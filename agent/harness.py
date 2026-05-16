@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
+from agent.ui import ConversationUI
 from settings import get_settings
 
 
@@ -13,13 +14,19 @@ class AgentHarness:
 
     GREETING = "GoodBoy: How can I help?"
 
-    def __init__(self, *, loop: AgentLoop | None = None) -> None:
-        self._loop = loop or AgentLoop()
+    def __init__(
+        self,
+        *,
+        loop: AgentLoop | None = None,
+        ui: ConversationUI | None = None,
+    ) -> None:
+        self._ui = ui or ConversationUI()
+        self._loop = loop or AgentLoop(ui=self._ui)
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
         click.echo(self.GREETING)
-        task = click.prompt("You", prompt_suffix=" ").strip()
+        task = self._ui.prompt_user()
         if not task:
             click.echo("No task provided.", err=True)
             return 1
@@ -27,34 +34,35 @@ class AgentHarness:
         context = None
         while True:
             result = self._loop.run(task, context=context)
-            code = self._handle_result(result, task=task)
+            code = self._handle_result(result)
             if code is not None:
                 return code
             context = result.context
 
-    def _handle_result(self, result: LoopResult, *, task: str) -> int | None:
+    def _handle_result(self, result: LoopResult) -> int | None:
         if result.outcome == LoopOutcome.TASK_COMPLETE:
             click.echo()
-            click.echo(click.style("Task complete.", fg="green", bold=True))
-            click.echo(result.message)
+            click.echo(click.style("✓ Task complete", fg="green", bold=True))
             return 0
 
         if result.outcome == LoopOutcome.FAILED:
             click.echo()
-            click.echo(click.style("Failed.", fg="red", bold=True))
-            click.echo(result.message, err=True)
+            click.echo(click.style("✗ Failed", fg="red", bold=True))
+            if not any(
+                t.step.action.value == "failed"
+                for t in result.context.turns
+            ):
+                click.echo(result.message, err=True)
             return 1
 
         if result.outcome == LoopOutcome.MAX_TURNS:
             click.echo()
-            click.echo(click.style("Stopped.", fg="yellow", bold=True))
+            click.echo(click.style("⚠ Stopped", fg="yellow", bold=True))
             click.echo(result.message, err=True)
             return 1
 
         if result.outcome == LoopOutcome.NEED_USER_INPUT:
-            click.echo()
-            click.echo(result.message)
-            reply = click.prompt("You", prompt_suffix=" ").strip()
+            reply = self._ui.prompt_user()
             if not reply:
                 click.echo("No reply provided; ending session.", err=True)
                 return 1

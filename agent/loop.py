@@ -10,6 +10,7 @@ from typing import Callable
 from agent.context import SessionContext
 from agent.prompt import SYSTEM_PROMPT
 from agent.tools import run_python, run_shell
+from agent.ui import ConversationUI, tool_activity
 from agent.types import (
     AgentAction,
     AgentStep,
@@ -47,6 +48,7 @@ class AgentLoop:
         tool_timeout: float | None = None,
         model: str | None = None,
         llm_call: LLMCall | None = None,
+        ui: ConversationUI | None = None,
     ) -> None:
         cfg = get_settings()
         self.workspace = workspace or Path.cwd()
@@ -56,6 +58,7 @@ class AgentLoop:
         )
         self.model = model
         self._llm_call = llm_call or complete_structured
+        self._ui = ui
 
     def run(self, task: str, *, context: SessionContext | None = None) -> LoopResult:
         ctx = context or SessionContext(user_task=task)
@@ -63,12 +66,21 @@ class AgentLoop:
         consecutive_parse_failures = 0
 
         for turn in range(1, self.max_turns + 1):
-            raw = self._llm_call(
-                input=ctx.to_prompt(),
-                instructions=SYSTEM_PROMPT,
-                json_schema=json_schema,
-                model=self.model,
-            )
+            if self._ui is not None:
+                with self._ui.thinking():
+                    raw = self._llm_call(
+                        input=ctx.to_prompt(),
+                        instructions=SYSTEM_PROMPT,
+                        json_schema=json_schema,
+                        model=self.model,
+                    )
+            else:
+                raw = self._llm_call(
+                    input=ctx.to_prompt(),
+                    instructions=SYSTEM_PROMPT,
+                    json_schema=json_schema,
+                    model=self.model,
+                )
 
             try:
                 step = parse_agent_step(raw)
@@ -84,6 +96,9 @@ class AgentLoop:
                         context=ctx,
                     )
                 continue
+
+            if self._ui is not None:
+                self._ui.print_agent_step(step)
 
             if step.action == AgentAction.NEED_USER_INPUT:
                 ctx.add_turn(TurnRecord(turn=turn, step=step))
@@ -111,17 +126,36 @@ class AgentLoop:
 
             tool_result = None
             if step.action == AgentAction.RUN_SHELL:
-                tool_result = run_shell(
-                    step.command or "",
-                    cwd=self.workspace,
-                    timeout=self.tool_timeout,
-                )
+                if self._ui is not None:
+                    with tool_activity(self._ui, "shell"):
+                        tool_result = run_shell(
+                            step.command or "",
+                            cwd=self.workspace,
+                            timeout=self.tool_timeout,
+                        )
+                else:
+                    tool_result = run_shell(
+                        step.command or "",
+                        cwd=self.workspace,
+                        timeout=self.tool_timeout,
+                    )
             elif step.action == AgentAction.RUN_PYTHON:
-                tool_result = run_python(
-                    step.code or "",
-                    cwd=self.workspace,
-                    timeout=self.tool_timeout,
-                )
+                if self._ui is not None:
+                    with tool_activity(self._ui, "python"):
+                        tool_result = run_python(
+                            step.code or "",
+                            cwd=self.workspace,
+                            timeout=self.tool_timeout,
+                        )
+                else:
+                    tool_result = run_python(
+                        step.code or "",
+                        cwd=self.workspace,
+                        timeout=self.tool_timeout,
+                    )
+
+            if self._ui is not None and tool_result is not None:
+                self._ui.print_tool_result(tool_result)
 
             ctx.add_turn(
                 TurnRecord(turn=turn, step=step, tool_result=tool_result)
