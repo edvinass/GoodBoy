@@ -368,3 +368,13 @@ def test_ui_stop_request_consumed_once():
     ui.request_stop_after_current_step()
     assert ui.consume_stop_requested() is True
     assert ui.consume_stop_requested() is False
+
+
+def test_clear_session_resets_history_and_startup():
+    ui = ConversationUI()
+    ui.print_agent("hello")
+    ui.request_stop_after_current_step()
+    ui.clear_session()
+    assert ui.consume_stop_requested() is False
+    assert len(ui._history) == 1
+    assert ui._history[0][0] == "startup"

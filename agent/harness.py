@@ -12,6 +12,7 @@ from settings import get_settings
 
 
 _EXIT_COMMANDS = frozenset({"exit", "quit", "q"})
+_CLEAR_COMMANDS = frozenset({"clear", "new", "reset"})
 
 
 class AgentHarness:
@@ -72,6 +73,12 @@ class AgentHarness:
                         return 1
                     return exit_code
 
+                if self._is_clear_command(task):
+                    self._clear_conversation()
+                    if session_log is not None:
+                        session_log.event("conversation_cleared")
+                    continue
+
                 first_prompt = False
                 ctx = self._build_session_context(task)
                 result = self._loop.run(
@@ -84,9 +91,30 @@ class AgentHarness:
                 exit_code = max(exit_code, self._report_outcome(result, task=task))
 
     @staticmethod
-    def _should_exit(task: str) -> bool:
+    def _normalize_command(task: str) -> str:
         normalized = task.strip().lower()
+        if normalized.startswith("/"):
+            return normalized[1:]
+        return normalized
+
+    @classmethod
+    def _should_exit(cls, task: str) -> bool:
+        normalized = cls._normalize_command(task)
         return not normalized or normalized in _EXIT_COMMANDS
+
+    @classmethod
+    def _is_clear_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in _CLEAR_COMMANDS
+
+    def _clear_conversation(self) -> None:
+        """Drop cross-task model context and reset the on-screen transcript."""
+        self._conversation_history.clear()
+        self._paused_context = None
+        self._last_active_hosted_tools = []
+        self._ui.clear_session()
+        self._ui.print_notice(
+            "Conversation cleared. Prior messages will not be sent to the model."
+        )
 
     def _build_session_context(self, task: str) -> SessionContext | None:
         if self._paused_context is not None:

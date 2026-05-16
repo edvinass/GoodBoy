@@ -26,11 +26,18 @@ def _disable_session_log(monkeypatch):
 class FakeUI:
     prompts: Iterator[str]
 
+    def __init__(self, prompts: Iterator[str]) -> None:
+        self.prompts = prompts
+        self.clear_session_calls = 0
+
     def prompt_user(self) -> str:
         return next(self.prompts)
 
     def print_startup(self) -> None:
         pass
+
+    def clear_session(self) -> None:
+        self.clear_session_calls += 1
 
     def print_task_complete(self) -> None:
         pass
@@ -165,3 +172,81 @@ def test_harness_stopped_task_waits_for_next_user_prompt_to_resume():
     assert len(resumed_ctx.turns) == 1
     assert resumed_ctx.user_task == "long task"
     assert any("continue" in reply for reply in resumed_ctx.user_replies)
+
+
+def test_harness_clear_resets_conversation_history():
+    loop = Mock()
+    loop.workspace = "/tmp"
+    loop.run.side_effect = [
+        LoopResult(
+            outcome=LoopOutcome.TASK_COMPLETE,
+            message="London: cloudy",
+            context=SessionContext(
+                user_task="weather in London",
+                active_hosted_tools=["web_search"],
+            ),
+        ),
+        LoopResult(
+            outcome=LoopOutcome.TASK_COMPLETE,
+            message="Paris: rainy",
+            context=SessionContext(user_task="weather in Paris"),
+        ),
+    ]
+    ui = FakeUI(prompts=iter(["weather in London", "clear", "weather in Paris", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 2
+    assert ui.clear_session_calls == 1
+
+    second_kwargs = loop.run.call_args_list[1].kwargs
+    ctx = second_kwargs["context"]
+    assert ctx is None
+    assert harness._conversation_history == [
+        ConversationExchange(user="weather in Paris", assistant="Paris: rainy")
+    ]
+    assert harness._last_active_hosted_tools == []
+
+
+def test_harness_slash_clear_command():
+    harness = _harness(LoopOutcome.TASK_COMPLETE, ["/clear", "new task", "exit"])
+    assert harness.run() == 0
+    assert harness._ui.clear_session_calls == 1
+    assert harness._loop.run.call_count == 1
+
+
+def test_harness_clear_discards_paused_context():
+    loop = Mock()
+    loop.workspace = "/tmp"
+    stopped_context = SessionContext(user_task="long task")
+    stopped_context.add_turn(
+        TurnRecord(
+            turn=1,
+            step=AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo first",
+            ),
+        )
+    )
+    loop.run.side_effect = [
+        LoopResult(
+            outcome=LoopOutcome.STOPPED,
+            message="Stopped after the current step.",
+            context=stopped_context,
+        ),
+        LoopResult(
+            outcome=LoopOutcome.TASK_COMPLETE,
+            message="done",
+            context=SessionContext(user_task="fresh task"),
+        ),
+    ]
+    ui = FakeUI(prompts=iter(["long task", "clear", "fresh task", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 2
+
+    second_kwargs = loop.run.call_args_list[1].kwargs
+    ctx = second_kwargs["context"]
+    assert ctx is None
+    assert harness._paused_context is None

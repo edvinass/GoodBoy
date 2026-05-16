@@ -700,6 +700,16 @@ class ConversationUI:
     def print_startup(self) -> None:
         self._record("startup")
 
+    def clear_session(self) -> None:
+        """Clear the on-screen transcript and show the startup banner again."""
+        self._history.clear()
+        self._pending_redraw = False
+        self._stop_requested = False
+        if self._is_interactive_tty():
+            with self._display_lock:
+                self._console.clear()
+        self._record("startup")
+
     def print_task_complete(self) -> None:
         if not self.verbose:
             return
