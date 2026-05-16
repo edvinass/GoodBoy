@@ -7,11 +7,19 @@ from pydantic import BaseModel, Field
 from agent.types import TurnRecord
 
 
+class ConversationExchange(BaseModel):
+    """One completed user message and the assistant's final reply."""
+
+    user: str
+    assistant: str
+
+
 class SessionContext(BaseModel):
     """Accumulated state for one user task."""
 
     user_task: str
     workspace: str | None = None
+    conversation_history: list[ConversationExchange] = Field(default_factory=list)
     turns: list[TurnRecord] = Field(default_factory=list)
     user_replies: list[str] = Field(default_factory=list)
     parse_errors: list[str] = Field(default_factory=list)
@@ -28,10 +36,26 @@ class SessionContext(BaseModel):
 
     def to_prompt(self) -> str:
         """Serialize full context for the model's user message."""
-        sections: list[str] = [
-            "## User task",
-            self.user_task.strip(),
-        ]
+        sections: list[str] = []
+
+        if self.conversation_history:
+            sections.extend(
+                [
+                    "## Prior conversation",
+                    "Earlier messages in this session (the current task may be a follow-up):",
+                ]
+            )
+            for i, exchange in enumerate(self.conversation_history, start=1):
+                sections.append(f"\n### Exchange {i}")
+                sections.append(f"User: {exchange.user.strip()}")
+                sections.append(f"Assistant: {exchange.assistant.strip()}")
+
+        sections.extend(
+            [
+                "\n## User task",
+                self.user_task.strip(),
+            ]
+        )
 
         if self.workspace:
             sections.extend(

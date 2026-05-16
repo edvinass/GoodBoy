@@ -115,6 +115,8 @@ class AgentLoop:
         )
         if ctx.workspace is None:
             ctx = ctx.model_copy(update={"workspace": str(self.workspace)})
+        if context is not None and ctx.active_hosted_tools:
+            self._hosted_tools = tuple(ctx.active_hosted_tools)
         if session_log is not None:
             session_log.event(
                 "task_start",

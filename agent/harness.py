@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from agent.context import ConversationExchange, SessionContext
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
 from agent.session_log import open_session_log
 from agent.ui import ConversationUI
@@ -35,6 +36,8 @@ class AgentHarness:
             debug_output=debug_output,
         )
         self._loop = loop or AgentLoop(ui=self._ui)
+        self._conversation_history: list[ConversationExchange] = []
+        self._last_active_hosted_tools: list[str] = []
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
@@ -65,20 +68,50 @@ class AgentHarness:
                     return exit_code
 
                 first_prompt = False
+                ctx = self._build_session_context(task)
                 result = self._loop.run(
                     task,
+                    context=ctx,
                     ask_user=self._ui.prompt_user,
                     session_log=session_log,
                 )
-                exit_code = max(exit_code, self._report_outcome(result))
+                exit_code = max(exit_code, self._report_outcome(result, task=task))
 
     @staticmethod
     def _should_exit(task: str) -> bool:
         normalized = task.strip().lower()
         return not normalized or normalized in _EXIT_COMMANDS
 
-    def _report_outcome(self, result: LoopResult) -> int:
+    def _build_session_context(self, task: str) -> SessionContext | None:
+        if not self._conversation_history:
+            return None
+        return SessionContext(
+            user_task=task,
+            workspace=str(self._loop.workspace),
+            conversation_history=list(self._conversation_history),
+            active_hosted_tools=list(self._last_active_hosted_tools),
+        )
+
+    def _record_completed_exchange(self, task: str, result: LoopResult) -> None:
+        assistant = (result.message or "").strip()
+        if not assistant:
+            for record in reversed(result.context.turns):
+                if record.step.action.value == "task_complete" and record.step.message:
+                    assistant = record.step.message.strip()
+                    break
+        if assistant:
+            self._conversation_history.append(
+                ConversationExchange(user=task.strip(), assistant=assistant)
+            )
+
+    def _remember_session_state(self, result: LoopResult) -> None:
+        if result.context.active_hosted_tools:
+            self._last_active_hosted_tools = list(result.context.active_hosted_tools)
+
+    def _report_outcome(self, result: LoopResult, *, task: str) -> int:
+        self._remember_session_state(result)
         if result.outcome == LoopOutcome.TASK_COMPLETE:
+            self._record_completed_exchange(task, result)
             self._ui.print_task_complete()
             return 0
 

@@ -34,3 +34,22 @@ def test_user_replies_in_prompt():
     text = ctx.to_prompt()
     assert "staging only" in text
     assert "User clarifications" in text
+
+
+def test_conversation_history_in_prompt():
+    from agent.context import ConversationExchange
+
+    ctx = SessionContext(
+        user_task="and in Sydney",
+        conversation_history=[
+            ConversationExchange(
+                user="weather in London",
+                assistant="London: cloudy, 14°C",
+            )
+        ],
+    )
+    text = ctx.to_prompt()
+    assert "Prior conversation" in text
+    assert "weather in London" in text
+    assert "London: cloudy" in text
+    assert "and in Sydney" in text
