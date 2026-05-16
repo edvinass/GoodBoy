@@ -5,13 +5,15 @@ description = "Hello World Python project"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
+    "openai>=1.82",
 ]
 
 [project.scripts]
 goodboy = "main:main"
+llm = "llm:main"
 
 [tool.setuptools]
-py-modules = ["main"]
+py-modules = ["main", "llm"]
 
 [build-system]
 requires = ["setuptools>=61"]
