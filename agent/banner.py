@@ -24,8 +24,8 @@ def _brown_dog_art() -> str:
 DESCRIPTION = (
     "Autonomous coding agent for your machine. Describe a task — GoodBoy "
     "explores the repo, edits files, runs tests and builds, and reports back "
-    "when done. Type clear, new, or reset to start a fresh conversation; "
-    "exit or quit to leave."
+    "when done. Type @ to reference a file or folder in your message; type / "
+    "for commands (/clear to reset the conversation, /exit to quit)."
 )
 
 
