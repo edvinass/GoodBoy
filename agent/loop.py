@@ -17,6 +17,7 @@ from agent.clarifications import (
     should_add_proceed_directive,
     stuck_shell_directive,
 )
+from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
 from agent.context import SessionContext
 from agent.models import resolve_reasoning_effort, validate_reasoning_effort_for_model
@@ -95,6 +96,7 @@ class AgentLoop:
         *,
         context: SessionContext | None = None,
         ask_user: AskUser | None = None,
+        session_log: SessionLog | None = None,
     ) -> LoopResult:
         ctx = context or SessionContext(
             user_task=task,
@@ -102,8 +104,24 @@ class AgentLoop:
         )
         if ctx.workspace is None:
             ctx = ctx.model_copy(update={"workspace": str(self.workspace)})
+        if session_log is not None:
+            session_log.event(
+                "task_start",
+                task=task,
+                workspace=str(self.workspace),
+            )
         json_schema = AgentStep.model_json_schema()
         consecutive_parse_failures = 0
+
+        def finish(result: LoopResult) -> LoopResult:
+            if session_log is not None:
+                session_log.event(
+                    "task_end",
+                    outcome=result.outcome.value,
+                    message=result.message,
+                    turns=len(result.context.turns),
+                )
+            return result
 
         for turn in range(1, self.max_turns + 1):
             call_model = self._pending_model or self._default_model
@@ -121,6 +139,15 @@ class AgentLoop:
                 "reasoning_effort": call_reasoning,
             }
 
+            if session_log is not None:
+                session_log.log_llm_request(
+                    turn=turn,
+                    model=call_model,
+                    reasoning_effort=call_reasoning,
+                    instructions=self._instructions,
+                    input_text=llm_kwargs["input"],
+                )
+
             if self._ui is not None:
                 self._ui.print_llm_request(
                     turn=turn,
@@ -135,35 +162,49 @@ class AgentLoop:
             else:
                 raw = self._llm_call(**llm_kwargs)
 
+            if session_log is not None:
+                session_log.log_llm_response(turn=turn, raw=raw)
+
             try:
                 step = parse_agent_step(raw)
                 consecutive_parse_failures = 0
             except Exception as exc:
                 err = f"Turn {turn}: invalid JSON — {exc}"
                 ctx.add_parse_error(err)
+                if session_log is not None:
+                    session_log.event("parse_error", turn=turn, error=err, raw=raw)
                 consecutive_parse_failures += 1
                 if consecutive_parse_failures >= 2:
-                    return LoopResult(
-                        outcome=LoopOutcome.FAILED,
-                        message=f"Agent returned invalid JSON twice: {exc}",
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message=f"Agent returned invalid JSON twice: {exc}",
+                            context=ctx,
+                        )
                     )
                 continue
 
             routing_err = self._validate_routing(step, call_model)
             if routing_err:
                 ctx.add_parse_error(routing_err)
+                if session_log is not None:
+                    session_log.event("parse_error", turn=turn, error=routing_err)
                 consecutive_parse_failures += 1
                 if consecutive_parse_failures >= 2:
-                    return LoopResult(
-                        outcome=LoopOutcome.FAILED,
-                        message=routing_err,
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message=routing_err,
+                            context=ctx,
+                        )
                     )
                 continue
 
             consecutive_parse_failures = 0
             self._apply_pending_routing(step)
+
+            if session_log is not None:
+                session_log.log_agent_step(turn=turn, step=step)
 
             if self._ui is not None:
                 self._ui.print_agent_step(
@@ -176,14 +217,16 @@ class AgentLoop:
                 question = step.message or ""
 
                 if count_need_user_input_turns(ctx.turns) >= self.max_clarifications:
-                    return LoopResult(
-                        outcome=LoopOutcome.FAILED,
-                        message=(
-                            f"Agent asked for input too many times "
-                            f"({self.max_clarifications}). "
-                            "Try a more specific task or run again."
-                        ),
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message=(
+                                f"Agent asked for input too many times "
+                                f"({self.max_clarifications}). "
+                                "Try a more specific task or run again."
+                            ),
+                            context=ctx,
+                        )
                     )
 
                 prior = last_need_user_input_message(ctx.turns)
@@ -209,22 +252,31 @@ class AgentLoop:
                 )
 
                 if ask_user is None:
-                    return LoopResult(
-                        outcome=LoopOutcome.NEED_USER_INPUT,
-                        message=question,
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.NEED_USER_INPUT,
+                            message=question,
+                            context=ctx,
+                        )
                     )
 
                 reply = ask_user().strip()
+                if session_log is not None:
+                    session_log.event("user_reply", turn=turn, reply=reply)
                 if not reply:
-                    return LoopResult(
-                        outcome=LoopOutcome.FAILED,
-                        message="No reply provided.",
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message="No reply provided.",
+                            context=ctx,
+                        )
                     )
                 ctx.add_user_reply(reply)
                 if should_add_proceed_directive(reply):
-                    ctx.add_parse_error(proceed_directive(reply))
+                    directive = proceed_directive(reply)
+                    ctx.add_parse_error(directive)
+                    if session_log is not None:
+                        session_log.event("harness_directive", turn=turn, text=directive)
                 continue
 
             if step.action == AgentAction.TASK_COMPLETE:
@@ -236,10 +288,12 @@ class AgentLoop:
                         call_reasoning_effort=call_reasoning,
                     )
                 )
-                return LoopResult(
-                    outcome=LoopOutcome.TASK_COMPLETE,
-                    message=step.message or "",
-                    context=ctx,
+                return finish(
+                    LoopResult(
+                        outcome=LoopOutcome.TASK_COMPLETE,
+                        message=step.message or "",
+                        context=ctx,
+                    )
                 )
 
             if step.action == AgentAction.FAILED:
@@ -251,10 +305,12 @@ class AgentLoop:
                         call_reasoning_effort=call_reasoning,
                     )
                 )
-                return LoopResult(
-                    outcome=LoopOutcome.FAILED,
-                    message=step.message or "",
-                    context=ctx,
+                return finish(
+                    LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message=step.message or "",
+                        context=ctx,
+                    )
                 )
 
             tool_result = None
@@ -290,6 +346,9 @@ class AgentLoop:
             if self._ui is not None and tool_result is not None:
                 self._ui.print_tool_result(tool_result)
 
+            if session_log is not None and tool_result is not None:
+                session_log.log_tool_result(turn=turn, result=tool_result)
+
             if (
                 step.action == AgentAction.RUN_SHELL
                 and tool_result is not None
@@ -302,13 +361,15 @@ class AgentLoop:
                         stuck_shell_directive(step.command, tool_result.exit_code)
                     )
                 if failed and prior_runs >= 2:
-                    return LoopResult(
-                        outcome=LoopOutcome.FAILED,
-                        message=(
-                            f"Shell command failed repeatedly (exit "
-                            f"{tool_result.exit_code}): {step.command}"
-                        ),
-                        context=ctx,
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message=(
+                                f"Shell command failed repeatedly (exit "
+                                f"{tool_result.exit_code}): {step.command}"
+                            ),
+                            context=ctx,
+                        )
                     )
 
             ctx.add_turn(
@@ -321,10 +382,12 @@ class AgentLoop:
                 )
             )
 
-        return LoopResult(
-            outcome=LoopOutcome.MAX_TURNS,
-            message=f"Exceeded maximum turns ({self.max_turns}).",
-            context=ctx,
+        return finish(
+            LoopResult(
+                outcome=LoopOutcome.MAX_TURNS,
+                message=f"Exceeded maximum turns ({self.max_turns}).",
+                context=ctx,
+            )
         )
 
     def _validate_routing(self, step: AgentStep, call_model: str) -> str | None:

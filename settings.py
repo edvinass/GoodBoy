@@ -18,6 +18,8 @@ OPENAI_MODEL_VAR = "OPENAI_MODEL"
 GOODBOY_MAX_TURNS_VAR = "GOODBOY_MAX_TURNS"
 GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
 GOODBOY_MAX_CLARIFICATIONS_VAR = "GOODBOY_MAX_CLARIFICATIONS"
+GOODBOY_LOG_DIR_VAR = "GOODBOY_LOG_DIR"
+GOODBOY_SESSION_LOG_VAR = "GOODBOY_SESSION_LOG"
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
@@ -94,6 +96,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.getenv(name)
     if raw is None or not raw.strip():
@@ -111,10 +120,14 @@ class Settings:
     max_turns: int = DEFAULT_MAX_TURNS
     tool_timeout_sec: float = DEFAULT_TOOL_TIMEOUT_SEC
     max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
+    session_log_enabled: bool = True
+    session_log_dir: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         load_env()
+        log_dir_raw = os.getenv(GOODBOY_LOG_DIR_VAR)
+        log_dir = Path(log_dir_raw).expanduser() if log_dir_raw and log_dir_raw.strip() else None
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
@@ -125,6 +138,8 @@ class Settings:
             max_clarifications=_env_int(
                 GOODBOY_MAX_CLARIFICATIONS_VAR, DEFAULT_MAX_CLARIFICATIONS
             ),
+            session_log_enabled=_env_bool(GOODBOY_SESSION_LOG_VAR, True),
+            session_log_dir=log_dir,
         )
 
     @property

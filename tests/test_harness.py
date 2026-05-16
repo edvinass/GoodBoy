@@ -1,12 +1,24 @@
 """Tests for interactive harness REPL."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator
 from unittest.mock import Mock
 
+import pytest
+
 from agent.context import SessionContext
 from agent.harness import AgentHarness
 from agent.loop import LoopOutcome, LoopResult
+
+
+@pytest.fixture(autouse=True)
+def _disable_session_log(monkeypatch):
+    @contextmanager
+    def _noop(**_kwargs):
+        yield None
+
+    monkeypatch.setattr("agent.harness.open_session_log", _noop)
 
 
 @dataclass

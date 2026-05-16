@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
+from agent.session_log import open_session_log
 from agent.ui import ConversationUI
 from settings import get_settings
 
@@ -39,22 +40,35 @@ class AgentHarness:
         exit_code = 0
         first_prompt = True
 
-        while True:
-            try:
-                task = self._ui.prompt_user()
-            except (click.Abort, EOFError, KeyboardInterrupt):
-                self._ui.newline()
-                return exit_code
+        with open_session_log(workspace=self._loop.workspace) as session_log:
+            if session_log is not None and self._ui.debug:
+                self._ui.print_notice(f"Session log: {session_log.path}")
 
-            if self._should_exit(task):
-                if first_prompt and not task:
-                    self._ui.print_notice("No task provided.")
-                    return 1
-                return exit_code
+            while True:
+                try:
+                    task = self._ui.prompt_user()
+                except (click.Abort, EOFError, KeyboardInterrupt):
+                    self._ui.newline()
+                    if session_log is not None:
+                        session_log.event("session_interrupted")
+                    return exit_code
 
-            first_prompt = False
-            result = self._loop.run(task, ask_user=self._ui.prompt_user)
-            exit_code = max(exit_code, self._report_outcome(result))
+                if session_log is not None:
+                    session_log.event("user_input", text=task)
+
+                if self._should_exit(task):
+                    if first_prompt and not task:
+                        self._ui.print_notice("No task provided.")
+                        return 1
+                    return exit_code
+
+                first_prompt = False
+                result = self._loop.run(
+                    task,
+                    ask_user=self._ui.prompt_user,
+                    session_log=session_log,
+                )
+                exit_code = max(exit_code, self._report_outcome(result))
 
     @staticmethod
     def _should_exit(task: str) -> bool:
