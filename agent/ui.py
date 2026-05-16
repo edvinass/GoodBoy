@@ -6,8 +6,10 @@ import json
 import os
 import re
 import sys
+import threading
+import time
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Any, Iterator
 
 import click
 from prompt_toolkit.buffer import Buffer
@@ -53,6 +55,34 @@ _SUBTITLE_ICONS = {
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything…"
+
+_resize_poller_installed = False
+
+
+def _install_resize_poller(ui: "ConversationUI") -> None:
+    global _resize_poller_installed
+    if _resize_poller_installed:
+        return
+    _resize_poller_installed = True
+    ui._last_terminal_width: int | None = None
+
+    def _poll() -> None:
+        while True:
+            time.sleep(0.25)
+            current = ui._fresh_terminal_width()
+            if ui._last_terminal_width is None:
+                ui._last_terminal_width = current
+                continue
+            if current == ui._last_terminal_width:
+                continue
+            ui._last_terminal_width = current
+            ui._request_redraw()
+
+    threading.Thread(
+        target=_poll,
+        daemon=True,
+        name="goodboy-resize-poller",
+    ).start()
 
 
 class _AutoWidthConsole(Console):
@@ -246,6 +276,12 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
 def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) -> RenderableType:
     body = text.rstrip() or ""
     panel_width = max(width - 6, 40)
+    panel_kwargs = {
+        "border_style": "cyan",
+        "box": ROUNDED,
+        "padding": (0, 1),
+        "width": width,
+    }
     if subtitle == "shell":
         return Panel(
             _syntax(body, "bash", width=panel_width),
@@ -253,6 +289,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
             border_style="yellow",
             box=ROUNDED,
             padding=(0, 1),
+            width=width,
         )
     if subtitle == "python":
         return Panel(
@@ -261,6 +298,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
             border_style="magenta",
             box=ROUNDED,
             padding=(0, 1),
+            width=width,
         )
     if _looks_like_directory_listing(body):
         return Panel(
@@ -269,6 +307,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
             border_style="cyan",
             box=ROUNDED,
             padding=(0, 1),
+            width=width,
         )
     if _looks_like_markdown(body):
         return Panel(
@@ -276,8 +315,12 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
             border_style="cyan",
             box=ROUNDED,
             padding=(0, 1),
+            width=width,
         )
-    return Panel(body, border_style="cyan", box=ROUNDED, padding=(0, 1))
+    return Panel(
+        _wrap_long_lines(body, width=panel_width),
+        **panel_kwargs,
+    )
 
 
 class ConversationUI:
@@ -302,9 +345,246 @@ class ConversationUI:
         self.debug_output = debug_output
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
+        self._last_terminal_width: int | None = None
+        self._history: list[tuple[str, dict[str, Any]]] = []
+        self._display_lock = threading.Lock()
+        self._at_prompt = False
+        self._pending_redraw = False
+        self._transient_ui = False
+        _install_resize_poller(self)
+
+    def _is_interactive_tty(self) -> bool:
+        return sys.stdout.isatty()
+
+    def _fresh_terminal_width(self) -> int:
+        """Current stdout columns; avoids stale Rich/COLUMNS sizing after resize."""
+        try:
+            if sys.stdout.isatty():
+                columns = os.get_terminal_size(sys.stdout.fileno()).columns
+                return max(columns - self._console.legacy_windows, 40)
+        except OSError:
+            pass
+        return max(self._console.width, 40)
+
+    def _panel(self, renderable: RenderableType, **kwargs) -> Panel:
+        kwargs.setdefault("box", ROUNDED)
+        kwargs.setdefault("width", self._fresh_terminal_width())
+        return Panel(renderable, **kwargs)
 
     def _panel_text_width(self) -> int:
-        return max(self._console.width - 6, 40)
+        return max(self._fresh_terminal_width() - 6, 40)
+
+    def _header_title(self, role: str, *, subtitle: str | None = None) -> Text:
+        if role == "user":
+            title = Text.from_markup("[user]▸ You[/]")
+        else:
+            title = Text.from_markup("[agent]◆ GoodBoy[/]")
+            if subtitle:
+                icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
+                title.append(f"  [{icon}] ", style="subtitle")
+                title.append(f"({label})", style="subtitle")
+        return title
+
+    def _iter_history_block(self, kind: str, data: dict[str, Any]) -> Iterator[RenderableType | str]:
+        if kind == "startup":
+            yield self._panel(
+                Text.from_markup(format_startup(model=get_settings().default_model)),
+                border_style="cyan",
+                padding=(0, 2),
+            )
+            return
+        if kind == "header":
+            yield ""
+            yield self._header_title(data["role"], subtitle=data.get("subtitle"))
+            return
+        if kind == "user_message":
+            yield ""
+            yield self._header_title("user")
+            if data.get("paste_label"):
+                yield self._panel(
+                    data["paste_label"],
+                    border_style="green",
+                    padding=(0, 1),
+                )
+            panel_width = self._panel_text_width()
+            yield self._panel(
+                _wrap_long_lines(data["text"].rstrip() or "", width=panel_width),
+                border_style="green",
+                padding=(0, 1),
+            )
+            return
+        if kind == "agent_message":
+            yield ""
+            yield self._header_title("agent", subtitle=data.get("subtitle"))
+            yield _render_body(
+                data["text"],
+                subtitle=data.get("subtitle"),
+                width=self._fresh_terminal_width(),
+            )
+            return
+        if kind == "routing":
+            yield ""
+            yield self._kv_table(data["rows"])
+            return
+        if kind == "thought":
+            yield ""
+            yield self._header_title("agent", subtitle="thought")
+            panel_width = self._panel_text_width()
+            yield self._panel(
+                _wrap_long_lines(data["text"], width=panel_width),
+                border_style="cyan",
+                padding=(0, 1),
+            )
+            return
+        if kind == "status":
+            yield ""
+            yield data["markup"]
+            return
+        if kind == "tool_result":
+            yield ""
+            yield self._header_title("agent", subtitle="output")
+            yield self._render_tool_result_group(data)
+            return
+        if kind == "llm_request":
+            yield ""
+            yield self._header_title("agent", subtitle="input")
+            yield self._render_llm_request_group(data)
+            return
+        if kind == "llm_response":
+            yield ""
+            yield self._header_title("agent", subtitle="output")
+            panel_width = self._panel_text_width()
+            yield self._panel(
+                _syntax(_pretty_json(data["raw"]), "json", width=panel_width),
+                title=f"[muted]turn {data['turn']}[/]",
+                border_style="dim",
+                padding=(0, 1),
+            )
+            return
+
+    def _render_tool_result_group(self, data: dict[str, Any]) -> Group:
+        meta_rows: list[tuple[str, str]] = []
+        if data.get("timed_out"):
+            meta_rows.append(("status", "[warning]timed out[/]"))
+        elif data.get("exit_code") is not None:
+            style = "success" if data["exit_code"] == 0 else "warning"
+            meta_rows.append(("exit code", f"[{style}]{data['exit_code']}[/]"))
+        terminal_width = self._fresh_terminal_width()
+        panel_width = self._panel_text_width()
+        meta = self._kv_table(meta_rows, nested=True)
+        parts: list[RenderableType] = [
+            self._panel(
+                meta,
+                title="[muted]run[/]",
+                border_style="dim",
+                width=terminal_width,
+            )
+        ]
+        stdout = data.get("stdout", "")
+        stderr = data.get("stderr", "")
+        if stdout.strip():
+            parts.append(
+                self._panel(
+                    _syntax(stdout.rstrip(), "text", width=panel_width),
+                    title="[muted]stdout[/]",
+                    border_style="cyan",
+                    padding=(0, 1),
+                    width=terminal_width,
+                )
+            )
+        if stderr.strip():
+            parts.append(
+                self._panel(
+                    Text(
+                        _wrap_long_lines(stderr.rstrip(), width=panel_width),
+                        style="error",
+                    ),
+                    title="[muted]stderr[/]",
+                    border_style="red",
+                    padding=(0, 1),
+                    width=terminal_width,
+                )
+            )
+        if not stdout.strip() and not stderr.strip() and not data.get("timed_out"):
+            parts.append(
+                self._panel("[muted](no output)[/]", border_style="dim", width=terminal_width)
+            )
+        return Group(*parts)
+
+    def _render_llm_request_group(self, data: dict[str, Any]) -> Group:
+        meta_rows: list[tuple[str, str]] = [
+            ("turn", str(data["turn"])),
+            ("model", data["model"]),
+        ]
+        if data.get("reasoning_effort"):
+            meta_rows.append(("reasoning", data["reasoning_effort"]))
+        terminal_width = self._fresh_terminal_width()
+        panel_width = self._panel_text_width()
+        meta = self._kv_table(meta_rows, box=None, nested=True)
+        return Group(
+            self._panel(
+                meta,
+                title="[muted]request[/]",
+                border_style="dim",
+                width=terminal_width,
+            ),
+            self._panel(
+                _syntax(data["instructions"], "markdown", width=panel_width),
+                title="[muted]instructions[/]",
+                border_style="dim",
+                padding=(0, 1),
+                width=terminal_width,
+            ),
+            self._panel(
+                _syntax(data["input_text"], "markdown", width=panel_width),
+                title="[muted]input[/]",
+                border_style="dim",
+                padding=(0, 1),
+                width=terminal_width,
+            ),
+        )
+
+    def _redraw_all(self) -> None:
+        if not self._history:
+            return
+        self._console.clear()
+        for kind, data in self._history:
+            for item in self._iter_history_block(kind, data):
+                if item == "":
+                    self._console.print()
+                else:
+                    self._console.print(item)
+
+    def _request_redraw(self) -> None:
+        if not self._history or not self._is_interactive_tty():
+            return
+        if self._transient_ui:
+            self._pending_redraw = True
+            return
+        with self._display_lock:
+            self._redraw_all()
+            if self._at_prompt:
+                self._print_header("user")
+
+    def _sync_redraw(self) -> None:
+        if not self._pending_redraw or not self._history or not self._is_interactive_tty():
+            self._pending_redraw = False
+            return
+        with self._display_lock:
+            self._redraw_all()
+        self._pending_redraw = False
+
+    def _record(self, kind: str, **data: Any) -> None:
+        self._history.append((kind, data))
+        if self._is_interactive_tty():
+            with self._display_lock:
+                self._redraw_all()
+            return
+        for item in self._iter_history_block(kind, data):
+            if item == "":
+                self._console.print()
+            else:
+                self._console.print(item)
 
     def _kv_table(
         self,
@@ -312,8 +592,9 @@ class ConversationUI:
         *,
         box=ROUNDED,
         fit: bool = False,
+        nested: bool = False,
     ) -> Table:
-        """Key/value table; full terminal width unless nested in a panel."""
+        """Key/value table sized to the terminal or parent panel."""
         table_kwargs: dict = {
             "show_header": False,
             "box": box,
@@ -321,7 +602,9 @@ class ConversationUI:
             "padding": (0, 1),
         }
         if not fit:
-            table_kwargs["width"] = self._console.width
+            table_kwargs["width"] = (
+                self._panel_text_width() if nested else self._fresh_terminal_width()
+            )
             table_kwargs["expand"] = True
         table = Table(**table_kwargs)
         table.add_column(style="muted", no_wrap=True)
@@ -331,40 +614,33 @@ class ConversationUI:
         return table
 
     def print_startup(self) -> None:
-        self._console.print()
-        self._console.print(
-            Panel(
-                Text.from_markup(format_startup(model=get_settings().default_model)),
-                border_style="cyan",
-                box=ROUNDED,
-                padding=(0, 2),
-            )
-        )
+        self._record("startup")
 
     def print_task_complete(self) -> None:
         if not self.verbose:
             return
-        self._console.print()
-        self._console.print("[success]✓[/] [success]Task complete[/]")
+        self._record("status", markup="[success]✓[/] [success]Task complete[/]")
 
     def print_failed(self, message: str | None = None) -> None:
         if not self.verbose:
             if message:
                 self.print_agent(message)
             return
-        self._console.print()
-        self._console.print("[error]✗[/] [error]Failed[/]")
+        self._record("status", markup="[error]✗[/] [error]Failed[/]")
         if message:
-            self._err.print(Panel(message, border_style="red", box=ROUNDED))
+            self._err.print(
+                self._panel(message, border_style="red", width=self._fresh_terminal_width())
+            )
 
     def print_stopped(self, message: str) -> None:
         if not self.verbose:
             if message:
                 self.print_agent(message)
             return
-        self._console.print()
-        self._console.print("[warning]⚠[/] [warning]Stopped[/]")
-        self._err.print(Panel(message, border_style="yellow", box=ROUNDED))
+        self._record("status", markup="[warning]⚠[/] [warning]Stopped[/]")
+        self._err.print(
+            self._panel(message, border_style="yellow", width=self._fresh_terminal_width())
+        )
 
     def print_notice(self, message: str) -> None:
         self._err.print(f"[warning]{message}[/]")
@@ -374,45 +650,31 @@ class ConversationUI:
 
     def _print_header(self, role: str, *, subtitle: str | None = None) -> None:
         self._console.print()
-        if role == "user":
-            title = Text.from_markup("[user]▸ You[/]")
-        else:
-            title = Text.from_markup("[agent]◆ GoodBoy[/]")
-            if subtitle:
-                icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
-                title.append(f"  [{icon}] ", style="subtitle")
-                title.append(f"({label})", style="subtitle")
-        self._console.print(title)
+        self._console.print(self._header_title(role, subtitle=subtitle))
 
     def prompt_user(self) -> str:
         """Read user input; Enter sends; multiline paste shows a collapsed label."""
-        self._print_header("user")
-        paste_state = _PasteState()
-        result = _prompt_user_line(paste_state)
-        if result is None:
-            raise click.Abort()
-        text = paste_state.resolve(result)
-        if paste_state.label:
-            self._console.print(
-                Panel(
-                    paste_state.label,
-                    border_style="green",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                )
+        self._sync_redraw()
+        self._at_prompt = True
+        try:
+            self._print_header("user")
+            paste_state = _PasteState()
+            result = _prompt_user_line(paste_state)
+            if result is None:
+                raise click.Abort()
+            text = paste_state.resolve(result)
+            self._record(
+                "user_message",
+                text=text.strip(),
+                paste_label=paste_state.label,
             )
-        return text.strip()
+            return text.strip()
+        finally:
+            self._at_prompt = False
+            self._sync_redraw()
 
     def print_user(self, text: str) -> None:
-        self._print_header("user")
-        self._console.print(
-            Panel(
-                text.rstrip() or "",
-                border_style="green",
-                box=ROUNDED,
-                padding=(0, 1),
-            )
-        )
+        self._record("user_message", text=text.rstrip() or "")
 
     def print_agent(
         self,
@@ -420,10 +682,7 @@ class ConversationUI:
         *,
         subtitle: str | None = None,
     ) -> None:
-        self._print_header("agent", subtitle=subtitle)
-        self._console.print(
-            _render_body(text, subtitle=subtitle, width=self._console.width)
-        )
+        self._record("agent_message", text=text, subtitle=subtitle)
 
     def print_llm_request(
         self,
@@ -438,52 +697,20 @@ class ConversationUI:
         if not self.debug_input:
             return
 
-        meta_rows: list[tuple[str, str]] = [
-            ("turn", str(turn)),
-            ("model", model),
-        ]
-        if reasoning_effort:
-            meta_rows.append(("reasoning", reasoning_effort))
-        meta = self._kv_table(meta_rows, box=None, fit=True)
-
-        panel_width = self._panel_text_width()
-        self._print_header("agent", subtitle="input")
-        self._console.print(
-            Group(
-                Panel(meta, title="[muted]request[/]", border_style="dim", box=ROUNDED),
-                Panel(
-                    _syntax(instructions, "markdown", width=panel_width),
-                    title="[muted]instructions[/]",
-                    border_style="dim",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                ),
-                Panel(
-                    _syntax(input_text, "markdown", width=panel_width),
-                    title="[muted]input[/]",
-                    border_style="dim",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                ),
-            )
+        self._record(
+            "llm_request",
+            turn=turn,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            instructions=instructions,
+            input_text=input_text,
         )
 
     def print_llm_response(self, *, turn: int, raw: str) -> None:
         """Print raw model response without truncation (debug -o)."""
         if not self.debug_output:
             return
-
-        panel_width = self._panel_text_width()
-        self._print_header("agent", subtitle="output")
-        self._console.print(
-            Panel(
-                _syntax(_pretty_json(raw), "json", width=panel_width),
-                title=f"[muted]turn {turn}[/]",
-                border_style="dim",
-                box=ROUNDED,
-                padding=(0, 1),
-            )
-        )
+        self._record("llm_response", turn=turn, raw=raw)
 
     def print_agent_step(
         self,
@@ -516,8 +743,7 @@ class ConversationUI:
                     routing_rows.append(("model", model))
                 if reasoning:
                     routing_rows.append(("reasoning", reasoning))
-                self._console.print()
-                self._console.print(self._kv_table(routing_rows))
+                self._record("routing", rows=routing_rows)
             return
 
         show_routing = (
@@ -538,19 +764,10 @@ class ConversationUI:
                 routing_rows.append(("next model", next_model))
             if next_reasoning:
                 routing_rows.append(("next reasoning", next_reasoning))
-            self._console.print()
-            self._console.print(self._kv_table(routing_rows))
+            self._record("routing", rows=routing_rows)
 
         if step.thought:
-            self._print_header("agent", subtitle="thought")
-            self._console.print(
-                Panel(
-                    step.thought,
-                    border_style="cyan",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                )
-            )
+            self._record("thought", text=step.thought)
 
         if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
@@ -584,48 +801,13 @@ class ConversationUI:
         """Brief tool output summary after execution (-c / -d)."""
         if not self._show_tool_io:
             return
-
-        meta_rows: list[tuple[str, str]] = []
-        if result.timed_out:
-            meta_rows.append(("status", "[warning]timed out[/]"))
-        elif result.exit_code is not None:
-            style = "success" if result.exit_code == 0 else "warning"
-            meta_rows.append(("exit code", f"[{style}]{result.exit_code}[/]"))
-        meta = self._kv_table(meta_rows, fit=True)
-
-        panel_width = self._panel_text_width()
-        parts: list[RenderableType] = [Panel(meta, title="[muted]run[/]", border_style="dim", box=ROUNDED)]
-
-        if result.stdout.strip():
-            parts.append(
-                Panel(
-                    _syntax(result.stdout.rstrip(), "text", width=panel_width),
-                    title="[muted]stdout[/]",
-                    border_style="cyan",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                )
-            )
-
-        if result.stderr.strip():
-            parts.append(
-                Panel(
-                    Text(
-                        _wrap_long_lines(result.stderr.rstrip(), width=panel_width),
-                        style="error",
-                    ),
-                    title="[muted]stderr[/]",
-                    border_style="red",
-                    box=ROUNDED,
-                    padding=(0, 1),
-                )
-            )
-
-        if not result.stdout.strip() and not result.stderr.strip() and not result.timed_out:
-            parts.append(Panel("[muted](no output)[/]", border_style="dim", box=ROUNDED))
-
-        self._print_header("agent", subtitle="output")
-        self._console.print(Group(*parts))
+        self._record(
+            "tool_result",
+            stdout=result.stdout,
+            stderr=result.stderr,
+            exit_code=result.exit_code,
+            timed_out=result.timed_out,
+        )
 
     @contextmanager
     def thinking(self, label: str = "is thinking") -> Iterator[None]:
@@ -635,11 +817,16 @@ class ConversationUI:
             yield
             return
 
-        with self._console.status(
-            f"[agent]◆ GoodBoy[/] [muted]{label}…[/]",
-            spinner="dots",
-        ):
-            yield
+        self._transient_ui = True
+        try:
+            with self._console.status(
+                f"[agent]◆ GoodBoy[/] [muted]{label}…[/]",
+                spinner="dots",
+            ):
+                yield
+        finally:
+            self._transient_ui = False
+            self._sync_redraw()
 
 
 @contextmanager
