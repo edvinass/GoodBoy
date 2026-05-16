@@ -38,3 +38,34 @@ def test_run_shell_requires_command():
 def test_need_user_input_requires_message():
     with pytest.raises(ValidationError):
         AgentStep.model_validate({"action": "need_user_input"})
+
+
+def test_optional_model_and_reasoning_effort():
+    step = AgentStep.model_validate(
+        {
+            "action": "run_shell",
+            "command": "pwd",
+            "model": "gpt-4o-mini",
+            "reasoning_effort": "low",
+        }
+    )
+    assert step.model == "gpt-4o-mini"
+    assert step.reasoning_effort == "low"
+
+
+def test_invalid_reasoning_effort_rejected():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate(
+            {
+                "action": "task_complete",
+                "message": "done",
+                "reasoning_effort": "ultra",
+            }
+        )
+
+
+def test_model_strips_whitespace():
+    step = AgentStep.model_validate(
+        {"action": "task_complete", "message": "done", "model": "  "}
+    )
+    assert step.model is None

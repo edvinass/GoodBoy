@@ -58,9 +58,17 @@ class SessionContext(BaseModel):
     def _format_turn(record: TurnRecord) -> str:
         step = record.step
         lines = [f"\n### Turn {record.turn}"]
+        if record.call_model:
+            effort = record.call_reasoning_effort or "default"
+            lines.append(f"LLM: {record.call_model} (reasoning: {effort})")
         if step.thought:
             lines.append(f"Thought: {step.thought}")
         lines.append(f"Action: {step.action.value}")
+        if step.model:
+            next_effort = step.reasoning_effort or "(default)"
+            lines.append(
+                f"Next LLM: {step.model} (reasoning: {next_effort})"
+            )
 
         if record.parse_error:
             lines.append(f"Parse note: {record.parse_error}")

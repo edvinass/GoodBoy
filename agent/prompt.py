@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
+from agent.models import (
+    format_cost_policy_section,
+    format_models_section,
+    format_reasoning_section,
+)
+from agent.registry import DEFAULT_TOOLS, format_tools_section
 from agent.types import AgentStep
 
-SYSTEM_PROMPT = """You are GoodBoy, an autonomous AI agent running inside a local development harness.
-
-## Capabilities
-You can take one action per turn by returning a single JSON object. Available actions:
-- run_shell: execute a shell command on the user's machine (full user privileges; not sandboxed)
-- run_python: execute Python code via the same interpreter as the harness
-- need_user_input: ask the user a clarifying question when the request is ambiguous
-- task_complete: signal the user's task is fully done (include a concise summary in message)
-- failed: stop safely when blocked (permissions, repeated errors, unsafe or impossible request)
+_BASE_RULES = """You are GoodBoy, an autonomous AI agent running inside a local development harness.
 
 ## Rules
 1. Respond with exactly one JSON object per turn. No markdown fences, no prose outside JSON.
@@ -28,16 +26,45 @@ You can take one action per turn by returning a single JSON object. Available ac
 9. For git commits, staging, and routine dev tasks: run the commands unless the user explicitly
    asked you to stop or wait.
 
-## JSON schema
-Each response must match this structure (fields depend on action):
-- action: one of run_shell, run_python, need_user_input, task_complete, failed
+## Routing fields (each turn)
+- action (required): harness tool or terminal action for *this* turn's execution.
+- model (optional): OpenAI model ID for the *next* LLM call; must be from the allowlist below.
+- reasoning_effort (optional): for the *next* call only; only when the chosen model supports it.
+- thought, command, code, message: as required by action.
+"""
+
+_JSON_FIELD_DOCS = """## JSON fields
+- action: run_shell | run_python | need_user_input | task_complete | failed
+- model: optional; configures the next thinking step (not retroactive)
+- reasoning_effort: optional; none | minimal | low | medium | high | xhigh
 - thought: optional brief reasoning
 - command: required for run_shell
 - code: required for run_python
 - message: required for need_user_input, task_complete, failed
 """
 
+# Legacy static prompt for tests/fallback that expect SYSTEM_PROMPT
+SYSTEM_PROMPT = _BASE_RULES + "\n" + _JSON_FIELD_DOCS
+
 _JSON_SCHEMA = AgentStep.model_json_schema()
+
+
+def build_system_prompt(
+    *,
+    allowed_models: list[str],
+    tools: tuple | None = None,
+) -> str:
+    """Compose full system prompt with catalogs and cost policy."""
+    tool_specs = tools if tools is not None else DEFAULT_TOOLS
+    sections = [
+        _BASE_RULES,
+        format_cost_policy_section(),
+        format_models_section(allowed_models),
+        format_reasoning_section(),
+        format_tools_section(tool_specs),
+        _JSON_FIELD_DOCS,
+    ]
+    return "\n\n".join(sections)
 
 
 def system_prompt_with_schema() -> str:

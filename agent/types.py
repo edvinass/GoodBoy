@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+from llm import REASONING_EFFORT
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -24,12 +26,23 @@ class AgentStep(BaseModel):
     command: str | None = None
     code: str | None = None
     message: str | None = None
+    model: str | None = None
+    reasoning_effort: str | None = None
 
-    @field_validator("command", "code", "message", mode="before")
+    @field_validator("command", "code", "message", "model", "reasoning_effort", mode="before")
     @classmethod
     def _strip_optional_strings(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip() or None
+        return value
+
+    @field_validator("reasoning_effort")
+    @classmethod
+    def _validate_reasoning_effort_value(cls, value: str | None) -> str | None:
+        if value is not None and value not in REASONING_EFFORT:
+            raise ValueError(
+                f"reasoning_effort must be one of: {', '.join(REASONING_EFFORT)}"
+            )
         return value
 
     @model_validator(mode="after")
@@ -67,6 +80,8 @@ class TurnRecord(BaseModel):
     step: AgentStep
     tool_result: ToolResult | None = None
     parse_error: str | None = None
+    call_model: str | None = None
+    call_reasoning_effort: str | None = None
 
 
 def parse_agent_step(raw: str) -> AgentStep:

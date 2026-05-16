@@ -190,6 +190,7 @@ def complete_structured(
     instructions: str,
     json_schema: dict[str, Any],
     model: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Call Responses API with JSON schema output; fall back to plain completion."""
     from agent.prompt import system_prompt_with_schema
@@ -211,6 +212,8 @@ def complete_structured(
         "instructions": instructions,
         "text": text_config,
     }
+    if reasoning_effort is not None:
+        kwargs["reasoning"] = {"effort": reasoning_effort}
 
     try:
         response = client.responses.create(**kwargs)
@@ -221,6 +224,7 @@ def complete_structured(
             input,
             model=resolved_model,
             instructions=fallback_instructions,
+            reasoning_effort=reasoning_effort,
         )
 
 

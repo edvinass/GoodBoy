@@ -58,8 +58,25 @@ class ConversationUI:
             click.echo(f"{_AGENT}:")
         _indent_body(text)
 
-    def print_agent_step(self, step: AgentStep) -> None:
+    def print_agent_step(
+        self,
+        step: AgentStep,
+        *,
+        next_model: str | None = None,
+        next_reasoning: str | None = None,
+    ) -> None:
         """Show the agent's reasoning and intended action."""
+        routing_parts: list[str] = []
+        if next_model:
+            routing_parts.append(f"next model: {next_model}")
+        if next_reasoning:
+            routing_parts.append(f"next reasoning: {next_reasoning}")
+        if routing_parts:
+            click.echo()
+            click.echo(
+                f"{_AGENT} {click.style('(' + ', '.join(routing_parts) + ')', **_DIM)}:"
+            )
+
         if step.thought:
             self.print_agent(step.thought)
 

@@ -16,7 +16,9 @@ from agent.clarifications import (
     repeat_question_directive,
 )
 from agent.context import SessionContext
-from agent.prompt import SYSTEM_PROMPT
+from agent.models import resolve_reasoning_effort, validate_reasoning_effort_for_model
+from agent.prompt import build_system_prompt
+from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.tools import run_python, run_shell
 from agent.ui import ConversationUI, tool_activity
 from agent.types import (
@@ -25,7 +27,7 @@ from agent.types import (
     TurnRecord,
     parse_agent_step,
 )
-from llm import complete_structured
+from llm import complete_structured, get_available_models
 from settings import get_settings
 
 LLMCall = Callable[..., str]
@@ -56,6 +58,7 @@ class AgentLoop:
         max_turns: int | None = None,
         tool_timeout: float | None = None,
         model: str | None = None,
+        allowed_models: list[str] | None = None,
         llm_call: LLMCall | None = None,
         ui: ConversationUI | None = None,
         max_clarifications: int | None = None,
@@ -71,9 +74,13 @@ class AgentLoop:
             if max_clarifications is not None
             else cfg.max_clarifications
         )
-        self.model = model
+        self._default_model = model or cfg.default_model
+        self._allowed_models = allowed_models or get_available_models()
+        self._pending_model: str | None = None
+        self._pending_reasoning: str | None = None
         self._llm_call = llm_call or complete_structured
         self._ui = ui
+        self._instructions = build_system_prompt(allowed_models=self._allowed_models)
 
     def run(
         self,
@@ -87,21 +94,26 @@ class AgentLoop:
         consecutive_parse_failures = 0
 
         for turn in range(1, self.max_turns + 1):
+            call_model = self._pending_model or self._default_model
+            call_reasoning = resolve_reasoning_effort(
+                call_model, self._pending_reasoning
+            )
+            self._pending_model = None
+            self._pending_reasoning = None
+
+            llm_kwargs = {
+                "input": ctx.to_prompt(),
+                "instructions": self._instructions,
+                "json_schema": json_schema,
+                "model": call_model,
+                "reasoning_effort": call_reasoning,
+            }
+
             if self._ui is not None:
                 with self._ui.thinking():
-                    raw = self._llm_call(
-                        input=ctx.to_prompt(),
-                        instructions=SYSTEM_PROMPT,
-                        json_schema=json_schema,
-                        model=self.model,
-                    )
+                    raw = self._llm_call(**llm_kwargs)
             else:
-                raw = self._llm_call(
-                    input=ctx.to_prompt(),
-                    instructions=SYSTEM_PROMPT,
-                    json_schema=json_schema,
-                    model=self.model,
-                )
+                raw = self._llm_call(**llm_kwargs)
 
             try:
                 step = parse_agent_step(raw)
@@ -118,8 +130,27 @@ class AgentLoop:
                     )
                 continue
 
+            routing_err = self._validate_routing(step, call_model)
+            if routing_err:
+                ctx.add_parse_error(routing_err)
+                consecutive_parse_failures += 1
+                if consecutive_parse_failures >= 2:
+                    return LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message=routing_err,
+                        context=ctx,
+                    )
+                continue
+
+            consecutive_parse_failures = 0
+            self._apply_pending_routing(step)
+
             if self._ui is not None:
-                self._ui.print_agent_step(step)
+                self._ui.print_agent_step(
+                    step,
+                    next_model=self._pending_model,
+                    next_reasoning=self._pending_reasoning,
+                )
 
             if step.action == AgentAction.NEED_USER_INPUT:
                 question = step.message or ""
@@ -138,10 +169,24 @@ class AgentLoop:
                 prior = last_need_user_input_message(ctx.turns)
                 if prior and ctx.user_replies and is_repeat_question(prior, question):
                     ctx.add_parse_error(repeat_question_directive())
-                    ctx.add_turn(TurnRecord(turn=turn, step=step))
+                    ctx.add_turn(
+                        TurnRecord(
+                            turn=turn,
+                            step=step,
+                            call_model=call_model,
+                            call_reasoning_effort=call_reasoning,
+                        )
+                    )
                     continue
 
-                ctx.add_turn(TurnRecord(turn=turn, step=step))
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
 
                 if ask_user is None:
                     return LoopResult(
@@ -163,7 +208,14 @@ class AgentLoop:
                 continue
 
             if step.action == AgentAction.TASK_COMPLETE:
-                ctx.add_turn(TurnRecord(turn=turn, step=step))
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
                 return LoopResult(
                     outcome=LoopOutcome.TASK_COMPLETE,
                     message=step.message or "",
@@ -171,7 +223,14 @@ class AgentLoop:
                 )
 
             if step.action == AgentAction.FAILED:
-                ctx.add_turn(TurnRecord(turn=turn, step=step))
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
                 return LoopResult(
                     outcome=LoopOutcome.FAILED,
                     message=step.message or "",
@@ -179,31 +238,31 @@ class AgentLoop:
                 )
 
             tool_result = None
-            if step.action == AgentAction.RUN_SHELL:
-                if self._ui is not None:
-                    with tool_activity(self._ui, "shell"):
-                        tool_result = run_shell(
-                            step.command or "",
-                            cwd=self.workspace,
-                            timeout=self.tool_timeout,
-                        )
-                else:
-                    tool_result = run_shell(
-                        step.command or "",
-                        cwd=self.workspace,
-                        timeout=self.tool_timeout,
+            if is_harness_tool(step.action):
+                spec = get_tool(step.action)
+                if spec is None:
+                    ctx.add_parse_error(
+                        f"Unknown harness tool action: {step.action.value}"
                     )
-            elif step.action == AgentAction.RUN_PYTHON:
+                    continue
+
+                if step.action == AgentAction.RUN_SHELL:
+                    runner = run_shell
+                    payload = step.command or ""
+                else:
+                    runner = run_python
+                    payload = step.code or ""
+
                 if self._ui is not None:
-                    with tool_activity(self._ui, "python"):
-                        tool_result = run_python(
-                            step.code or "",
+                    with tool_activity(self._ui, spec.name.replace("run_", "")):
+                        tool_result = runner(
+                            payload,
                             cwd=self.workspace,
                             timeout=self.tool_timeout,
                         )
                 else:
-                    tool_result = run_python(
-                        step.code or "",
+                    tool_result = runner(
+                        payload,
                         cwd=self.workspace,
                         timeout=self.tool_timeout,
                     )
@@ -212,7 +271,13 @@ class AgentLoop:
                 self._ui.print_tool_result(tool_result)
 
             ctx.add_turn(
-                TurnRecord(turn=turn, step=step, tool_result=tool_result)
+                TurnRecord(
+                    turn=turn,
+                    step=step,
+                    tool_result=tool_result,
+                    call_model=call_model,
+                    call_reasoning_effort=call_reasoning,
+                )
             )
 
         return LoopResult(
@@ -220,3 +285,31 @@ class AgentLoop:
             message=f"Exceeded maximum turns ({self.max_turns}).",
             context=ctx,
         )
+
+    def _validate_routing(self, step: AgentStep, call_model: str) -> str | None:
+        if not is_valid_action(step.action):
+            return f"Invalid action '{step.action.value}'."
+
+        if step.model is not None and step.model not in self._allowed_models:
+            allowed = ", ".join(self._allowed_models[:8])
+            suffix = "..." if len(self._allowed_models) > 8 else ""
+            return (
+                f"Unknown model '{step.model}'. "
+                f"Pick from allowlist: {allowed}{suffix}"
+            )
+
+        if step.reasoning_effort is not None:
+            next_model = step.model or self._pending_model or call_model
+            err = validate_reasoning_effort_for_model(
+                next_model, step.reasoning_effort
+            )
+            if err:
+                return err
+
+        return None
+
+    def _apply_pending_routing(self, step: AgentStep) -> None:
+        if step.model is not None:
+            self._pending_model = step.model
+        if step.reasoning_effort is not None:
+            self._pending_reasoning = step.reasoning_effort
