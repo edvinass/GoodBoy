@@ -3,6 +3,9 @@ name = "goodboy"
 version = "0.1.0"
 description = "Hello World Python project"
 requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+]
 
 [project.scripts]
 goodboy = "main:main"
