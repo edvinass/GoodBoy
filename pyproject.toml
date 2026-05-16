@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-goodboy = "main:main"
+goodboy = "main:cli"
 llm = "llm:main"
 
 [tool.setuptools]

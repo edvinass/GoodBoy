@@ -67,10 +67,10 @@ def _is_selectable_chat_model(model_id: str) -> bool:
     return any(lid.startswith(prefix) for prefix in _CHAT_MODEL_PREFIXES)
 
 
-def get_available_models() -> list[str]:
+def get_available_models(*, api_key: str | None = None) -> list[str]:
     """Return chat models from the API, curated list first; fallback if unreachable."""
     try:
-        client = get_client()
+        client = get_client(api_key=api_key)
         api_ids = {
             m.id for m in client.models.list() if _is_selectable_chat_model(m.id)
         }
@@ -101,14 +101,18 @@ def _model_choice(model_id: str) -> questionary.Choice:
 def select_model_interactive(
     models: list[str] | None = None,
     *,
-    default: str = OpenAIModel.GPT_4O_MINI.value,
+    default: str | None = None,
+    api_key: str | None = None,
 ) -> str:
     """Show an arrow-key menu and return the chosen model ID."""
-    options = models if models is not None else get_available_models()
+    options = models if models is not None else get_available_models(api_key=api_key)
     if not options:
         raise click.ClickException("No models available to select.")
 
-    default_value = default if default in options else options[0]
+    resolved_default = default if default is not None else get_settings().default_model
+    default_value = (
+        resolved_default if resolved_default in options else options[0]
+    )
 
     choice = questionary.select(
         "Select a model",
@@ -124,19 +128,19 @@ def select_model_interactive(
     return choice
 
 
-def get_client() -> OpenAI:
-    api_key = get_settings().openai_api_key
-    if not api_key:
+def get_client(*, api_key: str | None = None) -> OpenAI:
+    resolved_key = api_key or get_settings().openai_api_key
+    if not resolved_key:
         raise click.ClickException(
-            "OPENAI_API_KEY is not set. Add it to .env in the project root."
+            "OPENAI_API_KEY is not set. Run: goodboy setup"
         )
-    return OpenAI(api_key=api_key)
+    return OpenAI(api_key=resolved_key)
 
 
 def complete(
     prompt: str,
     *,
-    model: str = OpenAIModel.GPT_4O_MINI.value,
+    model: str | None = None,
     instructions: str | None = None,
     temperature: float | None = None,
     top_p: float | None = None,
@@ -145,9 +149,10 @@ def complete(
 ) -> str:
     """Call OpenAI Responses API and return assistant text."""
     client = get_client()
+    resolved_model = model or get_settings().default_model
 
     kwargs: dict[str, Any] = {
-        "model": model,
+        "model": resolved_model,
         "input": prompt,
     }
     if instructions:
@@ -181,9 +186,9 @@ def complete(
     "--model",
     "-m",
     type=click.Choice(MODEL_CHOICES, case_sensitive=False),
-    default=OpenAIModel.GPT_4O_MINI.value,
-    show_default=True,
-    help="OpenAI model ID.",
+    default=None,
+    show_default="from .env (OPENAI_MODEL)",
+    help="OpenAI model ID; defaults to saved model from goodboy setup.",
 )
 @click.option(
     "--instructions",
