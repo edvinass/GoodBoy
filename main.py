@@ -60,6 +60,13 @@ def run_setup() -> None:
 
 @click.group(invoke_without_command=True)
 @click.option(
+    "-v",
+    "--verbose",
+    "compact",
+    is_flag=True,
+    help="Compact conversation: only your prompts and GoodBoy replies.",
+)
+@click.option(
     "-m",
     "show_model",
     is_flag=True,
@@ -92,6 +99,7 @@ def run_setup() -> None:
 @click.pass_context
 def cli(
     ctx: click.Context,
+    compact: bool,
     show_model: bool,
     show_commands: bool,
     debug: bool,
@@ -102,6 +110,7 @@ def cli(
     if ctx.invoked_subcommand is None:
         load_env()
         run_harness(
+            compact=compact,
             show_model=show_model,
             show_commands=show_commands,
             debug=debug,

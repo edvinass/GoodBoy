@@ -140,6 +140,48 @@ def test_print_tool_result_shown_with_show_commands(capsys):
     assert "stdout" in out
 
 
+def test_compact_hides_task_complete(capsys):
+    ui = ConversationUI(compact=True)
+    ui.print_task_complete()
+    assert capsys.readouterr().out == ""
+
+
+def test_compact_hides_failed_banner_shows_message(capsys):
+    ui = ConversationUI(compact=True)
+    ui.print_failed("something broke")
+    out = capsys.readouterr().out
+    assert "Failed" not in out
+    assert "something broke" in out
+    assert "GoodBoy" in out
+
+
+def test_compact_print_agent_step_only_final_message(capsys):
+    ui = ConversationUI(compact=True)
+    ui.print_agent_step(
+        AgentStep(
+            action=AgentAction.SWITCH_TOOLS,
+            thought="Need search",
+            tools=["web_search"],
+        ),
+        hosted_tools=["web_search"],
+    )
+    assert capsys.readouterr().out == ""
+
+    ui.print_agent_step(
+        AgentStep(
+            action=AgentAction.TASK_COMPLETE,
+            thought="Done",
+            message="London: cloudy",
+        ),
+        hosted_tools=["web_search"],
+    )
+    out = capsys.readouterr().out
+    assert "London: cloudy" in out
+    assert "thought" not in out
+    assert "web_search" not in out
+    assert "Enable hosted" not in out
+
+
 def test_print_agent_step_need_user_input(capsys):
     ui = ConversationUI()
     step = AgentStep(

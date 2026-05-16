@@ -267,6 +267,7 @@ class ConversationUI:
     def __init__(
         self,
         *,
+        compact: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
         debug: bool = False,
@@ -274,6 +275,7 @@ class ConversationUI:
         debug_output: bool = False,
         console: Console | None = None,
     ) -> None:
+        self.compact = compact
         self.show_model = show_model
         self.show_commands = show_commands
         self.debug = debug
@@ -297,16 +299,26 @@ class ConversationUI:
         )
 
     def print_task_complete(self) -> None:
+        if self.compact:
+            return
         self._console.print()
         self._console.print("[success]✓[/] [success]Task complete[/]")
 
     def print_failed(self, message: str | None = None) -> None:
+        if self.compact:
+            if message:
+                self.print_agent(message)
+            return
         self._console.print()
         self._console.print("[error]✗[/] [error]Failed[/]")
         if message:
             self._err.print(Panel(message, border_style="red", box=ROUNDED))
 
     def print_stopped(self, message: str) -> None:
+        if self.compact:
+            if message:
+                self.print_agent(message)
+            return
         self._console.print()
         self._console.print("[warning]⚠[/] [warning]Stopped[/]")
         self._err.print(Panel(message, border_style="yellow", box=ROUNDED))
@@ -441,6 +453,15 @@ class ConversationUI:
         hosted_tools: list[str] | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
+        if self.compact:
+            if step.message and step.action in (
+                AgentAction.NEED_USER_INPUT,
+                AgentAction.TASK_COMPLETE,
+                AgentAction.FAILED,
+            ):
+                self.print_agent(step.message)
+            return
+
         show_routing = (
             (self.show_model and model)
             or next_model
@@ -501,7 +522,7 @@ class ConversationUI:
 
     @property
     def _show_tool_io(self) -> bool:
-        return self.show_commands or self.debug
+        return not self.compact and (self.show_commands or self.debug)
 
     def print_tool_result(self, result: ToolResult) -> None:
         """Brief tool output summary after execution (-c / -d)."""
