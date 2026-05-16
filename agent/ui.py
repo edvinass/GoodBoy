@@ -12,13 +12,15 @@ import threading
 import time
 import tty
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator
 
 import click
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.clipboard import ClipboardData
-from prompt_toolkit.document import PasteMode
-from prompt_toolkit.shortcuts import PromptSession
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.document import Document, PasteMode
+from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
 from prompt_toolkit.styles import Style, merge_styles
 from questionary.constants import DEFAULT_STYLE
 from rich.box import ROUNDED
@@ -32,6 +34,13 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
+from agent.mentions import (
+    active_mention_query,
+    expand_file_mentions,
+    search_workspace_paths,
+)
+from agent.repl_commands import active_slash_command_query, search_slash_commands
+from agent.workspace import resolve_workspace
 from settings import get_settings
 from agent.types import AgentAction, AgentStep, ToolResult
 
@@ -162,8 +171,43 @@ def _attach_paste_handler(buffer: Buffer, paste_state: _PasteState) -> None:
     buffer.paste_clipboard_data = paste_clipboard_data  # type: ignore[method-assign]
 
 
-def _prompt_user_line(paste_state: _PasteState) -> str | None:
+class _UserInputCompleter(Completer):
+    """Offer slash commands at line start or file paths after @."""
+
+    def __init__(self, workspace: Path) -> None:
+        self._workspace = workspace.resolve()
+
+    def get_completions(self, document: Document, complete_event: object) -> Iterator[Completion]:
+        del complete_event
+        text_before = document.text_before_cursor
+
+        slash = active_slash_command_query(text_before)
+        if slash is not None:
+            query, start_position = slash
+            for command in search_slash_commands(query):
+                yield Completion(
+                    text=command.name,
+                    start_position=start_position,
+                    display=[("class:mention.choice", f"+ /{command.name}")],
+                    display_meta=command.description,
+                )
+            return
+
+        mention = active_mention_query(text_before)
+        if mention is None:
+            return
+        query, start_position = mention
+        for path in search_workspace_paths(self._workspace, query):
+            yield Completion(
+                text=path,
+                start_position=start_position,
+                display=[("class:mention.choice", f"+ {path}")],
+            )
+
+
+def _prompt_user_line(paste_state: _PasteState, *, workspace: Path | None = None) -> str | None:
     """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
+    root = (workspace or resolve_workspace()).resolve()
     style = merge_styles(
         [
             DEFAULT_STYLE,
@@ -171,6 +215,10 @@ def _prompt_user_line(paste_state: _PasteState) -> str | None:
                 {
                     "placeholder": "dim",
                     "question": "",
+                    "mention.choice": "ansibrightblue",
+                    "completion-menu": "bg:#1e1e1e",
+                    "completion-menu.completion": "",
+                    "completion-menu.completion.current": "bg:ansiblue",
                 }
             ),
         ]
@@ -184,6 +232,9 @@ def _prompt_user_line(paste_state: _PasteState) -> str | None:
         style=style,
         multiline=False,
         placeholder=_USER_INPUT_PLACEHOLDER,
+        completer=_UserInputCompleter(root),
+        complete_while_typing=True,
+        complete_style=CompleteStyle.COLUMN,
     )
     _attach_paste_handler(session.default_buffer, paste_state)
     try:
@@ -355,6 +406,7 @@ class ConversationUI:
         debug_input: bool = False,
         debug_output: bool = False,
         console: Console | None = None,
+        workspace: Path | str | None = None,
     ) -> None:
         self.show_thoughts = show_thoughts
         self.verbose = verbose
@@ -363,6 +415,9 @@ class ConversationUI:
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
+        self._workspace = (
+            Path(workspace).resolve() if workspace is not None else None
+        )
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
         self._last_terminal_width: int | None = None
@@ -753,16 +808,21 @@ class ConversationUI:
         try:
             self._print_header("user")
             paste_state = _PasteState()
-            result = _prompt_user_line(paste_state)
+            result = _prompt_user_line(
+                paste_state,
+                workspace=self._workspace or resolve_workspace(),
+            )
             if result is None:
                 raise click.Abort()
-            text = paste_state.resolve(result)
+            text = paste_state.resolve(result).strip()
+            workspace = self._workspace or resolve_workspace()
+            text = expand_file_mentions(text, workspace)
             self._record(
                 "user_message",
-                text=text.strip(),
+                text=text,
                 paste_label=paste_state.label,
             )
-            return text.strip()
+            return text
         finally:
             self._at_prompt = False
             self._sync_redraw()

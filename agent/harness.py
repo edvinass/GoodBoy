@@ -7,12 +7,9 @@ import click
 from agent.context import ConversationExchange, SessionContext
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
 from agent.session_log import open_session_log
+from agent.repl_commands import CLEAR_COMMAND_NAMES, EXIT_COMMAND_NAMES
 from agent.ui import ConversationUI
 from settings import get_settings
-
-
-_EXIT_COMMANDS = frozenset({"exit", "quit", "q"})
-_CLEAR_COMMANDS = frozenset({"clear", "new", "reset"})
 
 
 class AgentHarness:
@@ -31,6 +28,7 @@ class AgentHarness:
         loop: AgentLoop | None = None,
         ui: ConversationUI | None = None,
     ) -> None:
+        self._loop = loop or AgentLoop(ui=ui)
         self._ui = ui or ConversationUI(
             show_thoughts=show_thoughts,
             verbose=verbose,
@@ -39,8 +37,12 @@ class AgentHarness:
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
+            workspace=self._loop.workspace,
         )
-        self._loop = loop or AgentLoop(ui=self._ui)
+        if self._loop._ui is None:
+            self._loop._ui = self._ui
+        elif getattr(self._ui, "_workspace", None) is None:
+            self._ui._workspace = self._loop.workspace
         self._conversation_history: list[ConversationExchange] = []
         self._last_active_hosted_tools: list[str] = []
         self._paused_context: SessionContext | None = None
@@ -100,11 +102,11 @@ class AgentHarness:
     @classmethod
     def _should_exit(cls, task: str) -> bool:
         normalized = cls._normalize_command(task)
-        return not normalized or normalized in _EXIT_COMMANDS
+        return not normalized or normalized in EXIT_COMMAND_NAMES
 
     @classmethod
     def _is_clear_command(cls, task: str) -> bool:
-        return cls._normalize_command(task) in _CLEAR_COMMANDS
+        return cls._normalize_command(task) in CLEAR_COMMAND_NAMES
 
     def _clear_conversation(self) -> None:
         """Drop cross-task model context and reset the on-screen transcript."""

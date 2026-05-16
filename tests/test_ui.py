@@ -39,7 +39,7 @@ def test_paste_state_single_line_returns_none():
 def test_prompt_user_multiline(monkeypatch):
     ui = ConversationUI()
 
-    def _fake(paste_state: _PasteState) -> str:
+    def _fake(paste_state: _PasteState, **_: object) -> str:
         return paste_state.register_paste("line one\nline two") or ""
 
     monkeypatch.setattr("agent.ui._prompt_user_line", _fake)
@@ -50,7 +50,7 @@ def test_prompt_user_shows_paste_label(capsys, monkeypatch):
     ui = ConversationUI()
     monkeypatch.setattr(
         "agent.ui._prompt_user_line",
-        lambda paste_state: (
+        lambda paste_state, **_: (
             paste_state.register_paste("a\nb\n") or ""
         ),
     )
@@ -61,7 +61,7 @@ def test_prompt_user_shows_paste_label(capsys, monkeypatch):
 
 def test_prompt_user_abort_on_cancel(monkeypatch):
     ui = ConversationUI()
-    monkeypatch.setattr("agent.ui._prompt_user_line", lambda paste_state: None)
+    monkeypatch.setattr("agent.ui._prompt_user_line", lambda paste_state, **_: None)
 
     with pytest.raises(click.Abort):
         ui.prompt_user()
