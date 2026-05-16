@@ -7,6 +7,8 @@ from importlib.metadata import PackageNotFoundError, version
 
 from settings import ROOT_DIR
 
+_BRAND_STYLE = "rgb(139,69,19)"
+
 DOG_ASCII = r"""
       / \__
      (    @\___
@@ -14,6 +16,10 @@ DOG_ASCII = r"""
      /   (_____/
     /_____/   U
 """
+
+
+def _brown_dog_art() -> str:
+    return "\n".join(f"[{_BRAND_STYLE}]{line}[/]" for line in DOG_ASCII.rstrip().splitlines())
 
 DESCRIPTION = (
     "A local autonomous agent for your machine. Describe a task in plain "
@@ -34,8 +40,8 @@ def get_version() -> str:
 def format_startup(*, model: str) -> str:
     ver = get_version()
     return (
-        f"{DOG_ASCII.rstrip()}\n"
-        f"[bold cyan]GoodBoy[/] [dim]v{ver}[/]\n"
-        f"[dim]Model[/] [cyan]{model}[/]\n"
+        f"{_brown_dog_art()}\n"
+        f"[bold {_BRAND_STYLE}]GoodBoy[/] [dim]v{ver}[/]\n"
+        f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]\n"
         f"{DESCRIPTION}"
     )

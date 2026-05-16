@@ -53,8 +53,9 @@ def run_setup() -> None:
 
     click.echo()
     click.echo(click.style("Setup complete.", fg="green", bold=True))
-    click.echo(f"  Model: {click.style(model, fg='cyan')}")
-    click.echo(f"  API key: {click.style(_mask_api_key(api_key), fg='cyan')}")
+    _brown = 94  # ANSI 256-color brown (closest match in basic terminals)
+    click.echo(f"  Model: {click.style(model, fg=_brown)}")
+    click.echo(f"  API key: {click.style(_mask_api_key(api_key), fg=_brown)}")
     click.echo(f"  Saved to {settings.ENV_FILE}")
 
 
@@ -126,8 +127,9 @@ def status() -> None:
     if not cfg.openai_api_key:
         click.echo("Not configured yet. Run: goodboy setup")
         raise SystemExit(1)
-    click.echo(f"Model: {click.style(cfg.default_model, fg='green', bold=True)}")
-    click.echo(f"API key: {click.style(_mask_api_key(cfg.openai_api_key), fg='green')}")
+    _brown = 94
+    click.echo(f"Model: {click.style(cfg.default_model, fg=_brown, bold=True)}")
+    click.echo(f"API key: {click.style(_mask_api_key(cfg.openai_api_key), fg=_brown)}")
     click.echo("Run goodboy setup to change settings.")
 
 

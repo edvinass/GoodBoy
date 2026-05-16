@@ -32,9 +32,11 @@ from agent.banner import format_startup
 from settings import get_settings
 from agent.types import AgentAction, AgentStep, ToolResult
 
+_BRAND_STYLE = "rgb(139,69,19)"
+
 _THEME = Theme(
     {
-        "agent": "bold cyan",
+        "agent": f"bold {_BRAND_STYLE}",
         "user": "bold green",
         "subtitle": "dim italic",
         "shell": "yellow",
@@ -239,7 +241,7 @@ def _looks_like_directory_listing(text: str) -> bool:
 
 
 def _directory_tree(text: str) -> Tree:
-    root = Tree("[bold cyan]📂[/] [bold].[/]")
+    root = Tree(f"[bold {_BRAND_STYLE}]📂[/] [bold].[/]")
     current: Tree | None = None
 
     for raw in text.splitlines():
@@ -277,7 +279,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     body = text.rstrip() or ""
     panel_width = max(width - 6, 40)
     panel_kwargs = {
-        "border_style": "cyan",
+        "border_style": _BRAND_STYLE,
         "box": ROUNDED,
         "padding": (0, 1),
         "width": width,
@@ -304,7 +306,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
         return Panel(
             _directory_tree(body),
             title="[muted]directory[/]",
-            border_style="cyan",
+            border_style=_BRAND_STYLE,
             box=ROUNDED,
             padding=(0, 1),
             width=width,
@@ -312,7 +314,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     if _looks_like_markdown(body):
         return Panel(
             Markdown(body),
-            border_style="cyan",
+            border_style=_BRAND_STYLE,
             box=ROUNDED,
             padding=(0, 1),
             width=width,
@@ -389,7 +391,7 @@ class ConversationUI:
         if kind == "startup":
             yield self._panel(
                 Text.from_markup(format_startup(model=get_settings().default_model)),
-                border_style="cyan",
+                border_style=_BRAND_STYLE,
                 padding=(0, 2),
             )
             return
@@ -432,7 +434,7 @@ class ConversationUI:
             panel_width = self._panel_text_width()
             yield self._panel(
                 _wrap_long_lines(data["text"], width=panel_width),
-                border_style="cyan",
+                border_style=_BRAND_STYLE,
                 padding=(0, 1),
             )
             return
@@ -487,7 +489,7 @@ class ConversationUI:
                 self._panel(
                     _syntax(stdout.rstrip(), "text", width=panel_width),
                     title="[muted]stdout[/]",
-                    border_style="cyan",
+                    border_style=_BRAND_STYLE,
                     padding=(0, 1),
                     width=terminal_width,
                 )
