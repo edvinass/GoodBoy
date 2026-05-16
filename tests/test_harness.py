@@ -28,6 +28,9 @@ class FakeUI:
     def prompt_user(self) -> str:
         return next(self.prompts)
 
+    def print_startup(self) -> None:
+        pass
+
     def print_greeting(self, message: str) -> None:
         pass
 

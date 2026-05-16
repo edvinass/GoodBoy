@@ -18,6 +18,7 @@ from rich.text import Text
 from rich.theme import Theme
 from rich.tree import Tree
 
+from agent.banner import format_startup
 from agent.types import AgentAction, AgentStep, ToolResult
 
 _THEME = Theme(
@@ -146,6 +147,17 @@ class ConversationUI:
         self.debug_output = debug_output
         self._console = console or Console(theme=_THEME)
         self._err = Console(theme=_THEME, stderr=True)
+
+    def print_startup(self) -> None:
+        self._console.print()
+        self._console.print(
+            Panel(
+                Text.from_markup(format_startup()),
+                border_style="cyan",
+                box=ROUNDED,
+                padding=(0, 2),
+            )
+        )
 
     def print_greeting(self, message: str) -> None:
         self._console.print()

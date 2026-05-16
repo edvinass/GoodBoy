@@ -36,6 +36,7 @@ class AgentHarness:
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
+        self._ui.print_startup()
         self._ui.print_greeting(self.GREETING)
         exit_code = 0
         first_prompt = True
