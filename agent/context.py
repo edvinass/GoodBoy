@@ -11,6 +11,7 @@ class SessionContext(BaseModel):
     """Accumulated state for one user task."""
 
     user_task: str
+    workspace: str | None = None
     turns: list[TurnRecord] = Field(default_factory=list)
     user_replies: list[str] = Field(default_factory=list)
     parse_errors: list[str] = Field(default_factory=list)
@@ -30,6 +31,14 @@ class SessionContext(BaseModel):
             "## User task",
             self.user_task.strip(),
         ]
+
+        if self.workspace:
+            sections.extend(
+                [
+                    "\n## Workspace",
+                    f"run_shell and run_python use cwd: {self.workspace}",
+                ]
+            )
 
         if self.turns:
             sections.append("\n## Prior turns")

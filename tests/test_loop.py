@@ -241,6 +241,27 @@ def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
     assert calls[1]["model"] == "gpt-5.4-mini"
 
 
+def test_loop_stops_after_repeated_failed_shell(tmp_path: Path):
+    cmd = "false"
+    llm = _llm_responses(
+        [
+            AgentStep(action=AgentAction.RUN_SHELL, command=cmd),
+            AgentStep(action=AgentAction.RUN_SHELL, command=cmd),
+            AgentStep(action=AgentAction.RUN_SHELL, command=cmd),
+        ]
+    )
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=10,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("run failing command")
+    assert result.outcome == LoopOutcome.FAILED
+    assert "repeatedly" in result.message.lower()
+    assert len(result.context.turns) == 2
+
+
 def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
     calls = {"n": 0}
 

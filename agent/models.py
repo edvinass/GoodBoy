@@ -157,7 +157,7 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         "gpt-5.4-mini",
         family=ModelFamily.FRONTIER,
         best_for="Balanced agent turns after a cheap step fails once.",
-        avoid_when="grep, git status, echo, and other trivial commands.",
+        avoid_when="grep, ls, echo, and other trivial commands.",
         cost_tier=CostTier.MEDIUM,
         price_in=0.75,
         price_cached=0.075,
@@ -256,7 +256,7 @@ REASONING_EFFORT_CATALOG: tuple[ReasoningEffortSpec, ...] = (
     ReasoningEffortSpec(
         "medium",
         "Default max for gpt-5.4-mini on non-trivial agent steps.",
-        "Trivial echo/status/git one-liners.",
+        "Trivial echo/status/ls one-liners.",
         "high",
     ),
     ReasoningEffortSpec(
@@ -401,7 +401,7 @@ def format_reasoning_section() -> str:
 def format_cost_policy_section() -> str:
     return """## Cost policy (required)
 - Minimize spend: always pick the cheapest model + lowest reasoning effort that can succeed.
-- Simple task examples (use minimal tier): git status, ls, cat, echo, single-file edit, running tests, formatting.
+- Simple task examples (use minimal tier): ls, cat, echo, single-file edit, running tests, formatting.
 - Do NOT use gpt-5.5, o3, or high/xhigh reasoning for simple tasks.
 - Escalate one tier at a time only after a failed or ambiguous turn.
 - Prefer gpt-4o-mini or gpt-4.1-nano for the first planning turn unless the task is obviously hard.

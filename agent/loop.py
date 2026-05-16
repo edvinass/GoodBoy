@@ -8,13 +8,16 @@ from pathlib import Path
 from typing import Callable
 
 from agent.clarifications import (
+    count_matching_shell_commands,
     count_need_user_input_turns,
-    is_affirmative_reply,
     is_repeat_question,
     last_need_user_input_message,
     proceed_directive,
     repeat_question_directive,
+    should_add_proceed_directive,
+    stuck_shell_directive,
 )
+from agent.workspace import resolve_workspace
 from agent.context import SessionContext
 from agent.models import resolve_reasoning_effort, validate_reasoning_effort_for_model
 from agent.prompt import build_system_prompt
@@ -64,7 +67,7 @@ class AgentLoop:
         max_clarifications: int | None = None,
     ) -> None:
         cfg = get_settings()
-        self.workspace = workspace or Path.cwd()
+        self.workspace = resolve_workspace(workspace or Path.cwd())
         self.max_turns = max_turns if max_turns is not None else cfg.max_turns
         self.tool_timeout = (
             tool_timeout if tool_timeout is not None else cfg.tool_timeout_sec
@@ -93,7 +96,12 @@ class AgentLoop:
         context: SessionContext | None = None,
         ask_user: AskUser | None = None,
     ) -> LoopResult:
-        ctx = context or SessionContext(user_task=task)
+        ctx = context or SessionContext(
+            user_task=task,
+            workspace=str(self.workspace),
+        )
+        if ctx.workspace is None:
+            ctx = ctx.model_copy(update={"workspace": str(self.workspace)})
         json_schema = AgentStep.model_json_schema()
         consecutive_parse_failures = 0
 
@@ -215,7 +223,7 @@ class AgentLoop:
                         context=ctx,
                     )
                 ctx.add_user_reply(reply)
-                if is_affirmative_reply(reply):
+                if should_add_proceed_directive(reply):
                     ctx.add_parse_error(proceed_directive(reply))
                 continue
 
@@ -281,6 +289,27 @@ class AgentLoop:
 
             if self._ui is not None and tool_result is not None:
                 self._ui.print_tool_result(tool_result)
+
+            if (
+                step.action == AgentAction.RUN_SHELL
+                and tool_result is not None
+                and step.command
+            ):
+                prior_runs = count_matching_shell_commands(ctx.turns, step.command)
+                failed = tool_result.exit_code not in (0, None)
+                if failed and prior_runs >= 1:
+                    ctx.add_parse_error(
+                        stuck_shell_directive(step.command, tool_result.exit_code)
+                    )
+                if failed and prior_runs >= 2:
+                    return LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message=(
+                            f"Shell command failed repeatedly (exit "
+                            f"{tool_result.exit_code}): {step.command}"
+                        ),
+                        context=ctx,
+                    )
 
             ctx.add_turn(
                 TurnRecord(

@@ -34,7 +34,7 @@ DEFAULT_TOOLS: tuple[ToolSpec, ...] = (
         action=AgentAction.RUN_SHELL,
         name="run_shell",
         description="Execute a shell command on the user's machine (full privileges; not sandboxed).",
-        when_to_use="git, npm, pytest, file ops, pipelines (&&, pipes).",
+        when_to_use="shell CLIs, package managers, test runners, file ops, pipelines (&&, pipes).",
         avoid_when="Complex data transforms are easier in Python.",
     ),
     ToolSpec(
