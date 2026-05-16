@@ -65,12 +65,33 @@ def run_setup() -> None:
     is_flag=True,
     help="Show stdout/stderr from shell and Python tool runs.",
 )
+@click.option(
+    "-i",
+    "debug_input",
+    is_flag=True,
+    help="Print the full prompt sent to the model each turn (instructions + input).",
+)
+@click.option(
+    "-o",
+    "debug_output",
+    is_flag=True,
+    help="Print the model's raw response in full each turn.",
+)
 @click.pass_context
-def cli(ctx: click.Context, debug: bool) -> None:
+def cli(
+    ctx: click.Context,
+    debug: bool,
+    debug_input: bool,
+    debug_output: bool,
+) -> None:
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
         load_env()
-        run_harness(debug=debug)
+        run_harness(
+            debug=debug,
+            debug_input=debug_input,
+            debug_output=debug_output,
+        )
 
 
 @cli.command()

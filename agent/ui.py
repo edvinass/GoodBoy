@@ -27,8 +27,16 @@ def _indent_body(text: str, *, prefix: str = "  ") -> None:
 class ConversationUI:
     """Format user and agent messages distinctly in the terminal."""
 
-    def __init__(self, *, debug: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        debug: bool = False,
+        debug_input: bool = False,
+        debug_output: bool = False,
+    ) -> None:
         self.debug = debug
+        self.debug_input = debug_input
+        self.debug_output = debug_output
 
     def prompt_user(self) -> str:
         """Read a user line under the You: label."""
@@ -57,6 +65,45 @@ class ConversationUI:
         else:
             click.echo(f"{_AGENT}:")
         _indent_body(text)
+
+    def print_llm_request(
+        self,
+        *,
+        turn: int,
+        model: str,
+        reasoning_effort: str | None,
+        instructions: str,
+        input_text: str,
+    ) -> None:
+        """Print full prompt payload sent to the model (debug -i)."""
+        if not self.debug_input:
+            return
+
+        click.echo()
+        click.echo(
+            f"{_AGENT} {click.style(f'(input, turn {turn})', **_DIM)}:"
+        )
+        meta = f"model: {model}"
+        if reasoning_effort:
+            meta += f", reasoning: {reasoning_effort}"
+        _indent_body(meta)
+        click.echo()
+        _indent_body("--- instructions ---")
+        _indent_body(instructions)
+        click.echo()
+        _indent_body("--- input ---")
+        _indent_body(input_text)
+
+    def print_llm_response(self, *, turn: int, raw: str) -> None:
+        """Print raw model response without truncation (debug -o)."""
+        if not self.debug_output:
+            return
+
+        click.echo()
+        click.echo(
+            f"{_AGENT} {click.style(f'(output, turn {turn})', **_DIM)}:"
+        )
+        _indent_body(raw)
 
     def print_agent_step(
         self,

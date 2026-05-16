@@ -49,3 +49,47 @@ def test_print_tool_result_shown_in_debug(capsys):
     out = capsys.readouterr().out
     assert "hi" in out
     assert "output" in out
+
+
+def test_print_llm_request_with_debug_input(capsys):
+    ui = ConversationUI(debug_input=True)
+    ui.print_llm_request(
+        turn=1,
+        model="gpt-4o-mini",
+        reasoning_effort=None,
+        instructions="You are GoodBoy.",
+        input_text="## User task\nfix bug",
+    )
+    out = capsys.readouterr().out
+    assert "input, turn 1" in out
+    assert "instructions" in out
+    assert "You are GoodBoy." in out
+    assert "fix bug" in out
+    assert "gpt-4o-mini" in out
+
+
+def test_print_llm_request_hidden_without_flag(capsys):
+    ui = ConversationUI(debug_input=False)
+    ui.print_llm_request(
+        turn=1,
+        model="gpt-4o-mini",
+        reasoning_effort=None,
+        instructions="secret",
+        input_text="task",
+    )
+    assert capsys.readouterr().out == ""
+
+
+def test_print_llm_response_with_debug_output(capsys):
+    ui = ConversationUI(debug_output=True)
+    raw = '{"action":"task_complete","message":"done"}'
+    ui.print_llm_response(turn=2, raw=raw)
+    out = capsys.readouterr().out
+    assert "output, turn 2" in out
+    assert raw in out
+
+
+def test_print_llm_response_hidden_without_flag(capsys):
+    ui = ConversationUI(debug_output=False)
+    ui.print_llm_response(turn=1, raw='{"action":"failed"}')
+    assert capsys.readouterr().out == ""

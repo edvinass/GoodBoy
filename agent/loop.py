@@ -110,8 +110,16 @@ class AgentLoop:
             }
 
             if self._ui is not None:
+                self._ui.print_llm_request(
+                    turn=turn,
+                    model=call_model,
+                    reasoning_effort=call_reasoning,
+                    instructions=self._instructions,
+                    input_text=llm_kwargs["input"],
+                )
                 with self._ui.thinking():
                     raw = self._llm_call(**llm_kwargs)
+                self._ui.print_llm_response(turn=turn, raw=raw)
             else:
                 raw = self._llm_call(**llm_kwargs)
 
