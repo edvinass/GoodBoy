@@ -134,18 +134,31 @@ class TurnRecord(BaseModel):
     call_reasoning_effort: str | None = None
 
 
-def parse_agent_step(raw: str) -> AgentStep:
-    """Parse and validate JSON text into an AgentStep."""
+def _strip_markdown_json_fence(text: str) -> str:
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _load_first_json_object(text: str) -> Any:
+    """Decode the first JSON value; ignore trailing concatenated objects."""
     import json
 
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
+    decoder = json.JSONDecoder()
+    try:
+        data, _end = decoder.raw_decode(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(str(exc)) from exc
+    return data
 
-    data = json.loads(text)
+
+def parse_agent_step(raw: str) -> AgentStep:
+    """Parse and validate JSON text into an AgentStep."""
+    text = _strip_markdown_json_fence(raw.strip())
+    data = _load_first_json_object(text)
     return AgentStep.model_validate(data)

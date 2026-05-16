@@ -838,7 +838,7 @@ class ConversationUI:
         self._transient_ui = True
         try:
             with self._console.status(
-                f"[agent]◆ GoodBoy[/] [muted]{label}…[/]",
+                f"[agent]🐶 GoodBoy[/] [muted]{label}…[/]",
                 spinner="dots",
             ):
                 yield

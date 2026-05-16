@@ -121,3 +121,25 @@ def test_model_strips_whitespace():
         AgentStep.model_validate(
             {"action": "switch_model", "model": "  "}
         )
+
+
+def test_parse_duplicate_json_objects_uses_first():
+    """Models sometimes emit the same action twice in one response."""
+    one = {
+        "action": "run_shell",
+        "thought": "list files",
+        "command": "ls",
+    }
+    raw = json.dumps(one) + json.dumps(one)
+    step = parse_agent_step(raw)
+    assert step.action == AgentAction.RUN_SHELL
+    assert step.command == "ls"
+
+
+def test_parse_concatenated_json_objects_uses_first_only():
+    first = {"action": "run_shell", "command": "pwd"}
+    second = {"action": "task_complete", "message": "done"}
+    raw = json.dumps(first) + json.dumps(second)
+    step = parse_agent_step(raw)
+    assert step.action == AgentAction.RUN_SHELL
+    assert step.command == "pwd"
