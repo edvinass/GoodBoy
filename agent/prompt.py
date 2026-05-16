@@ -41,7 +41,20 @@ _JSON_FIELD_DOCS = """## JSON fields
 - command: required for run_shell
 - code: required for run_python
 - message: required for need_user_input, task_complete, failed
+  (for task_complete, this is what the user reads — include full answers here when they asked to see results)
 """
+
+
+def format_user_visibility_section(*, debug: bool) -> str:
+    """Explain what the user can see in the terminal for this session."""
+    if debug:
+        return """## User visibility (this session)
+Debug mode (`goodboy -d`) is **on**. The user sees tool stdout/stderr after each run_shell/run_python, plus your thoughts and terminal messages."""
+    return """## User visibility (this session)
+Debug mode is **off** (default). The user does **not** see run_shell or run_python stdout/stderr.
+They only see: optional thought, the shell command or Python preview, and your `message` on need_user_input, task_complete, or failed.
+Tool output appears in your prior-turn context only — do not assume the user read it.
+When the user asks to show, print, display, list, or report information, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless that message contains what they asked for."""
 
 # Legacy static prompt for tests/fallback that expect SYSTEM_PROMPT
 SYSTEM_PROMPT = _BASE_RULES + "\n" + _JSON_FIELD_DOCS
@@ -53,11 +66,13 @@ def build_system_prompt(
     *,
     allowed_models: list[str],
     tools: tuple | None = None,
+    debug: bool = False,
 ) -> str:
     """Compose full system prompt with catalogs and cost policy."""
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
         _BASE_RULES,
+        format_user_visibility_section(debug=debug),
         format_cost_policy_section(),
         format_models_section(allowed_models),
         format_reasoning_section(),

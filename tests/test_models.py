@@ -80,6 +80,18 @@ def test_build_system_prompt_includes_cost_policy():
     assert "gpt-4o-mini" in prompt
 
 
+def test_build_system_prompt_visibility_without_debug():
+    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=False)
+    assert "Debug mode is **off**" in prompt
+    assert "does **not** see run_shell" in prompt
+
+
+def test_build_system_prompt_visibility_with_debug():
+    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=True)
+    assert "goodboy -d" in prompt
+    assert "stdout/stderr" in prompt
+
+
 def test_gpt_5_4_mini_has_full_tools():
     assert model_supports_openai_tool("gpt-5.4-mini", OpenAITool.TOOL_SEARCH)
     assert model_supports_openai_tool("gpt-5.4-mini", OpenAITool.COMPUTER_USE)

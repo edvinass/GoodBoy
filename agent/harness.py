@@ -9,6 +9,9 @@ from agent.ui import ConversationUI
 from settings import get_settings
 
 
+_EXIT_COMMANDS = frozenset({"exit", "quit", "q"})
+
+
 class AgentHarness:
     """Greet the user, run the agent loop, and handle clarifications."""
 
@@ -33,15 +36,32 @@ class AgentHarness:
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
         click.echo(self.GREETING)
-        task = self._ui.prompt_user()
-        if not task:
-            click.echo("No task provided.", err=True)
-            return 1
+        exit_code = 0
+        first_prompt = True
 
-        result = self._loop.run(task, ask_user=self._ui.prompt_user)
-        return self._exit_code(result)
+        while True:
+            try:
+                task = self._ui.prompt_user()
+            except (click.Abort, EOFError, KeyboardInterrupt):
+                click.echo()
+                return exit_code
 
-    def _exit_code(self, result: LoopResult) -> int:
+            if self._should_exit(task):
+                if first_prompt and not task:
+                    click.echo("No task provided.", err=True)
+                    return 1
+                return exit_code
+
+            first_prompt = False
+            result = self._loop.run(task, ask_user=self._ui.prompt_user)
+            exit_code = max(exit_code, self._report_outcome(result))
+
+    @staticmethod
+    def _should_exit(task: str) -> bool:
+        normalized = task.strip().lower()
+        return not normalized or normalized in _EXIT_COMMANDS
+
+    def _report_outcome(self, result: LoopResult) -> int:
         if result.outcome == LoopOutcome.TASK_COMPLETE:
             click.echo()
             click.echo(click.style("✓ Task complete", fg="green", bold=True))

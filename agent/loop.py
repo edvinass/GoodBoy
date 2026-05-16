@@ -80,7 +80,11 @@ class AgentLoop:
         self._pending_reasoning: str | None = None
         self._llm_call = llm_call or complete_structured
         self._ui = ui
-        self._instructions = build_system_prompt(allowed_models=self._allowed_models)
+        debug_mode = ui.debug if ui is not None else False
+        self._instructions = build_system_prompt(
+            allowed_models=self._allowed_models,
+            debug=debug_mode,
+        )
 
     def run(
         self,
