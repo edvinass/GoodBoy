@@ -8,7 +8,7 @@ from agent.models import (
     assert_catalog_covers_model_choices,
     cheapest_model_with_tools,
     format_cost_policy_section,
-    format_hosted_api_section,
+    format_hosted_tools_reference,
     format_models_section,
     get_model_spec,
     model_supports_openai_tool,
@@ -83,17 +83,19 @@ def test_cheapest_model_with_tools():
     assert model == "gpt-4.1-nano"
 
 
-def test_format_hosted_api_section():
-    text = format_hosted_api_section()
-    assert "switch_api" in text
+def test_format_hosted_tools_reference():
+    text = format_hosted_tools_reference()
     assert "web_search" in text
-    assert "separate step" in text
+    assert "file_search" in text
 
 
 def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
     assert "Cost policy" in prompt
+    assert "Configuration guide" in prompt
     assert "switch_api" in prompt
+    assert "reasoning_effort" in prompt
+    assert "separate turn" in prompt.lower() or "separate turns" in prompt.lower()
     assert "web_search" in prompt
     assert "run_shell" in prompt
     assert "gpt-4o-mini" in prompt

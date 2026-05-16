@@ -401,8 +401,18 @@ def format_models_section(allowed_ids: list[str]) -> str:
 
 def format_reasoning_section() -> str:
     lines = [
-        "## Reasoning effort (optional; bills as output tokens on reasoning models)",
-        "Set reasoning_effort for the *next* LLM call only when the pending model supports it.",
+        "## Reasoning effort catalog",
+        "Use the `reasoning_effort` field on any action to set effort for the *next* LLM call.",
+        "Only valid when the *next* model (pending `model` or current default) is a",
+        "reasoning model and lists that level in Available models below. Omit otherwise.",
+        "",
+        "How to change (example — escalate after a failed shell turn):",
+        '  {"action": "run_shell", "command": "pytest -q", "reasoning_effort": "medium"}',
+        "",
+        "Rules:",
+        "- One change per concern when possible: do not set reasoning_effort on switch_api.",
+        "- Start low (none/low); increase only after ambiguity or repeated failure.",
+        "- gpt-4o-mini and gpt-4.1-* (non-reasoning): omit reasoning_effort entirely.",
         "",
     ]
     for spec in REASONING_EFFORT_CATALOG:
@@ -412,17 +422,14 @@ def format_reasoning_section() -> str:
     return "\n".join(lines)
 
 
-def format_hosted_api_section() -> str:
-    return """## OpenAI hosted API (switch_api)
-- Default: structured harness only (run_shell, run_python). No live web access.
-- For live web data (weather, news, prices, current events, "what is happening now"),
-  use action **switch_api** with tools: ["web_search"] before giving up.
-- Do NOT task_complete saying you cannot access live or current data — switch API first.
-- **Model switch is a separate step**: use switch_api alone first. If the active model
-  lacks the tool, the harness will tell you; then set `model` on the *next* turn to a
-  capable ID from the catalog (do not switch API again).
-- After hosted tools are active, continue the task and finish with task_complete; put
-  the full answer in message (user does not see tool traces unless debug mode)."""
+def format_hosted_tools_reference() -> str:
+    tool_ids = ", ".join(f'"{t.value}"' for t in OpenAITool)
+    return f"""## Hosted tool IDs (for switch_api `tools` array)
+Valid values: {tool_ids}
+- **web_search**: live web pages (weather, news, prices, current events).
+- **file_search**: search uploaded vector stores (not local files — use run_shell).
+- **code_interpreter**: sandboxed Python/charts in OpenAI (not run_python).
+- Other IDs: see model catalog — not every model supports every tool."""
 
 
 def format_cost_policy_section() -> str:
