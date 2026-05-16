@@ -2,10 +2,66 @@
 
 import json
 
+import click
+import pytest
 from rich.console import Console
 
 from agent.types import AgentAction, AgentStep, ToolResult
-from agent.ui import ConversationUI, _wrap_long_lines
+from agent.ui import (
+    ConversationUI,
+    _PasteState,
+    _wrap_long_lines,
+    format_pasted_text_label,
+)
+
+
+def test_format_pasted_text_label():
+    assert format_pasted_text_label(1, 53) == "[Pasted text #1 +52 lines]"
+
+
+def test_paste_state_register_multiline():
+    state = _PasteState()
+    label = state.register_paste("a\nb\nc")
+    assert label == "[Pasted text #1 +2 lines]"
+    assert state.stored == "a\nb\nc"
+    assert state.resolve("[Pasted text #1 +2 lines]") == "a\nb\nc"
+
+
+def test_paste_state_single_line_returns_none():
+    state = _PasteState()
+    assert state.register_paste("hello") is None
+    assert state.stored is None
+
+
+def test_prompt_user_multiline(monkeypatch):
+    ui = ConversationUI()
+
+    def _fake(paste_state: _PasteState) -> str:
+        return paste_state.register_paste("line one\nline two") or ""
+
+    monkeypatch.setattr("agent.ui._prompt_user_line", _fake)
+    assert ui.prompt_user() == "line one\nline two"
+
+
+def test_prompt_user_shows_paste_label(capsys, monkeypatch):
+    ui = ConversationUI()
+    monkeypatch.setattr(
+        "agent.ui._prompt_user_line",
+        lambda paste_state: (
+            paste_state.register_paste("a\nb\n") or ""
+        ),
+    )
+    ui.prompt_user()
+    out = capsys.readouterr().out
+    assert "[Pasted text #1 +1 lines]" in out
+
+
+def test_prompt_user_abort_on_cancel(monkeypatch):
+    ui = ConversationUI()
+    monkeypatch.setattr("agent.ui._prompt_user_line", lambda paste_state: None)
+
+    with pytest.raises(click.Abort):
+        ui.prompt_user()
 
 
 def test_print_user_format(capsys):
@@ -46,6 +102,24 @@ def test_print_agent_step_hides_model_without_flag(capsys):
     ui.print_agent_step(step, model="gpt-4o-mini")
     out = capsys.readouterr().out
     assert "gpt-4o-mini" not in out
+
+
+def test_print_agent_step_hides_shell_without_debug(capsys):
+    ui = ConversationUI(debug=False)
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s example.com")
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "curl" not in out
+    assert "shell" not in out
+
+
+def test_print_agent_step_shows_shell_with_debug(capsys):
+    ui = ConversationUI(debug=True)
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s example.com")
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "curl -s example.com" in out
+    assert "shell" in out
 
 
 def test_print_agent_step_need_user_input(capsys):

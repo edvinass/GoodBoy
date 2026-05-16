@@ -9,6 +9,12 @@ from contextlib import contextmanager
 from typing import Iterator
 
 import click
+from prompt_toolkit.buffer import Buffer
+from prompt_toolkit.clipboard import ClipboardData
+from prompt_toolkit.document import PasteMode
+from prompt_toolkit.shortcuts import PromptSession
+from prompt_toolkit.styles import Style, merge_styles
+from questionary.constants import DEFAULT_STYLE
 from rich.box import ROUNDED
 from rich.console import Console, Group, RenderableType
 from rich.markdown import Markdown
@@ -43,6 +49,92 @@ _SUBTITLE_ICONS = {
 }
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
+
+_USER_INPUT_PLACEHOLDER = "Ask anything…"
+
+
+def format_pasted_text_label(paste_id: int, line_count: int) -> str:
+    """Summary shown when the user pastes multiline text (e.g. +52 lines = 53 total)."""
+    if line_count < 2:
+        raise ValueError("line_count must be at least 2 for a paste label")
+    return f"[Pasted text #{paste_id} +{line_count - 1} lines]"
+
+
+class _PasteState:
+    """Tracks multiline clipboard paste for display vs. submitted text."""
+
+    def __init__(self) -> None:
+        self.counter = 0
+        self.stored: str | None = None
+        self.label: str | None = None
+
+    def register_paste(self, text: str) -> str | None:
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = normalized.split("\n")
+        if lines and lines[-1] == "":
+            lines = lines[:-1]
+        if len(lines) < 2:
+            return None
+        self.counter += 1
+        self.stored = normalized.rstrip("\n")
+        self.label = format_pasted_text_label(self.counter, len(lines))
+        return self.label
+
+    def resolve(self, buffer_text: str) -> str:
+        if self.stored is not None:
+            return self.stored
+        return buffer_text
+
+
+def _attach_paste_handler(buffer: Buffer, paste_state: _PasteState) -> None:
+    """Collapse multiline paste (Ctrl+V and bracketed paste) to a short label."""
+    original_paste = buffer.paste_clipboard_data
+
+    def paste_clipboard_data(
+        data: ClipboardData,
+        paste_mode: PasteMode = PasteMode.EMACS,
+        count: int = 1,
+    ) -> None:
+        if count != 1:
+            original_paste(data, paste_mode=paste_mode, count=count)
+            return
+        label = paste_state.register_paste(data.text)
+        if label is None:
+            original_paste(data, paste_mode=paste_mode, count=count)
+            return
+        buffer.text = label
+
+    buffer.paste_clipboard_data = paste_clipboard_data  # type: ignore[method-assign]
+
+
+def _prompt_user_line(paste_state: _PasteState) -> str | None:
+    """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
+    style = merge_styles(
+        [
+            DEFAULT_STYLE,
+            Style.from_dict(
+                {
+                    "placeholder": "dim",
+                    "question": "",
+                }
+            ),
+        ]
+    )
+
+    def get_prompt_tokens() -> list[tuple[str, str]]:
+        return [("class:question", " │ ")]
+
+    session = PromptSession(
+        get_prompt_tokens,
+        style=style,
+        multiline=False,
+        placeholder=_USER_INPUT_PLACEHOLDER,
+    )
+    _attach_paste_handler(session.default_buffer, paste_state)
+    try:
+        return session.prompt()
+    except (KeyboardInterrupt, EOFError):
+        return None
 
 
 def _wrap_long_lines(text: str, *, width: int) -> str:
@@ -247,13 +339,23 @@ class ConversationUI:
         self._console.print(title)
 
     def prompt_user(self) -> str:
-        """Read a user line under the You: label."""
+        """Read user input; Enter sends; multiline paste shows a collapsed label."""
         self._print_header("user")
-        return click.prompt(
-            Text.from_markup("[muted]│[/] ").plain,
-            prompt_suffix=" ",
-            show_default=False,
-        ).strip()
+        paste_state = _PasteState()
+        result = _prompt_user_line(paste_state)
+        if result is None:
+            raise click.Abort()
+        text = paste_state.resolve(result)
+        if paste_state.label:
+            self._console.print(
+                Panel(
+                    paste_state.label,
+                    border_style="green",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                )
+            )
+        return text.strip()
 
     def print_user(self, text: str) -> None:
         self._print_header("user")
@@ -378,9 +480,9 @@ class ConversationUI:
                 )
             )
 
-        if step.action == AgentAction.RUN_SHELL and step.command:
+        if self.debug and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
-        elif step.action == AgentAction.RUN_PYTHON and step.code:
+        elif self.debug and step.action == AgentAction.RUN_PYTHON and step.code:
             preview = step.code.strip()
             if "\n" in preview:
                 preview = preview.splitlines()[0] + " ..."

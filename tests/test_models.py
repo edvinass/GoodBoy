@@ -83,12 +83,15 @@ def test_build_system_prompt_includes_cost_policy():
 def test_build_system_prompt_visibility_without_debug():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=False)
     assert "Debug mode is **off**" in prompt
-    assert "does **not** see run_shell" in prompt
+    assert "does **not** see run_shell commands" in prompt
+    assert "run_python code" in prompt
+    assert "shell command or Python preview" not in prompt
 
 
 def test_build_system_prompt_visibility_with_debug():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=True)
     assert "goodboy -d" in prompt
+    assert "run_shell commands" in prompt
     assert "stdout/stderr" in prompt
 
 

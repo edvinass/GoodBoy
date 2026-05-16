@@ -49,11 +49,11 @@ def format_user_visibility_section(*, debug: bool) -> str:
     """Explain what the user can see in the terminal for this session."""
     if debug:
         return """## User visibility (this session)
-Debug mode (`goodboy -d`) is **on**. The user sees tool stdout/stderr after each run_shell/run_python, plus your thoughts and terminal messages."""
+Debug mode (`goodboy -d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
     return """## User visibility (this session)
-Debug mode is **off** (default). The user does **not** see run_shell or run_python stdout/stderr.
-They only see: optional thought, the shell command or Python preview, and your `message` on need_user_input, task_complete, or failed.
-Tool output appears in your prior-turn context only — do not assume the user read it.
+Debug mode is **off** (default). The user does **not** see run_shell commands, run_python code, or tool stdout/stderr.
+They only see: optional thought, and your `message` on need_user_input, task_complete, or failed.
+Tool commands and output appear in your prior-turn context only — do not assume the user saw them.
 When the user asks to show, print, display, list, or report information, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless that message contains what they asked for."""
 
 # Legacy static prompt for tests/fallback that expect SYSTEM_PROMPT
