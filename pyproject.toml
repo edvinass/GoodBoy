@@ -1,0 +1,15 @@
+[project]
+name = "goodboy"
+version = "0.1.0"
+description = "Hello World Python project"
+requires-python = ">=3.10"
+
+[project.scripts]
+goodboy = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
