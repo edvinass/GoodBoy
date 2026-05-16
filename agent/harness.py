@@ -14,14 +14,13 @@ _EXIT_COMMANDS = frozenset({"exit", "quit", "q"})
 
 
 class AgentHarness:
-    """Greet the user, run the agent loop, and handle clarifications."""
-
-    GREETING = "How can I help?"
+    """Run the agent loop and handle clarifications."""
 
     def __init__(
         self,
         *,
         show_model: bool = False,
+        show_commands: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
@@ -30,6 +29,7 @@ class AgentHarness:
     ) -> None:
         self._ui = ui or ConversationUI(
             show_model=show_model,
+            show_commands=show_commands,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
@@ -39,7 +39,6 @@ class AgentHarness:
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
         self._ui.print_startup()
-        self._ui.print_greeting(self.GREETING)
         exit_code = 0
         first_prompt = True
 
@@ -108,6 +107,7 @@ class AgentHarness:
 def run_harness(
     *,
     show_model: bool = False,
+    show_commands: bool = False,
     debug: bool = False,
     debug_input: bool = False,
     debug_output: bool = False,
@@ -119,6 +119,7 @@ def run_harness(
         raise SystemExit(1)
     harness = AgentHarness(
         show_model=show_model,
+        show_commands=show_commands,
         debug=debug,
         debug_input=debug_input,
         debug_output=debug_output,

@@ -31,9 +31,6 @@ class FakeUI:
     def print_startup(self) -> None:
         pass
 
-    def print_greeting(self, message: str) -> None:
-        pass
-
     def print_task_complete(self) -> None:
         pass
 

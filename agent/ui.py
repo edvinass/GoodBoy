@@ -268,12 +268,14 @@ class ConversationUI:
         self,
         *,
         show_model: bool = False,
+        show_commands: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
         console: Console | None = None,
     ) -> None:
         self.show_model = show_model
+        self.show_commands = show_commands
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
@@ -288,18 +290,6 @@ class ConversationUI:
         self._console.print(
             Panel(
                 Text.from_markup(format_startup(model=get_settings().default_model)),
-                border_style="cyan",
-                box=ROUNDED,
-                padding=(0, 2),
-            )
-        )
-
-    def print_greeting(self, message: str) -> None:
-        self._console.print()
-        self._console.print(
-            Panel(
-                message,
-                title="[agent]◆ GoodBoy[/]",
                 border_style="cyan",
                 box=ROUNDED,
                 padding=(0, 2),
@@ -485,9 +475,9 @@ class ConversationUI:
                 )
             )
 
-        if self.debug and step.action == AgentAction.RUN_SHELL and step.command:
+        if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
-        elif self.debug and step.action == AgentAction.RUN_PYTHON and step.code:
+        elif self._show_tool_io and step.action == AgentAction.RUN_PYTHON and step.code:
             preview = step.code.strip()
             if "\n" in preview:
                 preview = preview.splitlines()[0] + " ..."
@@ -504,9 +494,13 @@ class ConversationUI:
         ):
             self.print_agent(step.message)
 
+    @property
+    def _show_tool_io(self) -> bool:
+        return self.show_commands or self.debug
+
     def print_tool_result(self, result: ToolResult) -> None:
-        """Brief tool output summary after execution (debug mode only)."""
-        if not self.debug:
+        """Brief tool output summary after execution (-c / -d)."""
+        if not self._show_tool_io:
             return
 
         meta = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))

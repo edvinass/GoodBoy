@@ -111,7 +111,7 @@ def test_build_system_prompt_visibility_without_debug():
 
 def test_build_system_prompt_visibility_with_debug():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=True)
-    assert "goodboy -d" in prompt
+    assert "goodboy -c" in prompt
     assert "run_shell commands" in prompt
     assert "stdout/stderr" in prompt
 

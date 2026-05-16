@@ -90,7 +90,9 @@ class AgentLoop:
         self._hosted_tools: tuple[str, ...] = ()
         self._llm_call = llm_call or complete_structured
         self._ui = ui
-        debug_mode = ui.debug if ui is not None else False
+        debug_mode = (
+            (ui.show_commands or ui.debug) if ui is not None else False
+        )
         self._instructions = build_system_prompt(
             allowed_models=self._allowed_models,
             debug=debug_mode,

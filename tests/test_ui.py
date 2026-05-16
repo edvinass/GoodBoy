@@ -122,6 +122,24 @@ def test_print_agent_step_shows_shell_with_debug(capsys):
     assert "shell" in out
 
 
+def test_print_agent_step_shows_shell_with_show_commands(capsys):
+    ui = ConversationUI(show_commands=True)
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s example.com")
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "curl -s example.com" in out
+    assert "shell" in out
+
+
+def test_print_tool_result_shown_with_show_commands(capsys):
+    ui = ConversationUI(show_commands=True)
+    tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)
+    ui.print_tool_result(tool)
+    out = capsys.readouterr().out
+    assert "hi" in out
+    assert "stdout" in out
+
+
 def test_print_agent_step_need_user_input(capsys):
     ui = ConversationUI()
     step = AgentStep(

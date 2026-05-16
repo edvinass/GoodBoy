@@ -140,7 +140,7 @@ def format_user_visibility_section(*, debug: bool) -> str:
     """Explain what the user can see in the terminal for this session."""
     if debug:
         return """## User visibility (this session)
-Debug mode (`goodboy -d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
+Command visibility (`goodboy -c` or `-d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
     return """## User visibility (this session)
 Debug mode is **off** (default). The user does **not** see run_shell commands, run_python code, or tool stdout/stderr.
 They only see: optional thought, and your `message` on need_user_input, task_complete, or failed.

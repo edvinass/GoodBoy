@@ -66,6 +66,12 @@ def run_setup() -> None:
     help="Print the model used on each agent response.",
 )
 @click.option(
+    "-c",
+    "show_commands",
+    is_flag=True,
+    help="Print shell/Python commands the agent runs and their stdout/stderr.",
+)
+@click.option(
     "-d",
     "--debug",
     is_flag=True,
@@ -87,6 +93,7 @@ def run_setup() -> None:
 def cli(
     ctx: click.Context,
     show_model: bool,
+    show_commands: bool,
     debug: bool,
     debug_input: bool,
     debug_output: bool,
@@ -96,6 +103,7 @@ def cli(
         load_env()
         run_harness(
             show_model=show_model,
+            show_commands=show_commands,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
