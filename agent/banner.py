@@ -22,9 +22,9 @@ def _brown_dog_art() -> str:
     return "\n".join(f"[{_BRAND_STYLE}]{line}[/]" for line in DOG_ASCII.rstrip().splitlines())
 
 DESCRIPTION = (
-    "A local autonomous agent for your machine. Describe a task in plain "
-    "English — GoodBoy plans steps, runs shell commands and Python, and "
-    "reports back when done. Type exit or quit to leave."
+    "Autonomous coding agent for your machine. Describe a task — GoodBoy "
+    "explores the repo, edits files, runs tests and builds, and reports back "
+    "when done. Type exit or quit to leave."
 )
 
 

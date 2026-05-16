@@ -89,6 +89,15 @@ def test_format_hosted_tools_reference():
     assert "file_search" in text
 
 
+def test_build_system_prompt_coding_agent_identity():
+    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"])
+    assert "powerful autonomous coding agent" in prompt
+    assert "Core objective" in prompt
+    assert "Inspect the codebase before making changes" in prompt
+    assert "rg " in prompt
+    assert "perform" in prompt.lower()
+
+
 def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
     assert "Cost policy" in prompt

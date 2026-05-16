@@ -277,8 +277,8 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
 
 def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
     if role == "user":
-        return Text.from_markup("[user]▸ You[/]")
-    title = Text.from_markup("[agent]◆ GoodBoy[/]")
+        return Text.from_markup("[user]👤 You[/]")
+    title = Text.from_markup("[agent]🐶 GoodBoy[/]")
     if subtitle:
         icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
         title.append(f"  [{icon}] ", style="subtitle")

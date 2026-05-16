@@ -40,16 +40,25 @@ DEFAULT_TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         action=AgentAction.RUN_SHELL,
         name="run_shell",
-        description="Execute a shell command on the user's machine (full privileges; not sandboxed).",
-        when_to_use="shell CLIs, package managers, test runners, file ops, pipelines (&&, pipes).",
-        avoid_when="Complex data transforms are easier in Python.",
+        description=(
+            "Execute a shell command in the project workspace (full privileges; not sandboxed). "
+            "Primary tool for navigating, searching, reading, creating, and editing files."
+        ),
+        when_to_use=(
+            "ls/find/tree; rg/grep; cat/head; git; heredocs/sed/tee for edits; npm/pytest/cargo/go "
+            "test; builds, linters, formatters; installing deps; any CLI the project uses."
+        ),
+        avoid_when="Heavy structured data processing is clearer in run_python.",
     ),
     ToolSpec(
         action=AgentAction.RUN_PYTHON,
         name="run_python",
-        description="Execute Python via the same interpreter as the harness.",
-        when_to_use="Parsing, algorithms, one-off scripts, structured manipulation.",
-        avoid_when="A simple single shell command suffices.",
+        description="Execute Python via the same interpreter as the harness (workspace cwd).",
+        when_to_use=(
+            "Multi-file refactors, AST transforms, parsing build output, generating patches, "
+            "or logic that is awkward in shell."
+        ),
+        avoid_when="A focused shell command (rg, sed, pytest, git) is enough.",
     ),
 )
 
@@ -80,9 +89,10 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
     """Build prompt section describing harness tools."""
     specs = tools if tools is not None else DEFAULT_TOOLS
     lines = [
-        "## Harness tools (pick action for this turn's work)",
-        "Set action to one of the tool IDs below, or a terminal action "
-        "(need_user_input, task_complete, failed).",
+        "## Harness tools (local codebase work)",
+        "Set **action** to a tool below for this turn, or a terminal action "
+        "(need_user_input, task_complete, failed). There is no separate read_file/write_file "
+        "action — use run_shell to inspect and modify the repository.",
         "",
     ]
     for spec in specs:
