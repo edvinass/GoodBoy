@@ -59,12 +59,18 @@ def run_setup() -> None:
 
 
 @click.group(invoke_without_command=True)
+@click.option(
+    "-d",
+    "--debug",
+    is_flag=True,
+    help="Show stdout/stderr from shell and Python tool runs.",
+)
 @click.pass_context
-def cli(ctx: click.Context) -> None:
+def cli(ctx: click.Context, debug: bool) -> None:
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
         load_env()
-        run_harness()
+        run_harness(debug=debug)
 
 
 @cli.command()

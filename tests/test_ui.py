@@ -35,8 +35,15 @@ def test_print_agent_step_need_user_input(capsys):
     assert "Which file?" in out
 
 
-def test_print_tool_result(capsys):
-    ui = ConversationUI()
+def test_print_tool_result_hidden_without_debug(capsys):
+    ui = ConversationUI(debug=False)
+    tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)
+    ui.print_tool_result(tool)
+    assert capsys.readouterr().out == ""
+
+
+def test_print_tool_result_shown_in_debug(capsys):
+    ui = ConversationUI(debug=True)
     tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)
     ui.print_tool_result(tool)
     out = capsys.readouterr().out

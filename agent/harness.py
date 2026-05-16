@@ -17,10 +17,11 @@ class AgentHarness:
     def __init__(
         self,
         *,
+        debug: bool = False,
         loop: AgentLoop | None = None,
         ui: ConversationUI | None = None,
     ) -> None:
-        self._ui = ui or ConversationUI()
+        self._ui = ui or ConversationUI(debug=debug)
         self._loop = loop or AgentLoop(ui=self._ui)
 
     def run(self) -> int:
@@ -64,11 +65,11 @@ class AgentHarness:
         return 1
 
 
-def run_harness() -> None:
+def run_harness(*, debug: bool = False) -> None:
     """Entry point for the GoodBoy harness."""
     cfg = get_settings()
     if not cfg.openai_api_key:
         click.echo("Not configured yet. Run: goodboy setup", err=True)
         raise SystemExit(1)
-    harness = AgentHarness()
+    harness = AgentHarness(debug=debug)
     raise SystemExit(harness.run())

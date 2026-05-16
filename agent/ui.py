@@ -27,6 +27,9 @@ def _indent_body(text: str, *, prefix: str = "  ") -> None:
 class ConversationUI:
     """Format user and agent messages distinctly in the terminal."""
 
+    def __init__(self, *, debug: bool = False) -> None:
+        self.debug = debug
+
     def prompt_user(self) -> str:
         """Read a user line under the You: label."""
         click.echo()
@@ -75,7 +78,10 @@ class ConversationUI:
             self.print_agent(step.message)
 
     def print_tool_result(self, result: ToolResult) -> None:
-        """Brief tool output summary after execution."""
+        """Brief tool output summary after execution (debug mode only)."""
+        if not self.debug:
+            return
+
         lines: list[str] = []
         if result.timed_out:
             lines.append(click.style("Timed out.", fg="yellow"))
