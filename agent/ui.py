@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from contextlib import contextmanager
@@ -16,7 +17,7 @@ from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style, merge_styles
 from questionary.constants import DEFAULT_STYLE
 from rich.box import ROUNDED
-from rich.console import Console, Group, RenderableType
+from rich.console import Console, ConsoleDimensions, Group, RenderableType
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -52,6 +53,24 @@ _SUBTITLE_ICONS = {
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything…"
+
+
+class _AutoWidthConsole(Console):
+    """Console sized from the output stream, not a stale COLUMNS env var."""
+
+    @property
+    def size(self) -> ConsoleDimensions:
+        file = self.file
+        if hasattr(file, "isatty") and file.isatty() and hasattr(file, "fileno"):
+            try:
+                width, height = os.get_terminal_size(file.fileno())
+                return ConsoleDimensions(
+                    max(width - self.legacy_windows, 1),
+                    max(height, 1),
+                )
+            except OSError:
+                pass
+        return super().size
 
 
 def format_pasted_text_label(paste_id: int, line_count: int) -> str:
@@ -281,11 +300,35 @@ class ConversationUI:
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
-        self._console = console or Console(theme=_THEME)
-        self._err = Console(theme=_THEME, stderr=True)
+        self._console = console or _AutoWidthConsole(theme=_THEME)
+        self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
 
     def _panel_text_width(self) -> int:
         return max(self._console.width - 6, 40)
+
+    def _kv_table(
+        self,
+        rows: list[tuple[str, str]],
+        *,
+        box=ROUNDED,
+        fit: bool = False,
+    ) -> Table:
+        """Key/value table; full terminal width unless nested in a panel."""
+        table_kwargs: dict = {
+            "show_header": False,
+            "box": box,
+            "border_style": "dim",
+            "padding": (0, 1),
+        }
+        if not fit:
+            table_kwargs["width"] = self._console.width
+            table_kwargs["expand"] = True
+        table = Table(**table_kwargs)
+        table.add_column(style="muted", no_wrap=True)
+        table.add_column(overflow="fold")
+        for key, value in rows:
+            table.add_row(key, value)
+        return table
 
     def print_startup(self) -> None:
         self._console.print()
@@ -395,13 +438,13 @@ class ConversationUI:
         if not self.debug_input:
             return
 
-        meta = Table(show_header=False, box=None, padding=(0, 1))
-        meta.add_column(style="muted")
-        meta.add_column()
-        meta.add_row("turn", str(turn))
-        meta.add_row("model", model)
+        meta_rows: list[tuple[str, str]] = [
+            ("turn", str(turn)),
+            ("model", model),
+        ]
         if reasoning_effort:
-            meta.add_row("reasoning", reasoning_effort)
+            meta_rows.append(("reasoning", reasoning_effort))
+        meta = self._kv_table(meta_rows, box=None, fit=True)
 
         panel_width = self._panel_text_width()
         self._print_header("agent", subtitle="input")
@@ -468,17 +511,13 @@ class ConversationUI:
                     preview = preview.splitlines()[0] + " ..."
                 self.print_agent(preview, subtitle="python")
             elif self.show_model and (model or reasoning):
-                routing = Table(
-                    show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1)
-                )
-                routing.add_column(style="muted")
-                routing.add_column()
+                routing_rows: list[tuple[str, str]] = []
                 if model:
-                    routing.add_row("model", model)
+                    routing_rows.append(("model", model))
                 if reasoning:
-                    routing.add_row("reasoning", reasoning)
+                    routing_rows.append(("reasoning", reasoning))
                 self._console.print()
-                self._console.print(routing)
+                self._console.print(self._kv_table(routing_rows))
             return
 
         show_routing = (
@@ -488,21 +527,19 @@ class ConversationUI:
             or hosted_tools
         )
         if show_routing:
-            routing = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
-            routing.add_column(style="muted")
-            routing.add_column()
+            routing_rows = []
             if self.show_model and model:
-                routing.add_row("model", model)
+                routing_rows.append(("model", model))
             if self.show_model and reasoning:
-                routing.add_row("reasoning", reasoning)
+                routing_rows.append(("reasoning", reasoning))
             if hosted_tools:
-                routing.add_row("hosted tools", ", ".join(hosted_tools))
+                routing_rows.append(("hosted tools", ", ".join(hosted_tools)))
             if next_model:
-                routing.add_row("next model", next_model)
+                routing_rows.append(("next model", next_model))
             if next_reasoning:
-                routing.add_row("next reasoning", next_reasoning)
+                routing_rows.append(("next reasoning", next_reasoning))
             self._console.print()
-            self._console.print(routing)
+            self._console.print(self._kv_table(routing_rows))
 
         if step.thought:
             self._print_header("agent", subtitle="thought")
@@ -548,14 +585,13 @@ class ConversationUI:
         if not self._show_tool_io:
             return
 
-        meta = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
-        meta.add_column(style="muted")
-        meta.add_column()
+        meta_rows: list[tuple[str, str]] = []
         if result.timed_out:
-            meta.add_row("status", "[warning]timed out[/]")
+            meta_rows.append(("status", "[warning]timed out[/]"))
         elif result.exit_code is not None:
             style = "success" if result.exit_code == 0 else "warning"
-            meta.add_row("exit code", f"[{style}]{result.exit_code}[/]")
+            meta_rows.append(("exit code", f"[{style}]{result.exit_code}[/]"))
+        meta = self._kv_table(meta_rows, fit=True)
 
         panel_width = self._panel_text_width()
         parts: list[RenderableType] = [Panel(meta, title="[muted]run[/]", border_style="dim", box=ROUNDED)]
@@ -593,13 +629,13 @@ class ConversationUI:
 
     @contextmanager
     def thinking(self, label: str = "is thinking") -> Iterator[None]:
-        """Show a spinner on stderr while the agent waits on the LLM."""
-        if not sys.stderr.isatty():
-            self._err.print(f"[agent]◆ GoodBoy[/] [muted]{label}…[/]")
+        """Show a spinner while the agent waits on the LLM."""
+        if not sys.stdout.isatty():
+            self._console.print(f"[agent]◆ GoodBoy[/] [muted]{label}…[/]")
             yield
             return
 
-        with self._err.status(
+        with self._console.status(
             f"[agent]◆ GoodBoy[/] [muted]{label}…[/]",
             spinner="dots",
         ):

@@ -1,6 +1,7 @@
 """Tests for conversation UI formatting."""
 
 import json
+import os
 
 import click
 import pytest
@@ -9,7 +10,9 @@ from rich.console import Console
 from agent.types import AgentAction, AgentStep, ToolResult
 from agent.ui import (
     ConversationUI,
+    _AutoWidthConsole,
     _PasteState,
+    _THEME,
     _wrap_long_lines,
     format_pasted_text_label,
 )
@@ -83,7 +86,7 @@ def test_print_agent_with_subtitle(capsys):
 
 
 def test_print_agent_step_shows_model_with_flag(capsys):
-    ui = ConversationUI(show_model=True)
+    ui = ConversationUI(show_model=True, console=Console(width=72, theme=_THEME))
     step = AgentStep(
         action=AgentAction.RUN_SHELL,
         command="ls",
@@ -94,6 +97,38 @@ def test_print_agent_step_shows_model_with_flag(capsys):
     assert "gpt-4o-mini" in out
     assert "reasoning" in out
     assert "low" in out
+
+
+def test_routing_table_width_matches_console(capsys):
+    ui = ConversationUI(
+        show_model=True,
+        console=Console(width=72, height=25, theme=_THEME),
+    )
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="ls")
+    ui.print_agent_step(step, model="gpt-4o-mini", reasoning="low")
+    out = capsys.readouterr().out
+    table_borders = [line for line in out.splitlines() if line.startswith("╭") or line.startswith("╰")]
+    assert table_borders
+    assert all(len(line) == ui._console.width for line in table_borders)
+
+
+def test_auto_width_console_ignores_stale_columns_env(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "200")
+
+    class _FakeTTY:
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return 1
+
+    console = _AutoWidthConsole(file=_FakeTTY(), theme=_THEME)
+    monkeypatch.setattr(
+        os,
+        "get_terminal_size",
+        lambda _fd: os.terminal_size((80, 24)),
+    )
+    assert console.width == 80
 
 
 def test_print_agent_step_hides_model_without_flag(capsys):
