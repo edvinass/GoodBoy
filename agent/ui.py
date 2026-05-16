@@ -275,19 +275,33 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
+def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
+    if role == "user":
+        return Text.from_markup("[user]▸ You[/]")
+    title = Text.from_markup("[agent]◆ GoodBoy[/]")
+    if subtitle:
+        icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
+        title.append(f"  [{icon}] ", style="subtitle")
+        title.append(f"({label})", style="subtitle")
+    return title
+
+
 def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) -> RenderableType:
     body = text.rstrip() or ""
     panel_width = max(width - 6, 40)
+    agent_title = _role_panel_title("agent", subtitle=subtitle)
     panel_kwargs = {
         "border_style": _BRAND_STYLE,
         "box": ROUNDED,
         "padding": (0, 1),
         "width": width,
+        "title": agent_title,
     }
     if subtitle == "shell":
         return Panel(
             _syntax(body, "bash", width=panel_width),
-            title="[shell]command[/]",
+            title=agent_title,
+            subtitle="[shell]command[/]",
             border_style="yellow",
             box=ROUNDED,
             padding=(0, 1),
@@ -296,7 +310,8 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     if subtitle == "python":
         return Panel(
             _syntax(body, "python", width=panel_width),
-            title="[python]code[/]",
+            title=agent_title,
+            subtitle="[python]code[/]",
             border_style="magenta",
             box=ROUNDED,
             padding=(0, 1),
@@ -305,7 +320,8 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     if _looks_like_directory_listing(body):
         return Panel(
             _directory_tree(body),
-            title="[muted]directory[/]",
+            title=agent_title,
+            subtitle="[muted]directory[/]",
             border_style=_BRAND_STYLE,
             box=ROUNDED,
             padding=(0, 1),
@@ -314,10 +330,7 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     if _looks_like_markdown(body):
         return Panel(
             Markdown(body),
-            border_style=_BRAND_STYLE,
-            box=ROUNDED,
-            padding=(0, 1),
-            width=width,
+            **panel_kwargs,
         )
     return Panel(
         _wrap_long_lines(body, width=panel_width),
@@ -377,15 +390,7 @@ class ConversationUI:
         return max(self._fresh_terminal_width() - 6, 40)
 
     def _header_title(self, role: str, *, subtitle: str | None = None) -> Text:
-        if role == "user":
-            title = Text.from_markup("[user]▸ You[/]")
-        else:
-            title = Text.from_markup("[agent]◆ GoodBoy[/]")
-            if subtitle:
-                icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
-                title.append(f"  [{icon}] ", style="subtitle")
-                title.append(f"({label})", style="subtitle")
-        return title
+        return _role_panel_title(role, subtitle=subtitle)
 
     def _iter_history_block(self, kind: str, data: dict[str, Any]) -> Iterator[RenderableType | str]:
         if kind == "startup":
@@ -401,23 +406,24 @@ class ConversationUI:
             return
         if kind == "user_message":
             yield ""
-            yield self._header_title("user")
+            user_title = _role_panel_title("user")
             if data.get("paste_label"):
                 yield self._panel(
                     data["paste_label"],
+                    title=user_title,
                     border_style="green",
                     padding=(0, 1),
                 )
             panel_width = self._panel_text_width()
             yield self._panel(
                 _wrap_long_lines(data["text"].rstrip() or "", width=panel_width),
+                title=user_title,
                 border_style="green",
                 padding=(0, 1),
             )
             return
         if kind == "agent_message":
             yield ""
-            yield self._header_title("agent", subtitle=data.get("subtitle"))
             yield _render_body(
                 data["text"],
                 subtitle=data.get("subtitle"),
@@ -430,10 +436,10 @@ class ConversationUI:
             return
         if kind == "thought":
             yield ""
-            yield self._header_title("agent", subtitle="thought")
             panel_width = self._panel_text_width()
             yield self._panel(
                 _wrap_long_lines(data["text"], width=panel_width),
+                title=_role_panel_title("agent", subtitle="thought"),
                 border_style=_BRAND_STYLE,
                 padding=(0, 1),
             )
@@ -444,21 +450,19 @@ class ConversationUI:
             return
         if kind == "tool_result":
             yield ""
-            yield self._header_title("agent", subtitle="output")
             yield self._render_tool_result_group(data)
             return
         if kind == "llm_request":
             yield ""
-            yield self._header_title("agent", subtitle="input")
             yield self._render_llm_request_group(data)
             return
         if kind == "llm_response":
             yield ""
-            yield self._header_title("agent", subtitle="output")
             panel_width = self._panel_text_width()
             yield self._panel(
                 _syntax(_pretty_json(data["raw"]), "json", width=panel_width),
-                title=f"[muted]turn {data['turn']}[/]",
+                title=_role_panel_title("agent", subtitle="output"),
+                subtitle=f"[muted]turn {data['turn']}[/]",
                 border_style="dim",
                 padding=(0, 1),
             )
@@ -511,7 +515,13 @@ class ConversationUI:
             parts.append(
                 self._panel("[muted](no output)[/]", border_style="dim", width=terminal_width)
             )
-        return Group(*parts)
+        return self._panel(
+            Group(*parts),
+            title=_role_panel_title("agent", subtitle="output"),
+            border_style=_BRAND_STYLE,
+            padding=(0, 0),
+            width=terminal_width,
+        )
 
     def _render_llm_request_group(self, data: dict[str, Any]) -> Group:
         meta_rows: list[tuple[str, str]] = [
@@ -523,27 +533,33 @@ class ConversationUI:
         terminal_width = self._fresh_terminal_width()
         panel_width = self._panel_text_width()
         meta = self._kv_table(meta_rows, box=None, nested=True)
-        return Group(
-            self._panel(
-                meta,
-                title="[muted]request[/]",
-                border_style="dim",
-                width=terminal_width,
+        return self._panel(
+            Group(
+                self._panel(
+                    meta,
+                    title="[muted]request[/]",
+                    border_style="dim",
+                    width=terminal_width,
+                ),
+                self._panel(
+                    _syntax(data["instructions"], "markdown", width=panel_width),
+                    title="[muted]instructions[/]",
+                    border_style="dim",
+                    padding=(0, 1),
+                    width=terminal_width,
+                ),
+                self._panel(
+                    _syntax(data["input_text"], "markdown", width=panel_width),
+                    title="[muted]input[/]",
+                    border_style="dim",
+                    padding=(0, 1),
+                    width=terminal_width,
+                ),
             ),
-            self._panel(
-                _syntax(data["instructions"], "markdown", width=panel_width),
-                title="[muted]instructions[/]",
-                border_style="dim",
-                padding=(0, 1),
-                width=terminal_width,
-            ),
-            self._panel(
-                _syntax(data["input_text"], "markdown", width=panel_width),
-                title="[muted]input[/]",
-                border_style="dim",
-                padding=(0, 1),
-                width=terminal_width,
-            ),
+            title=_role_panel_title("agent", subtitle="input"),
+            border_style=_BRAND_STYLE,
+            padding=(0, 0),
+            width=terminal_width,
         )
 
     def _redraw_all(self) -> None:
