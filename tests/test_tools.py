@@ -27,6 +27,17 @@ def test_run_shell_timeout(tmp_path: Path):
     assert "timed out" in result.stderr.lower()
 
 
+def test_run_shell_non_utf8_stderr(tmp_path: Path):
+    # Latin-1 byte 0xe1 is invalid as a standalone UTF-8 continuation byte.
+    result = run_python(
+        "import sys; sys.stderr.buffer.write(b'\\xe1\\n')",
+        cwd=tmp_path,
+        timeout=10.0,
+    )
+    assert result.exit_code == 0
+    assert "\ufffd" in result.stderr
+
+
 def test_truncation(tmp_path: Path, monkeypatch):
     import agent.tools as tools_mod
 

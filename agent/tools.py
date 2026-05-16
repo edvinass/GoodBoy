@@ -13,6 +13,12 @@ _MAX_OUTPUT_BYTES = 48 * 1024
 _TRUNCATION_SUFFIX = "\n... [truncated]"
 
 
+def _decode_stream(data: bytes | None) -> str:
+    if not data:
+        return ""
+    return data.decode("utf-8", errors="replace")
+
+
 def _truncate_stream(text: str, *, max_bytes: int | None = None) -> str:
     limit = max_bytes if max_bytes is not None else _MAX_OUTPUT_BYTES
     encoded = text.encode("utf-8", errors="replace")
@@ -36,19 +42,26 @@ def run_shell(
             shell=True,
             cwd=workdir,
             capture_output=True,
-            text=True,
             timeout=timeout,
         )
         return ToolResult(
             executed=command,
-            stdout=_truncate_stream(completed.stdout or ""),
-            stderr=_truncate_stream(completed.stderr or ""),
+            stdout=_truncate_stream(_decode_stream(completed.stdout)),
+            stderr=_truncate_stream(_decode_stream(completed.stderr)),
             exit_code=completed.returncode,
             timed_out=False,
         )
     except subprocess.TimeoutExpired as exc:
-        stdout = _truncate_stream(exc.stdout or "") if exc.stdout else ""
-        stderr = _truncate_stream(exc.stderr or "") if exc.stderr else ""
+        stdout = (
+            _truncate_stream(_decode_stream(exc.stdout))
+            if exc.stdout is not None
+            else ""
+        )
+        stderr = (
+            _truncate_stream(_decode_stream(exc.stderr))
+            if exc.stderr is not None
+            else ""
+        )
         if stderr and not stderr.endswith("\n"):
             stderr += "\n"
         stderr += f"Command timed out after {timeout}s."
@@ -83,19 +96,26 @@ def run_python(
             [sys.executable, "-c", code],
             cwd=workdir,
             capture_output=True,
-            text=True,
             timeout=timeout,
         )
         return ToolResult(
             executed=executed,
-            stdout=_truncate_stream(completed.stdout or ""),
-            stderr=_truncate_stream(completed.stderr or ""),
+            stdout=_truncate_stream(_decode_stream(completed.stdout)),
+            stderr=_truncate_stream(_decode_stream(completed.stderr)),
             exit_code=completed.returncode,
             timed_out=False,
         )
     except subprocess.TimeoutExpired as exc:
-        stdout = _truncate_stream(exc.stdout or "") if exc.stdout else ""
-        stderr = _truncate_stream(exc.stderr or "") if exc.stderr else ""
+        stdout = (
+            _truncate_stream(_decode_stream(exc.stdout))
+            if exc.stdout is not None
+            else ""
+        )
+        stderr = (
+            _truncate_stream(_decode_stream(exc.stderr))
+            if exc.stderr is not None
+            else ""
+        )
         if stderr and not stderr.endswith("\n"):
             stderr += "\n"
         stderr += f"Python execution timed out after {timeout}s."

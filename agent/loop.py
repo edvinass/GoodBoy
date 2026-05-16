@@ -545,6 +545,9 @@ class AgentLoop:
     def _apply_pending_routing(self, step: AgentStep) -> None:
         if step.action == AgentAction.SWITCH_MODEL and step.model is not None:
             self._pending_model = step.model
+            self._default_model = step.model
+            if self._ui is not None:
+                self._ui.set_session_model(step.model)
         if step.reasoning_effort is not None:
             self._pending_reasoning = step.reasoning_effort
 

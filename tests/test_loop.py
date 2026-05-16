@@ -238,6 +238,7 @@ def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
     assert len(calls) == 2
     assert calls[0]["model"] == "gpt-4o-mini"
     assert calls[1]["model"] == "gpt-5.4-mini"
+    assert loop.session_model == "gpt-5.4-mini"
 
 
 def test_loop_stops_after_repeated_failed_shell(tmp_path: Path):
