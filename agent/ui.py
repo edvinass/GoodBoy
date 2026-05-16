@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import select
 import sys
+import termios
 import threading
 import time
+import tty
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -366,7 +369,68 @@ class ConversationUI:
         self._at_prompt = False
         self._pending_redraw = False
         self._transient_ui = False
+        self._stop_requested = False
         _install_resize_poller(self)
+
+
+    def request_stop_after_current_step(self) -> None:
+        """Request that the agent pause after the currently running step."""
+        self._stop_requested = True
+
+    def consume_stop_requested(self) -> bool:
+        """Return and clear a pending stop-after-current-step request."""
+        requested = self._stop_requested
+        self._stop_requested = False
+        return requested
+
+    @contextmanager
+    def _escape_stop_listener(self) -> Iterator[None]:
+        """Listen for Escape while the agent is busy, without aborting the step."""
+        if (
+            not sys.stdin.isatty()
+            or not sys.stdout.isatty()
+            or threading.current_thread() is not threading.main_thread()
+        ):
+            yield
+            return
+
+        stop_event = threading.Event()
+        fd = sys.stdin.fileno()
+        try:
+            old_settings = termios.tcgetattr(fd)
+        except (OSError, termios.error):
+            yield
+            return
+
+        def listen() -> None:
+            try:
+                while not stop_event.is_set():
+                    readable, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if not readable:
+                        continue
+                    ch = os.read(fd, 1)
+                    if ch == b"\x1b":
+                        self.request_stop_after_current_step()
+                        stop_event.set()
+                        return
+            except OSError:
+                return
+
+        try:
+            tty.setcbreak(fd)
+            listener = threading.Thread(
+                target=listen,
+                daemon=True,
+                name="goodboy-escape-listener",
+            )
+            listener.start()
+            yield
+        finally:
+            stop_event.set()
+            try:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            except (OSError, termios.error):
+                pass
 
     def _is_interactive_tty(self) -> bool:
         return sys.stdout.isatty()
@@ -837,11 +901,12 @@ class ConversationUI:
 
         self._transient_ui = True
         try:
-            with self._console.status(
-                f"[agent]🐶 GoodBoy[/] [muted]{label}…[/]",
-                spinner="dots",
-            ):
-                yield
+            with self._escape_stop_listener():
+                with self._console.status(
+                    f"[agent]🐶 GoodBoy[/] [muted]{label}…[/]",
+                    spinner="dots",
+                ):
+                    yield
         finally:
             self._transient_ui = False
             self._sync_redraw()

@@ -44,6 +44,7 @@ from settings import get_settings
 
 LLMCall = Callable[..., str]
 AskUser = Callable[[], str]
+StopRequested = Callable[[], bool]
 
 
 class LoopOutcome(str, Enum):
@@ -51,6 +52,7 @@ class LoopOutcome(str, Enum):
     NEED_USER_INPUT = "need_user_input"
     FAILED = "failed"
     MAX_TURNS = "max_turns"
+    STOPPED = "stopped"
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,7 @@ class AgentLoop:
         context: SessionContext | None = None,
         ask_user: AskUser | None = None,
         session_log: SessionLog | None = None,
+        stop_requested: StopRequested | None = None,
     ) -> LoopResult:
         ctx = context or SessionContext(
             user_task=task,
@@ -135,6 +138,20 @@ class AgentLoop:
                     turns=len(result.context.turns),
                 )
             return result
+
+        def stop_after_current_step() -> LoopResult | None:
+            if stop_requested is None or not stop_requested():
+                return None
+            return finish(
+                LoopResult(
+                    outcome=LoopOutcome.STOPPED,
+                    message=(
+                        "Stopped after the current step. "
+                        "Ask GoodBoy to continue when you are ready."
+                    ),
+                    context=ctx,
+                )
+            )
 
         for turn in range(1, self.max_turns + 1):
             call_model = self._pending_model or self._default_model
@@ -249,6 +266,9 @@ class AgentLoop:
                         call_reasoning_effort=call_reasoning,
                     )
                 )
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
                 continue
 
             if step.action in _SWITCH_TOOLS_ACTIONS:
@@ -288,6 +308,9 @@ class AgentLoop:
                         call_reasoning_effort=call_reasoning,
                     )
                 )
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
                 continue
 
             if step.action == AgentAction.NEED_USER_INPUT:
@@ -392,6 +415,10 @@ class AgentLoop:
 
             tool_result = None
             if is_harness_tool(step.action):
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
+
                 spec = get_tool(step.action)
                 if spec is None:
                     ctx.add_parse_error(
@@ -458,6 +485,9 @@ class AgentLoop:
                     call_reasoning_effort=call_reasoning,
                 )
             )
+            stopped = stop_after_current_step()
+            if stopped is not None:
+                return stopped
 
         return finish(
             LoopResult(

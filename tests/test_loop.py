@@ -387,3 +387,100 @@ def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert any("does not support" in e for e in result.context.parse_errors)
+
+
+def test_loop_stop_requested_before_tool_pauses_without_running_next_step(tmp_path: Path):
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo should-not-run",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("echo then pause", stop_requested=lambda: True)
+
+    assert result.outcome == LoopOutcome.STOPPED
+    assert calls["n"] == 1
+    assert result.context.turns == []
+
+
+def test_loop_stop_requested_during_tool_pauses_after_tool_step(tmp_path: Path):
+    calls = {"n": 0}
+    stop_checks = iter([False, True])
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="echo current-step",
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="should not run yet",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("echo then pause", stop_requested=lambda: next(stop_checks))
+
+    assert result.outcome == LoopOutcome.STOPPED
+    assert calls["n"] == 1
+    assert len(result.context.turns) == 1
+    assert result.context.turns[0].tool_result is not None
+    assert "current-step" in result.context.turns[0].tool_result.stdout
+
+
+def test_loop_resume_after_stop_continues_from_existing_context(tmp_path: Path):
+    calls = {"n": 0}
+    stop_checks = iter([False, True, False])
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="echo first",
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="resumed",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+
+    first = loop.run("pause me", stop_requested=lambda: next(stop_checks))
+    assert first.outcome == LoopOutcome.STOPPED
+
+    second = loop.run("pause me", context=first.context, stop_requested=lambda: next(stop_checks))
+    assert second.outcome == LoopOutcome.TASK_COMPLETE
+    assert second.message == "resumed"
+    assert calls["n"] == 2
+    assert len(second.context.turns) == 2

@@ -40,6 +40,7 @@ class AgentHarness:
         self._loop = loop or AgentLoop(ui=self._ui)
         self._conversation_history: list[ConversationExchange] = []
         self._last_active_hosted_tools: list[str] = []
+        self._paused_context: SessionContext | None = None
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
@@ -76,6 +77,7 @@ class AgentHarness:
                     context=ctx,
                     ask_user=self._ui.prompt_user,
                     session_log=session_log,
+                    stop_requested=getattr(self._ui, "consume_stop_requested", None),
                 )
                 exit_code = max(exit_code, self._report_outcome(result, task=task))
 
@@ -85,6 +87,16 @@ class AgentHarness:
         return not normalized or normalized in _EXIT_COMMANDS
 
     def _build_session_context(self, task: str) -> SessionContext | None:
+        if self._paused_context is not None:
+            ctx = self._paused_context.model_copy(deep=True)
+            self._paused_context = None
+            ctx.add_user_reply(
+                "User resumed after pressing Escape and said: " + task.strip()
+            )
+            if self._conversation_history:
+                ctx.conversation_history = list(self._conversation_history)
+            return ctx
+
         if not self._conversation_history:
             return None
         return SessionContext(
@@ -126,6 +138,11 @@ class AgentHarness:
                 extra = result.message
             self._ui.print_failed(extra)
             return 1
+
+        if result.outcome == LoopOutcome.STOPPED:
+            self._paused_context = result.context
+            self._ui.print_stopped(result.message)
+            return 0
 
         if result.outcome == LoopOutcome.MAX_TURNS:
             self._ui.print_stopped(result.message)

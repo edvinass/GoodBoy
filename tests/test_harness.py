@@ -10,6 +10,7 @@ import pytest
 from agent.context import ConversationExchange, SessionContext
 from agent.harness import AgentHarness
 from agent.loop import LoopOutcome, LoopResult
+from agent.types import AgentAction, AgentStep, TurnRecord
 
 
 @pytest.fixture(autouse=True)
@@ -120,3 +121,47 @@ def test_harness_passes_conversation_history_on_follow_up():
     )
     assert ctx.active_hosted_tools == ["web_search"]
     assert len(harness._conversation_history) == 2
+
+
+def test_harness_stopped_task_waits_for_next_user_prompt_to_resume():
+    loop = Mock()
+    loop.workspace = "/tmp"
+    stopped_context = SessionContext(user_task="long task")
+    stopped_context.add_turn(
+        TurnRecord(
+            turn=1,
+            step=AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo first",
+            ),
+        )
+    )
+    loop.run.side_effect = [
+        LoopResult(
+            outcome=LoopOutcome.STOPPED,
+            message="Stopped after the current step.",
+            context=stopped_context,
+        ),
+        LoopResult(
+            outcome=LoopOutcome.TASK_COMPLETE,
+            message="done",
+            context=SessionContext(user_task="long task"),
+        ),
+    ]
+
+    harness = AgentHarness(
+        loop=loop,
+        ui=FakeUI(prompts=iter(["long task", "continue", "exit"])),
+    )
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 2
+    first_kwargs = loop.run.call_args_list[0].kwargs
+    assert first_kwargs.get("context") is None
+
+    second_kwargs = loop.run.call_args_list[1].kwargs
+    resumed_ctx = second_kwargs["context"]
+    assert resumed_ctx is not stopped_context
+    assert len(resumed_ctx.turns) == 1
+    assert resumed_ctx.user_task == "long task"
+    assert any("continue" in reply for reply in resumed_ctx.user_replies)

@@ -346,3 +346,11 @@ app.py
     out = capsys.readouterr().out
     assert "cli" in out
     assert "app.py" in out
+
+
+def test_ui_stop_request_consumed_once():
+    ui = ConversationUI()
+    assert ui.consume_stop_requested() is False
+    ui.request_stop_after_current_step()
+    assert ui.consume_stop_requested() is True
+    assert ui.consume_stop_requested() is False
