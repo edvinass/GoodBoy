@@ -100,10 +100,10 @@ class AgentStep(BaseModel):
         ):
             if not self.message:
                 raise ValueError(f"{self.action.value} requires non-empty 'message'")
-        if self.model is not None and self.action != AgentAction.SWITCH_MODEL:
+        if self.model is not None and self.action in _SWITCH_TOOLS_ACTIONS:
             raise ValueError(
-                "model is only allowed with switch_model — use "
-                '{"action": "switch_model", "model": "..."}'
+                "model is not allowed on switch_tools — set model on the next "
+                "run_shell, run_python, switch_model, or terminal action"
             )
         if self.tools is not None and self.action not in _SWITCH_TOOLS_ACTIONS:
             raise ValueError(

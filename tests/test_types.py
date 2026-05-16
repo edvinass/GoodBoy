@@ -57,13 +57,24 @@ def test_switch_model_with_reasoning_effort():
     assert step.reasoning_effort == "low"
 
 
-def test_model_only_on_switch_model():
-    with pytest.raises(ValidationError, match="switch_model"):
+def test_model_on_run_shell():
+    step = AgentStep.model_validate(
+        {
+            "action": "run_shell",
+            "command": "pwd",
+            "model": "gpt-4o-mini",
+        }
+    )
+    assert step.model == "gpt-4o-mini"
+
+
+def test_model_not_on_switch_tools():
+    with pytest.raises(ValidationError, match="switch_tools"):
         AgentStep.model_validate(
             {
-                "action": "run_shell",
-                "command": "pwd",
-                "model": "gpt-4o-mini",
+                "action": "switch_tools",
+                "tools": ["web_search"],
+                "model": "gpt-5.4-mini",
             }
         )
 

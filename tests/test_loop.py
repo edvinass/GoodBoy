@@ -207,6 +207,41 @@ def test_loop_resumes_after_user_reply(tmp_path: Path):
     assert "main" in second.context.to_prompt()
 
 
+def test_loop_model_field_on_run_shell_applied_on_next_call(tmp_path: Path):
+    calls: list[dict] = []
+
+    def tracking_llm(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="true",
+                    model="gpt-5.4-mini",
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-4o-mini",
+        llm_call=tracking_llm,
+    )
+    result = loop.run("task")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(calls) == 2
+    assert calls[0]["model"] == "gpt-4o-mini"
+    assert calls[1]["model"] == "gpt-5.4-mini"
+    assert loop.session_model == "gpt-5.4-mini"
+
+
 def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
     calls: list[dict] = []
 
@@ -356,6 +391,37 @@ def test_loop_switch_tools_rejects_reasoning_on_same_turn(tmp_path: Path):
     result = loop.run("weather in London")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert any("reasoning_effort on switch_tools" in e for e in result.context.parse_errors)
+
+
+def test_loop_switch_tools_rejects_model_on_same_turn(tmp_path: Path):
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                {
+                    "action": "switch_tools",
+                    "tools": ["web_search"],
+                    "model": "gpt-5.4-mini",
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("weather in London")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any("switch_tools" in e and "model" in e for e in result.context.parse_errors)
 
 
 def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):

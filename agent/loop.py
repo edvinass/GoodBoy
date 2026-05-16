@@ -517,13 +517,18 @@ class AgentLoop:
             return f"Invalid action '{step.action.value}'."
 
         if step.action in _SWITCH_TOOLS_ACTIONS:
+            if step.model is not None:
+                return (
+                    "Do not set model on switch_tools. Set model on the next "
+                    "run_shell, run_python, switch_model, or terminal action."
+                )
             if step.reasoning_effort is not None:
                 return (
-                    "Do not set reasoning_effort on switch_tools. Use switch_model "
-                    "or set reasoning_effort on a later turn."
+                    "Do not set reasoning_effort on switch_tools. Set "
+                    "reasoning_effort on a later turn (optionally with model)."
                 )
 
-        if step.action == AgentAction.SWITCH_MODEL:
+        if step.model is not None:
             if step.model not in self._allowed_models:
                 allowed = ", ".join(self._allowed_models[:8])
                 suffix = "..." if len(self._allowed_models) > 8 else ""
@@ -531,6 +536,12 @@ class AgentLoop:
                     f"Unknown model '{step.model}'. "
                     f"Pick from allowlist: {allowed}{suffix}"
                 )
+            for tool in self._hosted_tools:
+                if not model_supports_openai_tool(step.model, tool):
+                    return (
+                        f"Model '{step.model}' does not support hosted tool "
+                        f"'{tool}' required by Active API."
+                    )
 
         if step.reasoning_effort is not None:
             next_model = step.model or self._pending_model or call_model
@@ -543,7 +554,7 @@ class AgentLoop:
         return None
 
     def _apply_pending_routing(self, step: AgentStep) -> None:
-        if step.action == AgentAction.SWITCH_MODEL and step.model is not None:
+        if step.model is not None:
             self._pending_model = step.model
             self._default_model = step.model
             if self._ui is not None:
@@ -559,8 +570,9 @@ class AgentLoop:
                 if suggestion:
                     return (
                         f"Model '{call_model}' does not support hosted tool '{tool}'. "
-                        f"On your next turn, use switch_model to '{suggestion}' "
-                        "(do not call switch_tools again) and continue the task."
+                        f"On your next turn, set model to '{suggestion}' "
+                        "(run_shell/switch_model; do not call switch_tools again) "
+                        "and continue the task."
                     )
                 return (
                     f"Model '{call_model}' does not support hosted tool '{tool}' and "

@@ -101,7 +101,8 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
         lines.append(f"  - Avoid when: {spec.avoid_when}")
     lines.append("")
     lines.append(
-        "Routing: switch_model, switch_tools (hosted tools; see hosted tools section). "
+        "Routing: optional model/reasoning_effort fields, switch_model (model-only), "
+        "switch_tools (hosted tools; see hosted tools section). "
         "Terminal: need_user_input, task_complete, failed."
     )
     return "\n".join(lines)

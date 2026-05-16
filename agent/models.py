@@ -402,8 +402,9 @@ def format_models_section(allowed_ids: list[str]) -> str:
 def format_reasoning_section() -> str:
     lines = [
         "## Reasoning effort catalog",
-        "Use the `reasoning_effort` field on any action to set effort for the *next* LLM call.",
-        "Only valid when the *next* model (pending `model` or current default) is a",
+        "Use `model` and/or `reasoning_effort` on any action except switch_tools to configure",
+        "the *next* LLM call (same turn can still run shell/python).",
+        "reasoning_effort is only valid when the *next* model (pending `model` or current default) is a",
         "reasoning model and lists that level in Available models below. Omit otherwise.",
         "",
         "How to change (example — escalate after a failed shell turn):",

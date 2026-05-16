@@ -126,7 +126,7 @@ _HARNESS_RULES = """## Harness rules (strict)
 ## Routing fields (each turn)
 
 - **action** (required): what runs this turn (shell, python, switch_model, switch_tools, or terminal).
-- **model**: required for switch_model only (sets the *next* LLM call).
+- **model**: optional on any action except switch_tools (sets the *next* LLM call); required for switch_model.
 - **tools**: required for switch_tools only (hosted tool IDs for the *next* LLM call).
 - **reasoning_effort**: optional on any action except switch_tools (next call only).
 - **thought**, **command**, **code**, **message**: as required by action.
@@ -144,7 +144,7 @@ _BASE_RULES = "\n\n".join(
 
 _JSON_FIELD_DOCS = """## JSON fields (quick reference)
 - action: run_shell | run_python | switch_model | switch_tools | need_user_input | task_complete | failed
-- model: required for switch_model — OpenAI model ID for the *next* LLM call (allowlist below)
+- model: optional on any action except switch_tools — OpenAI model ID for the *next* LLM call (required for switch_model; allowlist below)
 - tools: required for switch_tools — list of hosted tool IDs, e.g. ["web_search"]
 - reasoning_effort: optional — none | minimal | low | medium | high | xhigh (next call only; not on switch_tools)
 - thought: optional brief reasoning
@@ -159,9 +159,9 @@ def format_configuration_guide_section() -> str:
     """Step-by-step instructions for API, model, reasoning, and tool changes."""
     return """## Configuration guide (model, reasoning, hosted tools)
 
-Use dedicated routing actions. **switch_model** and **switch_tools** configure the **next**
-LLM call only. The **action** field is what actually runs this turn (often just routing).
-One config change per JSON object — do not combine switch_tools with model or reasoning_effort.
+**switch_tools** is a dedicated routing action. **model** and **reasoning_effort** are optional
+fields on any other action (including **switch_model** for a model-only turn). They configure
+the **next** LLM call only. Do not set model or reasoning_effort on switch_tools.
 
 ### Defaults at task start
 | Setting | Default |
@@ -185,20 +185,28 @@ Use when you need OpenAI-hosted capabilities (live web, etc.). This is **not** r
 - Do **not** call switch_tools again if tools are already active (see Active API).
 - Do **not** task_complete saying you lack live data — switch tools first.
 
-### 2. Change model (switch_model)
+### 2. Change model
+
+Set **model** on any action except switch_tools (applies to the *next* LLM call):
+
+```json
+{"action": "run_shell", "command": "pytest -q", "model": "gpt-5.4-mini", "reasoning_effort": "medium"}
+```
+
+Model-only turn (no shell/python this step):
 
 ```json
 {"action": "switch_model", "model": "gpt-5.4-mini"}
 ```
 
-- **model** (required): must be in the allowlist and must support all **Active API** tools.
-- Optional **reasoning_effort** on the same turn if the next model supports it.
-- If switch_tools failed because the current model lacks a tool, switch_model on the **next**
-  turn only — do not repeat switch_tools.
+- **model** must be in the allowlist and must support all **Active API** tools.
+- Optional **reasoning_effort** on the same object if the next model supports it.
+- If switch_tools failed because the current model lacks a tool, set **model** on the **next**
+  turn — do not repeat switch_tools.
 
 ### 3. Change reasoning effort
 
-Set **reasoning_effort** on switch_model or any action except switch_tools:
+Set **reasoning_effort** on any action except switch_tools (often together with **model**):
 
 ```json
 {"action": "run_shell", "command": "pytest -q", "reasoning_effort": "medium"}
@@ -212,9 +220,9 @@ Set **reasoning_effort** on switch_model or any action except switch_tools:
 
 | Goal | Turn A | Turn B (if needed) | Then |
 |------|--------|-------------------|------|
-| Live docs / API reference | switch_tools + web_search | switch_model if current model lacks tool | continue task |
-| Harder debugging | switch_model gpt-5.4-mini | run_shell + reasoning_effort medium | continue task |
-| Cheaper after done | switch_model gpt-4o-mini | — | continue |
+| Live docs / API reference | switch_tools + web_search | run_shell with model if current model lacks tool | continue task |
+| Harder debugging | run_shell with model gpt-5.4-mini + reasoning medium | — | continue task |
+| Cheaper after done | task_complete or run_shell with model gpt-4o-mini | — | continue |
 
 Never combine switch_tools with model or reasoning_effort on the **same** JSON object.
 
@@ -225,9 +233,9 @@ Turn 1 — inspect:
 {"action": "run_shell", "command": "rg \"OldClassName\" -n && pytest -q", "thought": "Find usages and current test status"}
 ```
 
-Turn 2 — if tests are complex, escalate model once:
+Turn 2 — if tests are complex, escalate model while re-running tests:
 ```json
-{"action": "switch_model", "model": "gpt-5.4-mini", "reasoning_effort": "medium"}
+{"action": "run_shell", "command": "pytest -q", "model": "gpt-5.4-mini", "reasoning_effort": "medium", "thought": "Escalate model and re-check tests"}
 ```
 
 Turn 3 — apply fix and verify:
@@ -242,8 +250,8 @@ Turn 4 — finish:
 
 ### 6. Common mistakes
 - Using task_complete to say you cannot browse the web — use switch_tools first when live data is required.
-- Putting model on run_shell instead of switch_model.
-- Setting reasoning_effort on switch_tools — use switch_model or a later turn.
+- Using switch_model when you could set model on run_shell and run a command the same turn.
+- Setting model or reasoning_effort on switch_tools — use a later turn.
 - Re-running switch_tools when Active API already lists your tools.
 - Expecting run_shell to search the web — use switch_tools + web_search instead."""
 
