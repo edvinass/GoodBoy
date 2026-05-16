@@ -15,7 +15,7 @@ _EXIT_COMMANDS = frozenset({"exit", "quit", "q"})
 class AgentHarness:
     """Greet the user, run the agent loop, and handle clarifications."""
 
-    GREETING = "GoodBoy: How can I help?"
+    GREETING = "How can I help?"
 
     def __init__(
         self,
@@ -35,7 +35,7 @@ class AgentHarness:
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
-        click.echo(self.GREETING)
+        self._ui.print_greeting(self.GREETING)
         exit_code = 0
         first_prompt = True
 
@@ -43,12 +43,12 @@ class AgentHarness:
             try:
                 task = self._ui.prompt_user()
             except (click.Abort, EOFError, KeyboardInterrupt):
-                click.echo()
+                self._ui.newline()
                 return exit_code
 
             if self._should_exit(task):
                 if first_prompt and not task:
-                    click.echo("No task provided.", err=True)
+                    self._ui.print_notice("No task provided.")
                     return 1
                 return exit_code
 
@@ -63,31 +63,28 @@ class AgentHarness:
 
     def _report_outcome(self, result: LoopResult) -> int:
         if result.outcome == LoopOutcome.TASK_COMPLETE:
-            click.echo()
-            click.echo(click.style("✓ Task complete", fg="green", bold=True))
+            self._ui.print_task_complete()
             return 0
 
         if result.outcome == LoopOutcome.FAILED:
-            click.echo()
-            click.echo(click.style("✗ Failed", fg="red", bold=True))
+            extra = None
             if not any(
                 t.step.action.value == "failed"
                 for t in result.context.turns
             ):
-                click.echo(result.message, err=True)
+                extra = result.message
+            self._ui.print_failed(extra)
             return 1
 
         if result.outcome == LoopOutcome.MAX_TURNS:
-            click.echo()
-            click.echo(click.style("⚠ Stopped", fg="yellow", bold=True))
-            click.echo(result.message, err=True)
+            self._ui.print_stopped(result.message)
             return 1
 
         if result.outcome == LoopOutcome.NEED_USER_INPUT:
-            click.echo(result.message, err=True)
+            self._ui.print_notice(result.message)
             return 1
 
-        click.echo(f"Unexpected outcome: {result.outcome}", err=True)
+        self._ui.print_notice(f"Unexpected outcome: {result.outcome}")
         return 1
 
 

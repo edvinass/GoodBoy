@@ -8,7 +8,7 @@ def test_print_user_format(capsys):
     ui = ConversationUI()
     ui.print_user("hello\nworld")
     out = capsys.readouterr().out
-    assert "You:" in out
+    assert "You" in out
     assert "hello" in out
     assert "world" in out
 
@@ -61,7 +61,8 @@ def test_print_llm_request_with_debug_input(capsys):
         input_text="## User task\nfix bug",
     )
     out = capsys.readouterr().out
-    assert "input, turn 1" in out
+    assert "input" in out
+    assert "turn" in out
     assert "instructions" in out
     assert "You are GoodBoy." in out
     assert "fix bug" in out
@@ -85,7 +86,8 @@ def test_print_llm_response_with_debug_output(capsys):
     raw = '{"action":"task_complete","message":"done"}'
     ui.print_llm_response(turn=2, raw=raw)
     out = capsys.readouterr().out
-    assert "output, turn 2" in out
+    assert "output" in out
+    assert "turn 2" in out
     assert raw in out
 
 
@@ -93,3 +95,17 @@ def test_print_llm_response_hidden_without_flag(capsys):
     ui = ConversationUI(debug_output=False)
     ui.print_llm_response(turn=1, raw='{"action":"failed"}')
     assert capsys.readouterr().out == ""
+
+
+def test_directory_listing_renders_tree(capsys):
+    ui = ConversationUI()
+    listing = """__pycache__
+cli
+
+./cli:
+app.py
+"""
+    ui.print_agent(f"Current directory structure:\n\n{listing}")
+    out = capsys.readouterr().out
+    assert "cli" in out
+    assert "app.py" in out

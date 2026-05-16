@@ -2,26 +2,132 @@
 
 from __future__ import annotations
 
-import itertools
+import re
 import sys
-import threading
-import time
 from contextlib import contextmanager
 from typing import Iterator
 
 import click
+from rich.box import ROUNDED
+from rich.console import Console, Group, RenderableType
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
+from rich.theme import Theme
+from rich.tree import Tree
 
 from agent.types import AgentAction, AgentStep, ToolResult
 
-_AGENT = click.style("GoodBoy", fg="cyan", bold=True)
-_USER = click.style("You", fg="green", bold=True)
-_DIM = {"dim": True}
-_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_THEME = Theme(
+    {
+        "agent": "bold cyan",
+        "user": "bold green",
+        "subtitle": "dim italic",
+        "shell": "yellow",
+        "python": "magenta",
+        "success": "bold green",
+        "error": "bold red",
+        "warning": "bold yellow",
+        "muted": "dim",
+    }
+)
+
+_SUBTITLE_ICONS = {
+    "shell": ("$", "shell"),
+    "python": ("›", "python"),
+    "output": ("↳", "output"),
+}
+
+_LS_SECTION = re.compile(r"^\./(.+):$")
 
 
-def _indent_body(text: str, *, prefix: str = "  ") -> None:
-    for line in text.splitlines() or [""]:
-        click.echo(f"{prefix}{line}")
+def _looks_like_markdown(text: str) -> bool:
+    if "```" in text:
+        return True
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return True
+        if stripped.startswith(("- ", "* ", "1. ")):
+            return True
+    return False
+
+
+def _looks_like_directory_listing(text: str) -> bool:
+    return bool(_LS_SECTION.search(text))
+
+
+def _directory_tree(text: str) -> Tree:
+    root = Tree("[bold cyan]📂[/] [bold].[/]")
+    current: Tree | None = None
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        section = _LS_SECTION.match(line)
+        if section:
+            node = root
+            for part in section.group(1).split("/"):
+                node = _tree_find_or_add(node, part)
+            current = node
+            continue
+        if current is not None:
+            current.add(f"[muted]{line}[/]")
+        else:
+            root.add(line)
+
+    return root
+
+
+def _tree_label_plain(node: Tree) -> str:
+    label = node.label
+    return label.plain if isinstance(label, Text) else str(label)
+
+
+def _tree_find_or_add(parent: Tree, label: str) -> Tree:
+    for child in parent.children:
+        if _tree_label_plain(child) == label:
+            return child
+    return parent.add(f"[bold]{label}[/]")
+
+
+def _render_body(text: str, *, subtitle: str | None = None) -> RenderableType:
+    body = text.rstrip() or ""
+    if subtitle == "shell":
+        return Panel(
+            Syntax(body, "bash", theme="monokai", background_color="default"),
+            title="[shell]command[/]",
+            border_style="yellow",
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+    if subtitle == "python":
+        return Panel(
+            Syntax(body, "python", theme="monokai", background_color="default"),
+            title="[python]code[/]",
+            border_style="magenta",
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+    if _looks_like_directory_listing(body):
+        return Panel(
+            _directory_tree(body),
+            title="[muted]directory[/]",
+            border_style="cyan",
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+    if _looks_like_markdown(body):
+        return Panel(
+            Markdown(body),
+            border_style="cyan",
+            box=ROUNDED,
+            padding=(0, 1),
+        )
+    return Panel(body, border_style="cyan", box=ROUNDED, padding=(0, 1))
 
 
 class ConversationUI:
@@ -33,25 +139,78 @@ class ConversationUI:
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
+        console: Console | None = None,
     ) -> None:
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
+        self._console = console or Console(theme=_THEME)
+        self._err = Console(theme=_THEME, stderr=True)
+
+    def print_greeting(self, message: str) -> None:
+        self._console.print()
+        self._console.print(
+            Panel(
+                message,
+                title="[agent]◆ GoodBoy[/]",
+                border_style="cyan",
+                box=ROUNDED,
+                padding=(0, 2),
+            )
+        )
+
+    def print_task_complete(self) -> None:
+        self._console.print()
+        self._console.print("[success]✓[/] [success]Task complete[/]")
+
+    def print_failed(self, message: str | None = None) -> None:
+        self._console.print()
+        self._console.print("[error]✗[/] [error]Failed[/]")
+        if message:
+            self._err.print(Panel(message, border_style="red", box=ROUNDED))
+
+    def print_stopped(self, message: str) -> None:
+        self._console.print()
+        self._console.print("[warning]⚠[/] [warning]Stopped[/]")
+        self._err.print(Panel(message, border_style="yellow", box=ROUNDED))
+
+    def print_notice(self, message: str) -> None:
+        self._err.print(f"[warning]{message}[/]")
+
+    def newline(self) -> None:
+        self._console.print()
+
+    def _print_header(self, role: str, *, subtitle: str | None = None) -> None:
+        self._console.print()
+        if role == "user":
+            title = Text.from_markup("[user]▸ You[/]")
+        else:
+            title = Text.from_markup("[agent]◆ GoodBoy[/]")
+            if subtitle:
+                icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
+                title.append(f"  [{icon}] ", style="subtitle")
+                title.append(f"({label})", style="subtitle")
+        self._console.print(title)
 
     def prompt_user(self) -> str:
         """Read a user line under the You: label."""
-        click.echo()
-        click.echo(f"{_USER}:")
+        self._print_header("user")
         return click.prompt(
-            "",
+            Text.from_markup("[muted]│[/] ").plain,
             prompt_suffix=" ",
             show_default=False,
         ).strip()
 
     def print_user(self, text: str) -> None:
-        click.echo()
-        click.echo(f"{_USER}:")
-        _indent_body(text)
+        self._print_header("user")
+        self._console.print(
+            Panel(
+                text.rstrip() or "",
+                border_style="green",
+                box=ROUNDED,
+                padding=(0, 1),
+            )
+        )
 
     def print_agent(
         self,
@@ -59,12 +218,8 @@ class ConversationUI:
         *,
         subtitle: str | None = None,
     ) -> None:
-        click.echo()
-        if subtitle:
-            click.echo(f"{_AGENT} {click.style(f'({subtitle})', **_DIM)}:")
-        else:
-            click.echo(f"{_AGENT}:")
-        _indent_body(text)
+        self._print_header("agent", subtitle=subtitle)
+        self._console.print(_render_body(text, subtitle=subtitle))
 
     def print_llm_request(
         self,
@@ -79,31 +234,50 @@ class ConversationUI:
         if not self.debug_input:
             return
 
-        click.echo()
-        click.echo(
-            f"{_AGENT} {click.style(f'(input, turn {turn})', **_DIM)}:"
-        )
-        meta = f"model: {model}"
+        meta = Table(show_header=False, box=None, padding=(0, 1))
+        meta.add_column(style="muted")
+        meta.add_column()
+        meta.add_row("turn", str(turn))
+        meta.add_row("model", model)
         if reasoning_effort:
-            meta += f", reasoning: {reasoning_effort}"
-        _indent_body(meta)
-        click.echo()
-        _indent_body("--- instructions ---")
-        _indent_body(instructions)
-        click.echo()
-        _indent_body("--- input ---")
-        _indent_body(input_text)
+            meta.add_row("reasoning", reasoning_effort)
+
+        self._print_header("agent", subtitle="input")
+        self._console.print(
+            Group(
+                Panel(meta, title="[muted]request[/]", border_style="dim", box=ROUNDED),
+                Panel(
+                    Syntax(instructions, "markdown", theme="monokai", background_color="default"),
+                    title="[muted]instructions[/]",
+                    border_style="dim",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                ),
+                Panel(
+                    Syntax(input_text, "markdown", theme="monokai", background_color="default"),
+                    title="[muted]input[/]",
+                    border_style="dim",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                ),
+            )
+        )
 
     def print_llm_response(self, *, turn: int, raw: str) -> None:
         """Print raw model response without truncation (debug -o)."""
         if not self.debug_output:
             return
 
-        click.echo()
-        click.echo(
-            f"{_AGENT} {click.style(f'(output, turn {turn})', **_DIM)}:"
+        self._print_header("agent", subtitle="output")
+        self._console.print(
+            Panel(
+                Syntax(raw, "json", theme="monokai", background_color="default"),
+                title=f"[muted]turn {turn}[/]",
+                border_style="dim",
+                box=ROUNDED,
+                padding=(0, 1),
+            )
         )
-        _indent_body(raw)
 
     def print_agent_step(
         self,
@@ -113,19 +287,27 @@ class ConversationUI:
         next_reasoning: str | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
-        routing_parts: list[str] = []
-        if next_model:
-            routing_parts.append(f"next model: {next_model}")
-        if next_reasoning:
-            routing_parts.append(f"next reasoning: {next_reasoning}")
-        if routing_parts:
-            click.echo()
-            click.echo(
-                f"{_AGENT} {click.style('(' + ', '.join(routing_parts) + ')', **_DIM)}:"
-            )
+        if next_model or next_reasoning:
+            routing = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
+            routing.add_column(style="muted")
+            routing.add_column()
+            if next_model:
+                routing.add_row("next model", next_model)
+            if next_reasoning:
+                routing.add_row("next reasoning", next_reasoning)
+            self._console.print()
+            self._console.print(routing)
 
         if step.thought:
-            self.print_agent(step.thought)
+            self._print_header("agent", subtitle="thought")
+            self._console.print(
+                Panel(
+                    step.thought,
+                    border_style="cyan",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                )
+            )
 
         if step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
@@ -146,69 +328,64 @@ class ConversationUI:
         if not self.debug:
             return
 
-        lines: list[str] = []
+        meta = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
+        meta.add_column(style="muted")
+        meta.add_column()
         if result.timed_out:
-            lines.append(click.style("Timed out.", fg="yellow"))
-        elif result.exit_code is not None and result.exit_code != 0:
-            lines.append(click.style(f"Exit code: {result.exit_code}", fg="yellow"))
+            meta.add_row("status", "[warning]timed out[/]")
+        elif result.exit_code is not None:
+            style = "success" if result.exit_code == 0 else "warning"
+            meta.add_row("exit code", f"[{style}]{result.exit_code}[/]")
+
+        parts: list[RenderableType] = [Panel(meta, title="[muted]run[/]", border_style="dim", box=ROUNDED)]
 
         if result.stdout.strip():
             out = result.stdout.rstrip()
             if len(out) > 400:
                 out = out[:400] + "\n... [output truncated for display]"
-            lines.append(out)
+            parts.append(
+                Panel(
+                    Syntax(out, "text", theme="monokai", background_color="default"),
+                    title="[muted]stdout[/]",
+                    border_style="cyan",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                )
+            )
 
         if result.stderr.strip():
             err = result.stderr.rstrip()
             if len(err) > 200:
                 err = err[:200] + " ..."
-            lines.append(click.style(err, fg="red"))
+            parts.append(
+                Panel(
+                    Text(err, style="error"),
+                    title="[muted]stderr[/]",
+                    border_style="red",
+                    box=ROUNDED,
+                    padding=(0, 1),
+                )
+            )
 
-        if not lines:
-            lines.append(click.style("(no output)", **_DIM))
+        if not result.stdout.strip() and not result.stderr.strip() and not result.timed_out:
+            parts.append(Panel("[muted](no output)[/]", border_style="dim", box=ROUNDED))
 
-        click.echo()
-        click.echo(f"{_AGENT} {click.style('(output)', **_DIM)}:")
-        _indent_body("\n".join(lines))
+        self._print_header("agent", subtitle="output")
+        self._console.print(Group(*parts))
 
     @contextmanager
     def thinking(self, label: str = "is thinking") -> Iterator[None]:
         """Show a spinner on stderr while the agent waits on the LLM."""
-        with _ThinkingSpinner(label) as spinner:
-            yield spinner
-
-
-class _ThinkingSpinner:
-    def __init__(self, label: str) -> None:
-        self._label = label
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-
-    def __enter__(self) -> _ThinkingSpinner:
         if not sys.stderr.isatty():
-            click.echo(f"{_AGENT} {self._label}...", err=True)
-            return self
+            self._err.print(f"[agent]◆ GoodBoy[/] [muted]{label}…[/]")
+            yield
+            return
 
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-        if sys.stderr.isatty():
-            sys.stderr.write("\r\033[K")
-            sys.stderr.flush()
-
-    def _run(self) -> None:
-        frames = itertools.cycle(_SPINNER_FRAMES)
-        while not self._stop.is_set():
-            frame = next(frames)
-            sys.stderr.write(f"\r  {_AGENT} {frame} {self._label}...")
-            sys.stderr.flush()
-            if self._stop.wait(0.08):
-                break
+        with self._err.status(
+            f"[agent]◆ GoodBoy[/] [muted]{label}…[/]",
+            spinner="dots",
+        ):
+            yield
 
 
 @contextmanager

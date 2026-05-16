@@ -16,6 +16,24 @@ class FakeUI:
     def prompt_user(self) -> str:
         return next(self.prompts)
 
+    def print_greeting(self, message: str) -> None:
+        pass
+
+    def print_task_complete(self) -> None:
+        pass
+
+    def print_failed(self, message: str | None = None) -> None:
+        pass
+
+    def print_stopped(self, message: str) -> None:
+        pass
+
+    def print_notice(self, message: str) -> None:
+        pass
+
+    def newline(self) -> None:
+        pass
+
 
 def _harness(outcome: LoopOutcome, prompts: list[str]) -> AgentHarness:
     loop = Mock()
