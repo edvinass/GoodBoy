@@ -37,7 +37,9 @@ from agent.types import (
     _SWITCH_TOOLS_ACTIONS,
     parse_agent_step,
 )
-from llm import complete_structured, get_curated_models
+from openai import APIConnectionError
+
+from llm import complete_structured, format_api_connection_error, get_curated_models
 from settings import get_settings
 
 LLMCall = Callable[..., str]
@@ -159,19 +161,28 @@ class AgentLoop:
                     input_text=llm_kwargs["input"],
                 )
 
-            if self._ui is not None:
-                self._ui.print_llm_request(
-                    turn=turn,
-                    model=call_model,
-                    reasoning_effort=call_reasoning,
-                    instructions=self._instructions,
-                    input_text=llm_kwargs["input"],
-                )
-                with self._ui.thinking():
+            try:
+                if self._ui is not None:
+                    self._ui.print_llm_request(
+                        turn=turn,
+                        model=call_model,
+                        reasoning_effort=call_reasoning,
+                        instructions=self._instructions,
+                        input_text=llm_kwargs["input"],
+                    )
+                    with self._ui.thinking():
+                        raw = self._llm_call(**llm_kwargs)
+                    self._ui.print_llm_response(turn=turn, raw=raw)
+                else:
                     raw = self._llm_call(**llm_kwargs)
-                self._ui.print_llm_response(turn=turn, raw=raw)
-            else:
-                raw = self._llm_call(**llm_kwargs)
+            except APIConnectionError as exc:
+                return finish(
+                    LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message=format_api_connection_error(exc),
+                        context=ctx,
+                    )
+                )
 
             if session_log is not None:
                 session_log.log_llm_response(turn=turn, raw=raw)

@@ -20,6 +20,8 @@ GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
 GOODBOY_MAX_CLARIFICATIONS_VAR = "GOODBOY_MAX_CLARIFICATIONS"
 GOODBOY_LOG_DIR_VAR = "GOODBOY_LOG_DIR"
 GOODBOY_SESSION_LOG_VAR = "GOODBOY_SESSION_LOG"
+GOODBOY_SSL_CA_BUNDLE_VAR = "GOODBOY_SSL_CA_BUNDLE"
+GOODBOY_SSL_VERIFY_VAR = "GOODBOY_SSL_VERIFY"
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
@@ -84,6 +86,12 @@ def save_env(updates: dict[str, str]) -> None:
     ENV_FILE.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
     get_settings.cache_clear()
     load_env()
+    try:
+        from llm import clear_openai_client_cache
+
+        clear_openai_client_cache()
+    except ImportError:
+        pass
 
 
 def _env_int(name: str, default: int) -> int:
@@ -122,12 +130,20 @@ class Settings:
     max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
     session_log_enabled: bool = True
     session_log_dir: Path | None = None
+    ssl_ca_bundle: str | None = None
+    ssl_verify: bool = True
 
     @classmethod
     def from_env(cls) -> Settings:
         load_env()
         log_dir_raw = os.getenv(GOODBOY_LOG_DIR_VAR)
         log_dir = Path(log_dir_raw).expanduser() if log_dir_raw and log_dir_raw.strip() else None
+        ssl_ca = (
+            os.getenv(GOODBOY_SSL_CA_BUNDLE_VAR)
+            or os.getenv("SSL_CERT_FILE")
+            or os.getenv("REQUESTS_CA_BUNDLE")
+        )
+        ssl_ca_bundle = ssl_ca.strip() if ssl_ca and ssl_ca.strip() else None
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
@@ -140,6 +156,8 @@ class Settings:
             ),
             session_log_enabled=_env_bool(GOODBOY_SESSION_LOG_VAR, True),
             session_log_dir=log_dir,
+            ssl_ca_bundle=ssl_ca_bundle,
+            ssl_verify=_env_bool(GOODBOY_SSL_VERIFY_VAR, True),
         )
 
     @property

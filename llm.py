@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from enum import Enum
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import click
+import httpx
 import questionary
-from openai import OpenAI
+from openai import APIConnectionError, OpenAI
 
 from settings import get_settings
 
@@ -130,13 +133,67 @@ def select_model_interactive(
     return choice
 
 
+def _resolve_ssl_verify() -> bool | str:
+    """Return httpx verify: True (default CAs), path to CA bundle, or False."""
+    cfg = get_settings()
+    if not cfg.ssl_verify:
+        return False
+    if cfg.ssl_ca_bundle:
+        path = Path(cfg.ssl_ca_bundle).expanduser().resolve()
+        if not path.is_file():
+            raise click.ClickException(
+                f"SSL CA bundle not found: {path}\n"
+                "Set GOODBOY_SSL_CA_BUNDLE (or SSL_CERT_FILE) to your proxy/root CA .pem file."
+            )
+        return str(path)
+    return True
+
+
+def _build_http_client() -> httpx.Client:
+    return httpx.Client(verify=_resolve_ssl_verify())
+
+
+def clear_openai_client_cache() -> None:
+    """Drop cached OpenAI clients (e.g. after .env SSL settings change)."""
+    _openai_client.cache_clear()
+
+
+@lru_cache(maxsize=8)
+def _openai_client(
+    resolved_key: str, ssl_verify: bool, ssl_ca_bundle: str | None
+) -> OpenAI:
+    return OpenAI(api_key=resolved_key, http_client=_build_http_client())
+
+
+def format_api_connection_error(exc: BaseException) -> str:
+    """User-facing hint when TLS/proxy blocks the OpenAI API."""
+    parts: list[str] = []
+    cause: BaseException | None = exc
+    while cause is not None:
+        parts.append(str(cause))
+        cause = cause.__cause__  # type: ignore[assignment]
+    text = " ".join(parts).lower()
+    if "certificate_verify_failed" in text or "self-signed certificate" in text:
+        return (
+            "Could not reach OpenAI: TLS certificate verification failed "
+            "(common behind corporate HTTPS proxies).\n\n"
+            "Fix: save your organization's CA certificate to a .pem file, then add to .env:\n"
+            "  GOODBOY_SSL_CA_BUNDLE=/path/to/corporate-ca.pem\n\n"
+            "Or export before running goodboy:\n"
+            "  export SSL_CERT_FILE=/path/to/corporate-ca.pem\n\n"
+            "Last resort only (insecure): GOODBOY_SSL_VERIFY=false"
+        )
+    return f"Could not reach OpenAI: {exc}"
+
+
 def get_client(*, api_key: str | None = None) -> OpenAI:
-    resolved_key = api_key or get_settings().openai_api_key
+    cfg = get_settings()
+    resolved_key = api_key or cfg.openai_api_key
     if not resolved_key:
         raise click.ClickException(
             "OPENAI_API_KEY is not set. Run: goodboy setup"
         )
-    return OpenAI(api_key=resolved_key)
+    return _openai_client(resolved_key, cfg.ssl_verify, cfg.ssl_ca_bundle)
 
 
 def _extract_response_text(response: Any) -> str:
@@ -182,7 +239,10 @@ def complete(
     if reasoning_effort is not None:
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
-    response = client.responses.create(**kwargs)
+    try:
+        response = client.responses.create(**kwargs)
+    except APIConnectionError as exc:
+        raise click.ClickException(format_api_connection_error(exc)) from exc
     return _extract_response_text(response)
 
 
@@ -223,6 +283,8 @@ def complete_structured(
     try:
         response = client.responses.create(**kwargs)
         return _extract_response_text(response)
+    except APIConnectionError as exc:
+        raise click.ClickException(format_api_connection_error(exc)) from exc
     except Exception:
         fallback_instructions = system_prompt_with_schema()
         return complete(
