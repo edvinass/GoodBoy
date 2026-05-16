@@ -22,10 +22,21 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         ("new", "reset"),
     ),
     ReplCommand(
+        "model",
+        "Choose the LLM for this session",
+    ),
+    ReplCommand(
         "exit",
         "Exit GoodBoy",
         ("quit", "q"),
     ),
+)
+
+MODEL_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "model"
+    for name in (command.name, *command.aliases)
 )
 
 CLEAR_COMMAND_NAMES = frozenset(
@@ -56,6 +67,9 @@ def active_slash_command_query(text_before_cursor: str) -> tuple[str, int] | Non
 def search_slash_commands(query: str) -> list[ReplCommand]:
     """Return slash commands matching query (prefix on name or alias)."""
     query_fold = query.casefold()
+    if not query_fold:
+        return list(REPL_COMMANDS)
+
     scored: list[tuple[tuple[int, str], ReplCommand]] = []
 
     for command in REPL_COMMANDS:

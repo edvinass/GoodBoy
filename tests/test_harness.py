@@ -208,6 +208,34 @@ def test_harness_clear_resets_conversation_history():
     assert harness._last_active_hosted_tools == []
 
 
+def test_harness_model_command_changes_loop_and_persists(monkeypatch, tmp_path):
+    loop = Mock()
+    loop.workspace = "/tmp"
+    loop.session_model = "gpt-4o-mini"
+    loop._allowed_models = ["gpt-4o-mini", "gpt-5.4-mini"]
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    ui = FakeUI(prompts=iter(["/model", "exit"]))
+    ui.set_session_model = Mock()
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    monkeypatch.setattr(
+        "agent.harness.select_model_interactive",
+        lambda **_: "gpt-5.4-mini",
+    )
+    saved: dict[str, str] = {}
+    monkeypatch.setattr("agent.harness.save_env", saved.update)
+
+    assert harness.run() == 0
+    loop.set_session_model.assert_called_once_with("gpt-5.4-mini")
+    ui.set_session_model.assert_called_once_with("gpt-5.4-mini")
+    assert saved == {"OPENAI_MODEL": "gpt-5.4-mini"}
+    loop.run.assert_not_called()
+
+
 def test_harness_slash_clear_command():
     harness = _harness(LoopOutcome.TASK_COMPLETE, ["/clear", "new task", "exit"])
     assert harness.run() == 0

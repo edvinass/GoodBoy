@@ -407,6 +407,7 @@ class ConversationUI:
         debug_output: bool = False,
         console: Console | None = None,
         workspace: Path | str | None = None,
+        model: str | None = None,
     ) -> None:
         self.show_thoughts = show_thoughts
         self.verbose = verbose
@@ -418,6 +419,7 @@ class ConversationUI:
         self._workspace = (
             Path(workspace).resolve() if workspace is not None else None
         )
+        self._session_model = model
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
         self._last_terminal_width: int | None = None
@@ -515,8 +517,9 @@ class ConversationUI:
 
     def _iter_history_block(self, kind: str, data: dict[str, Any]) -> Iterator[RenderableType | str]:
         if kind == "startup":
+            model = data.get("model", self.session_model)
             yield self._panel(
-                Text.from_markup(format_startup(model=get_settings().default_model)),
+                Text.from_markup(format_startup(model=model)),
                 border_style=_BRAND_STYLE,
                 padding=(0, 2),
             )
@@ -752,8 +755,21 @@ class ConversationUI:
             table.add_row(key, value)
         return table
 
+    @property
+    def session_model(self) -> str:
+        return self._session_model or get_settings().default_model
+
+    def set_session_model(self, model: str) -> None:
+        """Update the model shown on the startup banner for this session."""
+        self._session_model = model
+        for index, (kind, data) in enumerate(self._history):
+            if kind == "startup":
+                self._history[index] = ("startup", {"model": model})
+                break
+        self._sync_redraw()
+
     def print_startup(self) -> None:
-        self._record("startup")
+        self._record("startup", model=self.session_model)
 
     def clear_session(self) -> None:
         """Clear the on-screen transcript and show the startup banner again."""
@@ -763,7 +779,7 @@ class ConversationUI:
         if self._is_interactive_tty():
             with self._display_lock:
                 self._console.clear()
-        self._record("startup")
+        self._record("startup", model=self.session_model)
 
     def print_task_complete(self) -> None:
         if not self.verbose:

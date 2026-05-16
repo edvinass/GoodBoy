@@ -22,7 +22,10 @@ def test_search_slash_commands_filters_by_prefix():
     assert names == ["clear"]
 
     names = [command.name for command in search_slash_commands("")]
-    assert names == ["clear", "exit"]
+    assert names == ["clear", "model", "exit"]
+
+    names = [command.name for command in search_slash_commands("mo")]
+    assert names == ["model"]
 
 
 def test_command_name_sets_match_harness():

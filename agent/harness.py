@@ -7,9 +7,14 @@ import click
 from agent.context import ConversationExchange, SessionContext
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
 from agent.session_log import open_session_log
-from agent.repl_commands import CLEAR_COMMAND_NAMES, EXIT_COMMAND_NAMES
+from agent.repl_commands import (
+    CLEAR_COMMAND_NAMES,
+    EXIT_COMMAND_NAMES,
+    MODEL_COMMAND_NAMES,
+)
 from agent.ui import ConversationUI
-from settings import get_settings
+from llm import MODEL_LABELS, select_model_interactive
+from settings import OPENAI_MODEL_VAR, get_settings, save_env
 
 
 class AgentHarness:
@@ -38,6 +43,7 @@ class AgentHarness:
             debug_input=debug_input,
             debug_output=debug_output,
             workspace=self._loop.workspace,
+            model=self._loop.session_model,
         )
         if self._loop._ui is None:
             self._loop._ui = self._ui
@@ -81,6 +87,12 @@ class AgentHarness:
                         session_log.event("conversation_cleared")
                     continue
 
+                if self._is_model_command(task):
+                    self._change_model()
+                    if session_log is not None:
+                        session_log.event("model_changed", model=self._loop.session_model)
+                    continue
+
                 first_prompt = False
                 ctx = self._build_session_context(task)
                 result = self._loop.run(
@@ -107,6 +119,26 @@ class AgentHarness:
     @classmethod
     def _is_clear_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in CLEAR_COMMAND_NAMES
+
+    @classmethod
+    def _is_model_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in MODEL_COMMAND_NAMES
+
+    def _change_model(self) -> None:
+        try:
+            chosen = select_model_interactive(
+                models=list(self._loop._allowed_models),
+                default=self._loop.session_model,
+            )
+        except click.ClickException as exc:
+            self._ui.print_notice(str(exc))
+            return
+
+        self._loop.set_session_model(chosen)
+        save_env({OPENAI_MODEL_VAR: chosen})
+        self._ui.set_session_model(chosen)
+        label = MODEL_LABELS.get(chosen, chosen)
+        self._ui.print_notice(f"Model set to {label} ({chosen}).")
 
     def _clear_conversation(self) -> None:
         """Drop cross-task model context and reset the on-screen transcript."""

@@ -107,6 +107,17 @@ class AgentLoop:
             show_thoughts=thoughts_visible,
         )
 
+    @property
+    def session_model(self) -> str:
+        return self._default_model
+
+    def set_session_model(self, model: str) -> None:
+        """Set the default model for subsequent tasks in this harness session."""
+        if model not in self._allowed_models:
+            raise ValueError(f"Model not in allowlist: {model}")
+        self._default_model = model
+        self._pending_model = None
+
     def run(
         self,
         task: str,
