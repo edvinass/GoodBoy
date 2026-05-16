@@ -22,6 +22,28 @@ def test_print_agent_with_subtitle(capsys):
     assert "ls -la" in out
 
 
+def test_print_agent_step_shows_model_with_flag(capsys):
+    ui = ConversationUI(show_model=True)
+    step = AgentStep(
+        action=AgentAction.RUN_SHELL,
+        command="ls",
+    )
+    ui.print_agent_step(step, model="gpt-4o-mini", reasoning="low")
+    out = capsys.readouterr().out
+    assert "model" in out
+    assert "gpt-4o-mini" in out
+    assert "reasoning" in out
+    assert "low" in out
+
+
+def test_print_agent_step_hides_model_without_flag(capsys):
+    ui = ConversationUI(show_model=False)
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="ls")
+    ui.print_agent_step(step, model="gpt-4o-mini")
+    out = capsys.readouterr().out
+    assert "gpt-4o-mini" not in out
+
+
 def test_print_agent_step_need_user_input(capsys):
     ui = ConversationUI()
     step = AgentStep(

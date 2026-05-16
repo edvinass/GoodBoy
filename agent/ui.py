@@ -137,11 +137,13 @@ class ConversationUI:
     def __init__(
         self,
         *,
+        show_model: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
         console: Console | None = None,
     ) -> None:
+        self.show_model = show_model
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
@@ -295,14 +297,25 @@ class ConversationUI:
         self,
         step: AgentStep,
         *,
+        model: str | None = None,
+        reasoning: str | None = None,
         next_model: str | None = None,
         next_reasoning: str | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
-        if next_model or next_reasoning:
+        show_routing = (
+            (self.show_model and model)
+            or next_model
+            or next_reasoning
+        )
+        if show_routing:
             routing = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
             routing.add_column(style="muted")
             routing.add_column()
+            if self.show_model and model:
+                routing.add_row("model", model)
+            if self.show_model and reasoning:
+                routing.add_row("reasoning", reasoning)
             if next_model:
                 routing.add_row("next model", next_model)
             if next_reasoning:

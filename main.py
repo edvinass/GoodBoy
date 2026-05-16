@@ -60,6 +60,12 @@ def run_setup() -> None:
 
 @click.group(invoke_without_command=True)
 @click.option(
+    "-m",
+    "show_model",
+    is_flag=True,
+    help="Print the model used on each agent response.",
+)
+@click.option(
     "-d",
     "--debug",
     is_flag=True,
@@ -80,6 +86,7 @@ def run_setup() -> None:
 @click.pass_context
 def cli(
     ctx: click.Context,
+    show_model: bool,
     debug: bool,
     debug_input: bool,
     debug_output: bool,
@@ -88,6 +95,7 @@ def cli(
     if ctx.invoked_subcommand is None:
         load_env()
         run_harness(
+            show_model=show_model,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,

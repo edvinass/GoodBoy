@@ -209,6 +209,8 @@ class AgentLoop:
             if self._ui is not None:
                 self._ui.print_agent_step(
                     step,
+                    model=call_model,
+                    reasoning=call_reasoning,
                     next_model=self._pending_model,
                     next_reasoning=self._pending_reasoning,
                 )
