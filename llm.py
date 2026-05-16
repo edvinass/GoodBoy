@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from typing import Any
 
 import click
 from openai import OpenAI
+
+from settings import get_settings
 
 # https://platform.openai.com/docs/models
 class OpenAIModel(str, Enum):
@@ -30,10 +31,10 @@ MODEL_CHOICES = [m.value for m in OpenAIModel]
 
 
 def get_client() -> OpenAI:
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = get_settings().openai_api_key
     if not api_key:
         raise click.ClickException(
-            "OPENAI_API_KEY is not set. Export it or add it to your environment."
+            "OPENAI_API_KEY is not set. Add it to .env in the project root."
         )
     return OpenAI(api_key=api_key)
 

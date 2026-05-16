@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
     "openai>=1.82",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
@@ -13,7 +14,7 @@ goodboy = "main:main"
 llm = "llm:main"
 
 [tool.setuptools]
-py-modules = ["main", "llm"]
+py-modules = ["main", "llm", "settings"]
 
 [build-system]
 requires = ["setuptools>=61"]
