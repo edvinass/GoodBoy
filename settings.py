@@ -17,9 +17,11 @@ OPENAI_API_KEY_VAR = "OPENAI_API_KEY"
 OPENAI_MODEL_VAR = "OPENAI_MODEL"
 GOODBOY_MAX_TURNS_VAR = "GOODBOY_MAX_TURNS"
 GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
+GOODBOY_MAX_CLARIFICATIONS_VAR = "GOODBOY_MAX_CLARIFICATIONS"
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
+DEFAULT_MAX_CLARIFICATIONS = 3
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -108,6 +110,7 @@ class Settings:
     openai_model: str | None
     max_turns: int = DEFAULT_MAX_TURNS
     tool_timeout_sec: float = DEFAULT_TOOL_TIMEOUT_SEC
+    max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -118,6 +121,9 @@ class Settings:
             max_turns=_env_int(GOODBOY_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
             tool_timeout_sec=_env_float(
                 GOODBOY_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
+            ),
+            max_clarifications=_env_int(
+                GOODBOY_MAX_CLARIFICATIONS_VAR, DEFAULT_MAX_CLARIFICATIONS
             ),
         )
 

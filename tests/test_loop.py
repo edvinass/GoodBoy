@@ -93,6 +93,76 @@ def test_loop_invalid_json_twice_fails(tmp_path: Path):
     assert "invalid JSON" in result.message
 
 
+def test_loop_ask_user_continues_in_one_run(tmp_path: Path):
+    replies = iter(["main"])
+
+    def ask_user() -> str:
+        return next(replies)
+
+    llm = _llm_responses(
+        [
+            AgentStep(
+                action=AgentAction.NEED_USER_INPUT,
+                message="Which branch?",
+            ),
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="merged",
+            ),
+        ]
+    )
+    loop = AgentLoop(workspace=tmp_path, llm_call=llm)
+    result = loop.run("merge", ask_user=ask_user)
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert "main" in result.context.to_prompt()
+
+
+def test_loop_repeat_question_after_reply_nudges_model(tmp_path: Path):
+    """Repeated confirmation questions get a harness nudge instead of blocking."""
+    replies = iter(["yes, commit"])
+
+    def ask_user() -> str:
+        return next(replies)
+
+    same_q = "Please confirm if you'd like me to create a commit message"
+    llm = _llm_responses(
+        [
+            AgentStep(action=AgentAction.NEED_USER_INPUT, message=same_q),
+            AgentStep(action=AgentAction.NEED_USER_INPUT, message=same_q),
+            AgentStep(action=AgentAction.TASK_COMPLETE, message="done"),
+        ]
+    )
+    loop = AgentLoop(workspace=tmp_path, max_turns=10, llm_call=llm)
+    result = loop.run("commit changes", ask_user=ask_user)
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any("already asked" in e.lower() for e in result.context.parse_errors)
+
+
+def test_loop_max_clarifications_fails(tmp_path: Path):
+    replies = iter(["a", "b", "c", "d"])
+
+    def ask_user() -> str:
+        return next(replies)
+
+    def always_ask(**_kwargs):
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.NEED_USER_INPUT,
+                message="Still unclear?",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=20,
+        max_clarifications=3,
+        llm_call=always_ask,
+    )
+    result = loop.run("task", ask_user=ask_user)
+    assert result.outcome == LoopOutcome.FAILED
+    assert "too many times" in result.message
+
+
 def test_loop_resumes_after_user_reply(tmp_path: Path):
     llm = _llm_responses(
         [

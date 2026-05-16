@@ -31,15 +31,17 @@ class SessionContext(BaseModel):
             self.user_task.strip(),
         ]
 
-        if self.user_replies:
-            sections.append("\n## User clarifications")
-            for i, reply in enumerate(self.user_replies, start=1):
-                sections.append(f"{i}. {reply}")
-
         if self.turns:
             sections.append("\n## Prior turns")
             for record in self.turns:
                 sections.append(self._format_turn(record))
+
+        if self.user_replies:
+            sections.append(
+                "\n## User clarifications (answers to your questions — act on these)"
+            )
+            for i, reply in enumerate(self.user_replies, start=1):
+                sections.append(f"{i}. {reply}")
 
         if self.parse_errors:
             sections.append("\n## Parse errors (fix your JSON)")

@@ -7,6 +7,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable
 
+from agent.clarifications import (
+    count_need_user_input_turns,
+    is_affirmative_reply,
+    is_repeat_question,
+    last_need_user_input_message,
+    proceed_directive,
+    repeat_question_directive,
+)
 from agent.context import SessionContext
 from agent.prompt import SYSTEM_PROMPT
 from agent.tools import run_python, run_shell
@@ -21,6 +29,7 @@ from llm import complete_structured
 from settings import get_settings
 
 LLMCall = Callable[..., str]
+AskUser = Callable[[], str]
 
 
 class LoopOutcome(str, Enum):
@@ -49,6 +58,7 @@ class AgentLoop:
         model: str | None = None,
         llm_call: LLMCall | None = None,
         ui: ConversationUI | None = None,
+        max_clarifications: int | None = None,
     ) -> None:
         cfg = get_settings()
         self.workspace = workspace or Path.cwd()
@@ -56,11 +66,22 @@ class AgentLoop:
         self.tool_timeout = (
             tool_timeout if tool_timeout is not None else cfg.tool_timeout_sec
         )
+        self.max_clarifications = (
+            max_clarifications
+            if max_clarifications is not None
+            else cfg.max_clarifications
+        )
         self.model = model
         self._llm_call = llm_call or complete_structured
         self._ui = ui
 
-    def run(self, task: str, *, context: SessionContext | None = None) -> LoopResult:
+    def run(
+        self,
+        task: str,
+        *,
+        context: SessionContext | None = None,
+        ask_user: AskUser | None = None,
+    ) -> LoopResult:
         ctx = context or SessionContext(user_task=task)
         json_schema = AgentStep.model_json_schema()
         consecutive_parse_failures = 0
@@ -101,12 +122,45 @@ class AgentLoop:
                 self._ui.print_agent_step(step)
 
             if step.action == AgentAction.NEED_USER_INPUT:
+                question = step.message or ""
+
+                if count_need_user_input_turns(ctx.turns) >= self.max_clarifications:
+                    return LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message=(
+                            f"Agent asked for input too many times "
+                            f"({self.max_clarifications}). "
+                            "Try a more specific task or run again."
+                        ),
+                        context=ctx,
+                    )
+
+                prior = last_need_user_input_message(ctx.turns)
+                if prior and ctx.user_replies and is_repeat_question(prior, question):
+                    ctx.add_parse_error(repeat_question_directive())
+                    ctx.add_turn(TurnRecord(turn=turn, step=step))
+                    continue
+
                 ctx.add_turn(TurnRecord(turn=turn, step=step))
-                return LoopResult(
-                    outcome=LoopOutcome.NEED_USER_INPUT,
-                    message=step.message or "",
-                    context=ctx,
-                )
+
+                if ask_user is None:
+                    return LoopResult(
+                        outcome=LoopOutcome.NEED_USER_INPUT,
+                        message=question,
+                        context=ctx,
+                    )
+
+                reply = ask_user().strip()
+                if not reply:
+                    return LoopResult(
+                        outcome=LoopOutcome.FAILED,
+                        message="No reply provided.",
+                        context=ctx,
+                    )
+                ctx.add_user_reply(reply)
+                if is_affirmative_reply(reply):
+                    ctx.add_parse_error(proceed_directive(reply))
+                continue
 
             if step.action == AgentAction.TASK_COMPLETE:
                 ctx.add_turn(TurnRecord(turn=turn, step=step))

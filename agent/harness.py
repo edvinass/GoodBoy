@@ -31,15 +31,10 @@ class AgentHarness:
             click.echo("No task provided.", err=True)
             return 1
 
-        context = None
-        while True:
-            result = self._loop.run(task, context=context)
-            code = self._handle_result(result)
-            if code is not None:
-                return code
-            context = result.context
+        result = self._loop.run(task, ask_user=self._ui.prompt_user)
+        return self._exit_code(result)
 
-    def _handle_result(self, result: LoopResult) -> int | None:
+    def _exit_code(self, result: LoopResult) -> int:
         if result.outcome == LoopOutcome.TASK_COMPLETE:
             click.echo()
             click.echo(click.style("✓ Task complete", fg="green", bold=True))
@@ -62,12 +57,8 @@ class AgentHarness:
             return 1
 
         if result.outcome == LoopOutcome.NEED_USER_INPUT:
-            reply = self._ui.prompt_user()
-            if not reply:
-                click.echo("No reply provided; ending session.", err=True)
-                return 1
-            result.context.add_user_reply(reply)
-            return None
+            click.echo(result.message, err=True)
+            return 1
 
         click.echo(f"Unexpected outcome: {result.outcome}", err=True)
         return 1
