@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class AgentAction(str, Enum):
     RUN_SHELL = "run_shell"
     RUN_PYTHON = "run_python"
+    SWITCH_API = "switch_api"
     NEED_USER_INPUT = "need_user_input"
     TASK_COMPLETE = "task_complete"
     FAILED = "failed"
@@ -26,14 +27,40 @@ class AgentStep(BaseModel):
     command: str | None = None
     code: str | None = None
     message: str | None = None
+    tools: list[str] | None = None
     model: str | None = None
     reasoning_effort: str | None = None
 
-    @field_validator("command", "code", "message", "model", "reasoning_effort", mode="before")
+    @field_validator(
+        "command", "code", "message", "model", "reasoning_effort", mode="before"
+    )
     @classmethod
     def _strip_optional_strings(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip() or None
+        return value
+
+    @field_validator("tools", mode="before")
+    @classmethod
+    def _normalize_tools(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = [value]
+        if isinstance(value, list):
+            cleaned = [str(item).strip() for item in value if str(item).strip()]
+            return cleaned or None
+        return value
+
+    @field_validator("tools")
+    @classmethod
+    def _validate_tools(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        from agent.models import OpenAITool
+
+        for tool in value:
+            OpenAITool(tool)
         return value
 
     @field_validator("reasoning_effort")
@@ -53,6 +80,9 @@ class AgentStep(BaseModel):
         elif self.action == AgentAction.RUN_PYTHON:
             if not self.code:
                 raise ValueError("run_python requires non-empty 'code'")
+        elif self.action == AgentAction.SWITCH_API:
+            if not self.tools:
+                raise ValueError("switch_api requires non-empty 'tools' list")
         elif self.action in (
             AgentAction.NEED_USER_INPUT,
             AgentAction.TASK_COMPLETE,

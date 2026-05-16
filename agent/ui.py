@@ -448,12 +448,14 @@ class ConversationUI:
         reasoning: str | None = None,
         next_model: str | None = None,
         next_reasoning: str | None = None,
+        hosted_tools: list[str] | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
         show_routing = (
             (self.show_model and model)
             or next_model
             or next_reasoning
+            or hosted_tools
         )
         if show_routing:
             routing = Table(show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1))
@@ -463,6 +465,8 @@ class ConversationUI:
                 routing.add_row("model", model)
             if self.show_model and reasoning:
                 routing.add_row("reasoning", reasoning)
+            if hosted_tools:
+                routing.add_row("hosted tools", ", ".join(hosted_tools))
             if next_model:
                 routing.add_row("next model", next_model)
             if next_reasoning:
@@ -488,6 +492,11 @@ class ConversationUI:
             if "\n" in preview:
                 preview = preview.splitlines()[0] + " ..."
             self.print_agent(preview, subtitle="python")
+        elif step.action == AgentAction.SWITCH_API and step.tools:
+            self.print_agent(
+                f"Enable hosted tools: {', '.join(step.tools)}",
+                subtitle="api",
+            )
         elif step.message and step.action in (
             AgentAction.NEED_USER_INPUT,
             AgentAction.TASK_COMPLETE,

@@ -5,6 +5,7 @@ from agent.registry import (
     format_tools_section,
     get_tool,
     is_harness_tool,
+    is_routing_action,
     is_valid_action,
 )
 from agent.types import AgentAction
@@ -28,4 +29,7 @@ def test_get_tool_and_harness_checks():
     assert get_tool(AgentAction.TASK_COMPLETE) is None
     assert is_harness_tool(AgentAction.RUN_PYTHON)
     assert not is_harness_tool(AgentAction.FAILED)
+    assert is_routing_action(AgentAction.SWITCH_API)
+    assert not is_harness_tool(AgentAction.SWITCH_API)
     assert is_valid_action(AgentAction.NEED_USER_INPUT)
+    assert is_valid_action(AgentAction.SWITCH_API)

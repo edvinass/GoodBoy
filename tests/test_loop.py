@@ -293,6 +293,72 @@ def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
     assert any("Unknown model" in e for e in result.context.parse_errors)
 
 
+def test_loop_switch_api_enables_hosted_tools(tmp_path: Path):
+    calls: list[dict] = []
+
+    def tracking_llm(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.SWITCH_API,
+                    tools=["web_search"],
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="Sunny, 18°C in London.",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-4o-mini",
+        llm_call=tracking_llm,
+    )
+    result = loop.run("what is the weather in London")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert result.message == "Sunny, 18°C in London."
+    assert len(calls) == 2
+    assert "tools" not in calls[0]
+    assert calls[1]["tools"] == ["web_search"]
+    assert result.context.active_hosted_tools == ["web_search"]
+
+
+def test_loop_switch_api_rejects_model_on_same_turn(tmp_path: Path):
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                {
+                    "action": "switch_api",
+                    "tools": ["web_search"],
+                    "model": "gpt-5.4-mini",
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("weather in London")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any("Do not set model on switch_api" in e for e in result.context.parse_errors)
+
+
 def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):
     calls = {"n": 0}
 

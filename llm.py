@@ -193,6 +193,7 @@ def complete_structured(
     json_schema: dict[str, Any],
     model: str | None = None,
     reasoning_effort: str | None = None,
+    tools: list[str] | None = None,
 ) -> str:
     """Call Responses API with JSON schema output; fall back to plain completion."""
     from agent.prompt import system_prompt_with_schema
@@ -216,6 +217,8 @@ def complete_structured(
     }
     if reasoning_effort is not None:
         kwargs["reasoning"] = {"effort": reasoning_effort}
+    if tools:
+        kwargs["tools"] = [{"type": tool} for tool in tools]
 
     try:
         response = client.responses.create(**kwargs)

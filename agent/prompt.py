@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent.models import (
     format_cost_policy_section,
+    format_hosted_api_section,
     format_models_section,
     format_reasoning_section,
 )
@@ -34,7 +35,8 @@ _BASE_RULES = """You are GoodBoy, an autonomous AI agent running inside a local 
 """
 
 _JSON_FIELD_DOCS = """## JSON fields
-- action: run_shell | run_python | need_user_input | task_complete | failed
+- action: run_shell | run_python | switch_api | need_user_input | task_complete | failed
+- tools: required for switch_api — OpenAI hosted tool IDs, e.g. ["web_search"]
 - model: optional; configures the next thinking step (not retroactive)
 - reasoning_effort: optional; none | minimal | low | medium | high | xhigh
 - thought: optional brief reasoning
@@ -73,6 +75,7 @@ def build_system_prompt(
     sections = [
         _BASE_RULES,
         format_user_visibility_section(debug=debug),
+        format_hosted_api_section(),
         format_cost_policy_section(),
         format_models_section(allowed_models),
         format_reasoning_section(),

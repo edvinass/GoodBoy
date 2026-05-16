@@ -297,6 +297,20 @@ def models_for_prompt(allowed_ids: list[str]) -> list[ModelSpec]:
     return sorted(specs, key=lambda s: s.cost_index)
 
 
+def cheapest_model_with_tools(
+    allowed_ids: list[str],
+    tools: list[OpenAITool | str],
+) -> str | None:
+    """Cheapest allowlisted model that supports every requested hosted tool."""
+    required = {
+        OpenAITool(tool) if isinstance(tool, str) else tool for tool in tools
+    }
+    for spec in models_for_prompt(allowed_ids):
+        if required <= spec.openai_tools:
+            return spec.id
+    return None
+
+
 def cheapest_capable_model(
     allowed_ids: list[str],
     *,
@@ -396,6 +410,19 @@ def format_reasoning_section() -> str:
         lines.append(f"  - Best for: {spec.best_for}")
         lines.append(f"  - Avoid when: {spec.avoid_when}")
     return "\n".join(lines)
+
+
+def format_hosted_api_section() -> str:
+    return """## OpenAI hosted API (switch_api)
+- Default: structured harness only (run_shell, run_python). No live web access.
+- For live web data (weather, news, prices, current events, "what is happening now"),
+  use action **switch_api** with tools: ["web_search"] before giving up.
+- Do NOT task_complete saying you cannot access live or current data — switch API first.
+- **Model switch is a separate step**: use switch_api alone first. If the active model
+  lacks the tool, the harness will tell you; then set `model` on the *next* turn to a
+  capable ID from the catalog (do not switch API again).
+- After hosted tools are active, continue the task and finish with task_complete; put
+  the full answer in message (user does not see tool traces unless debug mode)."""
 
 
 def format_cost_policy_section() -> str:

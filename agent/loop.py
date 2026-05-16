@@ -20,7 +20,12 @@ from agent.clarifications import (
 from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
 from agent.context import SessionContext
-from agent.models import resolve_reasoning_effort, validate_reasoning_effort_for_model
+from agent.models import (
+    cheapest_model_with_tools,
+    model_supports_openai_tool,
+    resolve_reasoning_effort,
+    validate_reasoning_effort_for_model,
+)
 from agent.prompt import build_system_prompt
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.tools import run_python, run_shell
@@ -82,6 +87,7 @@ class AgentLoop:
         self._allowed_models = allowed_models or get_curated_models()
         self._pending_model: str | None = None
         self._pending_reasoning: str | None = None
+        self._hosted_tools: tuple[str, ...] = ()
         self._llm_call = llm_call or complete_structured
         self._ui = ui
         debug_mode = ui.debug if ui is not None else False
@@ -138,6 +144,8 @@ class AgentLoop:
                 "model": call_model,
                 "reasoning_effort": call_reasoning,
             }
+            if self._hosted_tools:
+                llm_kwargs["tools"] = list(self._hosted_tools)
 
             if session_log is not None:
                 session_log.log_llm_request(
@@ -213,7 +221,47 @@ class AgentLoop:
                     reasoning=call_reasoning,
                     next_model=self._pending_model,
                     next_reasoning=self._pending_reasoning,
+                    hosted_tools=list(self._hosted_tools) or None,
                 )
+
+            if step.action == AgentAction.SWITCH_API:
+                api_err = self._apply_switch_api(step, call_model)
+                if api_err:
+                    ctx.add_parse_error(api_err)
+                    if session_log is not None:
+                        session_log.event("parse_error", turn=turn, error=api_err)
+                    consecutive_parse_failures += 1
+                    if consecutive_parse_failures >= 2:
+                        return finish(
+                            LoopResult(
+                                outcome=LoopOutcome.FAILED,
+                                message=api_err,
+                                context=ctx,
+                            )
+                        )
+                    ctx.add_turn(
+                        TurnRecord(
+                            turn=turn,
+                            step=step,
+                            call_model=call_model,
+                            call_reasoning_effort=call_reasoning,
+                        )
+                    )
+                    continue
+
+                consecutive_parse_failures = 0
+                ctx = ctx.model_copy(
+                    update={"active_hosted_tools": list(self._hosted_tools)}
+                )
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                continue
 
             if step.action == AgentAction.NEED_USER_INPUT:
                 question = step.message or ""
@@ -396,6 +444,18 @@ class AgentLoop:
         if not is_valid_action(step.action):
             return f"Invalid action '{step.action.value}'."
 
+        if step.action == AgentAction.SWITCH_API:
+            if step.model is not None:
+                return (
+                    "Do not set model on switch_api. Switch API first; set model on "
+                    "the next turn if needed."
+                )
+            if step.reasoning_effort is not None:
+                return (
+                    "Do not set reasoning_effort on switch_api. Set it on a later "
+                    "turn after API and model are configured."
+                )
+
         if step.model is not None and step.model not in self._allowed_models:
             allowed = ", ".join(self._allowed_models[:8])
             suffix = "..." if len(self._allowed_models) > 8 else ""
@@ -419,3 +479,22 @@ class AgentLoop:
             self._pending_model = step.model
         if step.reasoning_effort is not None:
             self._pending_reasoning = step.reasoning_effort
+
+    def _apply_switch_api(self, step: AgentStep, call_model: str) -> str | None:
+        tools = step.tools or []
+        for tool in tools:
+            if not model_supports_openai_tool(call_model, tool):
+                suggestion = cheapest_model_with_tools(self._allowed_models, tools)
+                if suggestion:
+                    return (
+                        f"Model '{call_model}' does not support hosted tool '{tool}'. "
+                        f"On your next turn, set model to '{suggestion}' (routing only — "
+                        "do not call switch_api again) and continue the task."
+                    )
+                return (
+                    f"Model '{call_model}' does not support hosted tool '{tool}' and "
+                    "no allowlisted model supports it."
+                )
+
+        self._hosted_tools = tuple(tools)
+        return None

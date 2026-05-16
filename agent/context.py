@@ -15,6 +15,7 @@ class SessionContext(BaseModel):
     turns: list[TurnRecord] = Field(default_factory=list)
     user_replies: list[str] = Field(default_factory=list)
     parse_errors: list[str] = Field(default_factory=list)
+    active_hosted_tools: list[str] = Field(default_factory=list)
 
     def add_turn(self, record: TurnRecord) -> None:
         self.turns.append(record)
@@ -37,6 +38,15 @@ class SessionContext(BaseModel):
                 [
                     "\n## Workspace",
                     f"run_shell and run_python use cwd: {self.workspace}",
+                ]
+            )
+
+        if self.active_hosted_tools:
+            tools = ", ".join(self.active_hosted_tools)
+            sections.extend(
+                [
+                    "\n## Active API",
+                    f"OpenAI hosted tools enabled for subsequent LLM calls: {tools}",
                 ]
             )
 
@@ -73,6 +83,8 @@ class SessionContext(BaseModel):
         if step.thought:
             lines.append(f"Thought: {step.thought}")
         lines.append(f"Action: {step.action.value}")
+        if step.tools:
+            lines.append(f"Tools: {', '.join(step.tools)}")
         if step.model:
             next_effort = step.reasoning_effort or "(default)"
             lines.append(

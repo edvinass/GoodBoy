@@ -64,6 +64,25 @@ def test_invalid_reasoning_effort_rejected():
         )
 
 
+def test_parse_switch_api():
+    raw = json.dumps({"action": "switch_api", "tools": ["web_search"]})
+    step = parse_agent_step(raw)
+    assert step.action == AgentAction.SWITCH_API
+    assert step.tools == ["web_search"]
+
+
+def test_switch_api_requires_tools():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate({"action": "switch_api"})
+
+
+def test_switch_api_rejects_invalid_tool():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate(
+            {"action": "switch_api", "tools": ["not_a_real_tool"]}
+        )
+
+
 def test_model_strips_whitespace():
     step = AgentStep.model_validate(
         {"action": "task_complete", "message": "done", "model": "  "}

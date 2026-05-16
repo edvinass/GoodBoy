@@ -6,7 +6,9 @@ from agent.models import (
     MODEL_CATALOG,
     OpenAITool,
     assert_catalog_covers_model_choices,
+    cheapest_model_with_tools,
     format_cost_policy_section,
+    format_hosted_api_section,
     format_models_section,
     get_model_spec,
     model_supports_openai_tool,
@@ -73,9 +75,26 @@ def test_nano_lacks_computer_use_and_tool_search():
     assert not model_supports_openai_tool("gpt-5.4-nano", OpenAITool.TOOL_SEARCH)
 
 
+def test_cheapest_model_with_tools():
+    model = cheapest_model_with_tools(
+        ["gpt-5.5", "gpt-4o-mini", "gpt-4.1-nano"],
+        [OpenAITool.WEB_SEARCH],
+    )
+    assert model == "gpt-4.1-nano"
+
+
+def test_format_hosted_api_section():
+    text = format_hosted_api_section()
+    assert "switch_api" in text
+    assert "web_search" in text
+    assert "separate step" in text
+
+
 def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
     assert "Cost policy" in prompt
+    assert "switch_api" in prompt
+    assert "web_search" in prompt
     assert "run_shell" in prompt
     assert "gpt-4o-mini" in prompt
 
