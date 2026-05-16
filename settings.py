@@ -15,7 +15,11 @@ ENV_FILE = ROOT_DIR / ".env"
 
 OPENAI_API_KEY_VAR = "OPENAI_API_KEY"
 OPENAI_MODEL_VAR = "OPENAI_MODEL"
+GOODBOY_MAX_TURNS_VAR = "GOODBOY_MAX_TURNS"
+GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
 DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_MAX_TURNS = 40
+DEFAULT_TOOL_TIMEOUT_SEC = 120.0
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -78,10 +82,32 @@ def save_env(updates: dict[str, str]) -> None:
     load_env()
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw.strip())
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     openai_api_key: str | None
     openai_model: str | None
+    max_turns: int = DEFAULT_MAX_TURNS
+    tool_timeout_sec: float = DEFAULT_TOOL_TIMEOUT_SEC
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -89,6 +115,10 @@ class Settings:
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
+            max_turns=_env_int(GOODBOY_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
+            tool_timeout_sec=_env_float(
+                GOODBOY_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
+            ),
         )
 
     @property

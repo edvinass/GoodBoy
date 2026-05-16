@@ -137,6 +137,20 @@ def get_client(*, api_key: str | None = None) -> OpenAI:
     return OpenAI(api_key=resolved_key)
 
 
+def _extract_response_text(response: Any) -> str:
+    if getattr(response, "output_text", None):
+        return response.output_text
+
+    output = getattr(response, "output", None) or []
+    for item in output:
+        for content in getattr(item, "content", []) or []:
+            text = getattr(content, "text", None)
+            if text:
+                return text
+
+    raise click.ClickException("Model returned no text output.")
+
+
 def complete(
     prompt: str,
     *,
@@ -167,17 +181,47 @@ def complete(
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
     response = client.responses.create(**kwargs)
+    return _extract_response_text(response)
 
-    if getattr(response, "output_text", None):
-        return response.output_text
 
-    for item in response.output:
-        for content in getattr(item, "content", []) or []:
-            text = getattr(content, "text", None)
-            if text:
-                return text
+def complete_structured(
+    *,
+    input: str,
+    instructions: str,
+    json_schema: dict[str, Any],
+    model: str | None = None,
+) -> str:
+    """Call Responses API with JSON schema output; fall back to plain completion."""
+    from agent.prompt import system_prompt_with_schema
 
-    raise click.ClickException("Model returned no text output.")
+    client = get_client()
+    resolved_model = model or get_settings().default_model
+
+    text_config: dict[str, Any] = {
+        "format": {
+            "type": "json_schema",
+            "name": "agent_step",
+            "schema": json_schema,
+            "strict": False,
+        }
+    }
+    kwargs: dict[str, Any] = {
+        "model": resolved_model,
+        "input": input,
+        "instructions": instructions,
+        "text": text_config,
+    }
+
+    try:
+        response = client.responses.create(**kwargs)
+        return _extract_response_text(response)
+    except Exception:
+        fallback_instructions = system_prompt_with_schema()
+        return complete(
+            input,
+            model=resolved_model,
+            instructions=fallback_instructions,
+        )
 
 
 @click.command()

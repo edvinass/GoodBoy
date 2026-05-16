@@ -4,6 +4,7 @@ import click
 import questionary
 
 import settings
+from agent.harness import run_harness
 from llm import select_model_interactive
 from settings import OPENAI_API_KEY_VAR, OPENAI_MODEL_VAR, get_settings, save_env
 
@@ -63,13 +64,20 @@ def cli(ctx: click.Context) -> None:
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
         load_env()
-        cfg = get_settings()
-        if not cfg.openai_api_key:
-            click.echo("Not configured yet. Run: goodboy setup")
-            raise SystemExit(1)
-        click.echo(f"Model: {click.style(cfg.default_model, fg='green', bold=True)}")
-        click.echo(f"API key: {click.style(_mask_api_key(cfg.openai_api_key), fg='green')}")
-        click.echo("Run goodboy setup to change settings.")
+        run_harness()
+
+
+@cli.command()
+def status() -> None:
+    """Show saved API key and model."""
+    load_env()
+    cfg = get_settings()
+    if not cfg.openai_api_key:
+        click.echo("Not configured yet. Run: goodboy setup")
+        raise SystemExit(1)
+    click.echo(f"Model: {click.style(cfg.default_model, fg='green', bold=True)}")
+    click.echo(f"API key: {click.style(_mask_api_key(cfg.openai_api_key), fg='green')}")
+    click.echo("Run goodboy setup to change settings.")
 
 
 @cli.command()

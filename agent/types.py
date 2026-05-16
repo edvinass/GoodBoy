@@ -1,0 +1,86 @@
+"""Structured agent protocol types."""
+
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class AgentAction(str, Enum):
+    RUN_SHELL = "run_shell"
+    RUN_PYTHON = "run_python"
+    NEED_USER_INPUT = "need_user_input"
+    TASK_COMPLETE = "task_complete"
+    FAILED = "failed"
+
+
+class AgentStep(BaseModel):
+    """Single turn from the LLM; must be valid JSON matching this schema."""
+
+    action: AgentAction
+    thought: str | None = None
+    command: str | None = None
+    code: str | None = None
+    message: str | None = None
+
+    @field_validator("command", "code", "message", mode="before")
+    @classmethod
+    def _strip_optional_strings(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip() or None
+        return value
+
+    @model_validator(mode="after")
+    def _validate_action_fields(self) -> AgentStep:
+        if self.action == AgentAction.RUN_SHELL:
+            if not self.command:
+                raise ValueError("run_shell requires non-empty 'command'")
+        elif self.action == AgentAction.RUN_PYTHON:
+            if not self.code:
+                raise ValueError("run_python requires non-empty 'code'")
+        elif self.action in (
+            AgentAction.NEED_USER_INPUT,
+            AgentAction.TASK_COMPLETE,
+            AgentAction.FAILED,
+        ):
+            if not self.message:
+                raise ValueError(f"{self.action.value} requires non-empty 'message'")
+        return self
+
+
+class ToolResult(BaseModel):
+    """Captured output from a shell or Python tool execution."""
+
+    executed: str
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int | None = None
+    timed_out: bool = False
+
+
+class TurnRecord(BaseModel):
+    """One harness turn: agent step plus optional tool result."""
+
+    turn: int
+    step: AgentStep
+    tool_result: ToolResult | None = None
+    parse_error: str | None = None
+
+
+def parse_agent_step(raw: str) -> AgentStep:
+    """Parse and validate JSON text into an AgentStep."""
+    import json
+
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    data = json.loads(text)
+    return AgentStep.model_validate(data)
