@@ -26,6 +26,7 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
+from settings import get_settings
 from agent.types import AgentAction, AgentStep, ToolResult
 
 _THEME = Theme(
@@ -286,7 +287,7 @@ class ConversationUI:
         self._console.print()
         self._console.print(
             Panel(
-                Text.from_markup(format_startup()),
+                Text.from_markup(format_startup(model=get_settings().default_model)),
                 border_style="cyan",
                 box=ROUNDED,
                 padding=(0, 2),

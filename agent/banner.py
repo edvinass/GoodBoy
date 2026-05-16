@@ -31,10 +31,11 @@ def get_version() -> str:
         return match.group(1) if match else "unknown"
 
 
-def format_startup() -> str:
+def format_startup(*, model: str) -> str:
     ver = get_version()
     return (
         f"{DOG_ASCII.rstrip()}\n"
         f"[bold cyan]GoodBoy[/] [dim]v{ver}[/]\n"
+        f"[dim]Model[/] [cyan]{model}[/]\n"
         f"{DESCRIPTION}"
     )
