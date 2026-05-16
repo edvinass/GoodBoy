@@ -5,7 +5,7 @@ import json
 from rich.console import Console
 
 from agent.types import AgentAction, AgentStep, ToolResult
-from agent.ui import ConversationUI
+from agent.ui import ConversationUI, _wrap_long_lines
 
 
 def test_print_user_format(capsys):
@@ -118,13 +118,22 @@ def test_print_llm_response_with_debug_output(capsys):
     assert "done" in out
 
 
+def test_wrap_long_lines_splits_without_ellipsis():
+    line = "a" * 100
+    wrapped = _wrap_long_lines(line, width=40)
+    assert "..." not in wrapped
+    assert wrapped.replace("\n", "") == line
+
+
 def test_print_llm_response_shows_full_long_json(capsys):
     long_command = "curl -s 'https://example.com/" + "a" * 80 + "'"
     raw = json.dumps({"action": "run_shell", "command": long_command})
     ui = ConversationUI(debug_output=True, console=Console(width=60))
     ui.print_llm_response(turn=1, raw=raw)
     out = capsys.readouterr().out
-    assert long_command in out
+    assert "run_shell" in out
+    assert out.count("a") >= 80
+    assert "..." not in out
 
 
 def test_print_agent_shell_command_wraps(capsys):
@@ -132,7 +141,8 @@ def test_print_agent_shell_command_wraps(capsys):
     ui = ConversationUI(console=Console(width=60))
     ui.print_agent(long_command, subtitle="shell")
     out = capsys.readouterr().out
-    assert long_command in out
+    assert out.count("x") >= 120
+    assert "..." not in out
 
 
 def test_print_llm_response_hidden_without_flag(capsys):

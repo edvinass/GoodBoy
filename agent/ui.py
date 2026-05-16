@@ -45,10 +45,26 @@ _SUBTITLE_ICONS = {
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
 
-def _syntax(text: str, lexer: str) -> Syntax:
-    """Syntax block that wraps long lines instead of clipping at panel width."""
+def _wrap_long_lines(text: str, *, width: int) -> str:
+    """Break lines longer than width so panels do not clip with an ellipsis."""
+    if width < 20:
+        width = 20
+    wrapped: list[str] = []
+    for line in text.splitlines():
+        if len(line) <= width:
+            wrapped.append(line)
+            continue
+        start = 0
+        while start < len(line):
+            wrapped.append(line[start : start + width])
+            start += width
+    return "\n".join(wrapped)
+
+
+def _syntax(text: str, lexer: str, *, width: int) -> Syntax:
+    """Syntax block with long lines folded to the available width."""
     return Syntax(
-        text,
+        _wrap_long_lines(text, width=width),
         lexer,
         theme="monokai",
         background_color="default",
@@ -115,11 +131,12 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
-def _render_body(text: str, *, subtitle: str | None = None) -> RenderableType:
+def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) -> RenderableType:
     body = text.rstrip() or ""
+    panel_width = max(width - 6, 40)
     if subtitle == "shell":
         return Panel(
-            _syntax(body, "bash"),
+            _syntax(body, "bash", width=panel_width),
             title="[shell]command[/]",
             border_style="yellow",
             box=ROUNDED,
@@ -127,7 +144,7 @@ def _render_body(text: str, *, subtitle: str | None = None) -> RenderableType:
         )
     if subtitle == "python":
         return Panel(
-            _syntax(body, "python"),
+            _syntax(body, "python", width=panel_width),
             title="[python]code[/]",
             border_style="magenta",
             box=ROUNDED,
@@ -169,6 +186,9 @@ class ConversationUI:
         self.debug_output = debug_output
         self._console = console or Console(theme=_THEME)
         self._err = Console(theme=_THEME, stderr=True)
+
+    def _panel_text_width(self) -> int:
+        return max(self._console.width - 6, 40)
 
     def print_startup(self) -> None:
         self._console.print()
@@ -253,7 +273,9 @@ class ConversationUI:
         subtitle: str | None = None,
     ) -> None:
         self._print_header("agent", subtitle=subtitle)
-        self._console.print(_render_body(text, subtitle=subtitle))
+        self._console.print(
+            _render_body(text, subtitle=subtitle, width=self._console.width)
+        )
 
     def print_llm_request(
         self,
@@ -276,19 +298,20 @@ class ConversationUI:
         if reasoning_effort:
             meta.add_row("reasoning", reasoning_effort)
 
+        panel_width = self._panel_text_width()
         self._print_header("agent", subtitle="input")
         self._console.print(
             Group(
                 Panel(meta, title="[muted]request[/]", border_style="dim", box=ROUNDED),
                 Panel(
-                    _syntax(instructions, "markdown"),
+                    _syntax(instructions, "markdown", width=panel_width),
                     title="[muted]instructions[/]",
                     border_style="dim",
                     box=ROUNDED,
                     padding=(0, 1),
                 ),
                 Panel(
-                    _syntax(input_text, "markdown"),
+                    _syntax(input_text, "markdown", width=panel_width),
                     title="[muted]input[/]",
                     border_style="dim",
                     box=ROUNDED,
@@ -302,10 +325,11 @@ class ConversationUI:
         if not self.debug_output:
             return
 
+        panel_width = self._panel_text_width()
         self._print_header("agent", subtitle="output")
         self._console.print(
             Panel(
-                _syntax(_pretty_json(raw), "json"),
+                _syntax(_pretty_json(raw), "json", width=panel_width),
                 title=f"[muted]turn {turn}[/]",
                 border_style="dim",
                 box=ROUNDED,
@@ -382,12 +406,13 @@ class ConversationUI:
             style = "success" if result.exit_code == 0 else "warning"
             meta.add_row("exit code", f"[{style}]{result.exit_code}[/]")
 
+        panel_width = self._panel_text_width()
         parts: list[RenderableType] = [Panel(meta, title="[muted]run[/]", border_style="dim", box=ROUNDED)]
 
         if result.stdout.strip():
             parts.append(
                 Panel(
-                    _syntax(result.stdout.rstrip(), "text"),
+                    _syntax(result.stdout.rstrip(), "text", width=panel_width),
                     title="[muted]stdout[/]",
                     border_style="cyan",
                     box=ROUNDED,
@@ -398,7 +423,10 @@ class ConversationUI:
         if result.stderr.strip():
             parts.append(
                 Panel(
-                    Text(result.stderr.rstrip(), style="error"),
+                    Text(
+                        _wrap_long_lines(result.stderr.rstrip(), width=panel_width),
+                        style="error",
+                    ),
                     title="[muted]stderr[/]",
                     border_style="red",
                     box=ROUNDED,
