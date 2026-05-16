@@ -1,5 +1,9 @@
 """Tests for conversation UI formatting."""
 
+import json
+
+from rich.console import Console
+
 from agent.types import AgentAction, AgentStep, ToolResult
 from agent.ui import ConversationUI
 
@@ -110,7 +114,25 @@ def test_print_llm_response_with_debug_output(capsys):
     out = capsys.readouterr().out
     assert "output" in out
     assert "turn 2" in out
-    assert raw in out
+    assert "task_complete" in out
+    assert "done" in out
+
+
+def test_print_llm_response_shows_full_long_json(capsys):
+    long_command = "curl -s 'https://example.com/" + "a" * 80 + "'"
+    raw = json.dumps({"action": "run_shell", "command": long_command})
+    ui = ConversationUI(debug_output=True, console=Console(width=60))
+    ui.print_llm_response(turn=1, raw=raw)
+    out = capsys.readouterr().out
+    assert long_command in out
+
+
+def test_print_agent_shell_command_wraps(capsys):
+    long_command = "echo " + "x" * 120
+    ui = ConversationUI(console=Console(width=60))
+    ui.print_agent(long_command, subtitle="shell")
+    out = capsys.readouterr().out
+    assert long_command in out
 
 
 def test_print_llm_response_hidden_without_flag(capsys):

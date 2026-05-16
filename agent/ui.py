@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from contextlib import contextmanager
@@ -42,6 +43,25 @@ _SUBTITLE_ICONS = {
 }
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
+
+
+def _syntax(text: str, lexer: str) -> Syntax:
+    """Syntax block that wraps long lines instead of clipping at panel width."""
+    return Syntax(
+        text,
+        lexer,
+        theme="monokai",
+        background_color="default",
+        word_wrap=True,
+    )
+
+
+def _pretty_json(raw: str) -> str:
+    """Format JSON for display; fall back to raw text if not valid JSON."""
+    try:
+        return json.dumps(json.loads(raw), indent=2)
+    except (json.JSONDecodeError, TypeError):
+        return raw
 
 
 def _looks_like_markdown(text: str) -> bool:
@@ -99,7 +119,7 @@ def _render_body(text: str, *, subtitle: str | None = None) -> RenderableType:
     body = text.rstrip() or ""
     if subtitle == "shell":
         return Panel(
-            Syntax(body, "bash", theme="monokai", background_color="default"),
+            _syntax(body, "bash"),
             title="[shell]command[/]",
             border_style="yellow",
             box=ROUNDED,
@@ -107,7 +127,7 @@ def _render_body(text: str, *, subtitle: str | None = None) -> RenderableType:
         )
     if subtitle == "python":
         return Panel(
-            Syntax(body, "python", theme="monokai", background_color="default"),
+            _syntax(body, "python"),
             title="[python]code[/]",
             border_style="magenta",
             box=ROUNDED,
@@ -261,14 +281,14 @@ class ConversationUI:
             Group(
                 Panel(meta, title="[muted]request[/]", border_style="dim", box=ROUNDED),
                 Panel(
-                    Syntax(instructions, "markdown", theme="monokai", background_color="default"),
+                    _syntax(instructions, "markdown"),
                     title="[muted]instructions[/]",
                     border_style="dim",
                     box=ROUNDED,
                     padding=(0, 1),
                 ),
                 Panel(
-                    Syntax(input_text, "markdown", theme="monokai", background_color="default"),
+                    _syntax(input_text, "markdown"),
                     title="[muted]input[/]",
                     border_style="dim",
                     box=ROUNDED,
@@ -285,7 +305,7 @@ class ConversationUI:
         self._print_header("agent", subtitle="output")
         self._console.print(
             Panel(
-                Syntax(raw, "json", theme="monokai", background_color="default"),
+                _syntax(_pretty_json(raw), "json"),
                 title=f"[muted]turn {turn}[/]",
                 border_style="dim",
                 box=ROUNDED,
@@ -365,12 +385,9 @@ class ConversationUI:
         parts: list[RenderableType] = [Panel(meta, title="[muted]run[/]", border_style="dim", box=ROUNDED)]
 
         if result.stdout.strip():
-            out = result.stdout.rstrip()
-            if len(out) > 400:
-                out = out[:400] + "\n... [output truncated for display]"
             parts.append(
                 Panel(
-                    Syntax(out, "text", theme="monokai", background_color="default"),
+                    _syntax(result.stdout.rstrip(), "text"),
                     title="[muted]stdout[/]",
                     border_style="cyan",
                     box=ROUNDED,
@@ -379,12 +396,9 @@ class ConversationUI:
             )
 
         if result.stderr.strip():
-            err = result.stderr.rstrip()
-            if len(err) > 200:
-                err = err[:200] + " ..."
             parts.append(
                 Panel(
-                    Text(err, style="error"),
+                    Text(result.stderr.rstrip(), style="error"),
                     title="[muted]stderr[/]",
                     border_style="red",
                     box=ROUNDED,
