@@ -27,7 +27,7 @@ from agent.types import (
     TurnRecord,
     parse_agent_step,
 )
-from llm import complete_structured, get_available_models
+from llm import complete_structured, get_curated_models
 from settings import get_settings
 
 LLMCall = Callable[..., str]
@@ -75,7 +75,7 @@ class AgentLoop:
             else cfg.max_clarifications
         )
         self._default_model = model or cfg.default_model
-        self._allowed_models = allowed_models or get_available_models()
+        self._allowed_models = allowed_models or get_curated_models()
         self._pending_model: str | None = None
         self._pending_reasoning: str | None = None
         self._llm_call = llm_call or complete_structured

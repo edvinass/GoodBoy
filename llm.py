@@ -67,13 +67,16 @@ def _is_selectable_chat_model(model_id: str) -> bool:
     return any(lid.startswith(prefix) for prefix in _CHAT_MODEL_PREFIXES)
 
 
-def get_available_models(*, api_key: str | None = None) -> list[str]:
-    """Return chat models from the API, curated list first; fallback if unreachable."""
+def get_curated_models(*, api_key: str | None = None) -> list[str]:
+    """Return main catalog models available on the account (no dated snapshots or extras)."""
     try:
         client = get_client(api_key=api_key)
         api_ids = {
             m.id for m in client.models.list() if _is_selectable_chat_model(m.id)
         }
+        curated = [m.value for m in OpenAIModel if m.value in api_ids]
+        if curated:
+            return curated
     except click.ClickException:
         return MODEL_CHOICES.copy()
     except Exception as exc:
@@ -84,13 +87,12 @@ def get_available_models(*, api_key: str | None = None) -> list[str]:
             ),
             err=True,
         )
-        return MODEL_CHOICES.copy()
-
-    curated = [m.value for m in OpenAIModel if m.value in api_ids]
-    extras = sorted(api_ids - set(curated))
-    if curated or extras:
-        return curated + extras
     return MODEL_CHOICES.copy()
+
+
+def get_available_models(*, api_key: str | None = None) -> list[str]:
+    """Alias for get_curated_models (setup menu and agent allowlist)."""
+    return get_curated_models(api_key=api_key)
 
 
 def _model_choice(model_id: str) -> questionary.Choice:

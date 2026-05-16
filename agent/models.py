@@ -292,28 +292,9 @@ def model_supports_openai_tool(model_id: str, tool: OpenAITool | str) -> bool:
 
 
 def models_for_prompt(allowed_ids: list[str]) -> list[ModelSpec]:
-    curated = [MODEL_CATALOG[mid] for mid in allowed_ids if mid in MODEL_CATALOG]
-    extras = sorted(
-        mid for mid in allowed_ids if mid not in MODEL_CATALOG
-    )
-    result = sorted(curated, key=lambda s: s.cost_index)
-    for mid in extras:
-        result.append(
-            ModelSpec(
-                id=mid,
-                family=ModelFamily.GENERAL,
-                best_for="No curated guidance.",
-                avoid_when="Prefer a listed model unless required.",
-                cost_tier=CostTier.MEDIUM,
-                price_input_per_1m=0.0,
-                price_cached_input_per_1m=0.0,
-                price_output_per_1m=0.0,
-                reasoning=False,
-                reasoning_efforts=None,
-                openai_tools=frozenset(),
-            )
-        )
-    return result
+    """Catalog entries for allowed IDs, cheapest first (unknown IDs omitted)."""
+    specs = [MODEL_CATALOG[mid] for mid in allowed_ids if mid in MODEL_CATALOG]
+    return sorted(specs, key=lambda s: s.cost_index)
 
 
 def cheapest_capable_model(
@@ -401,13 +382,6 @@ def format_models_section(allowed_ids: list[str]) -> str:
             efforts = ", ".join(spec.reasoning_efforts)
             lines.append(f"  - Reasoning efforts: {efforts}")
         lines.append(f"  - OpenAI hosted tools: {_format_openai_tools(spec)}")
-    unknown = [mid for mid in allowed_ids if mid not in MODEL_CATALOG]
-    if unknown:
-        lines.append("")
-        lines.append(
-            "Other allowed IDs without curated guidance: "
-            + ", ".join(unknown)
-        )
     return "\n".join(lines)
 
 
