@@ -61,6 +61,12 @@ def run_setup() -> None:
 
 @click.group(invoke_without_command=True)
 @click.option(
+    "-f",
+    "show_thoughts",
+    is_flag=True,
+    help="Show model thoughts on each step.",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
@@ -99,6 +105,7 @@ def run_setup() -> None:
 @click.pass_context
 def cli(
     ctx: click.Context,
+    show_thoughts: bool,
     verbose: bool,
     show_model: bool,
     show_commands: bool,
@@ -110,6 +117,7 @@ def cli(
     if ctx.invoked_subcommand is None:
         load_env()
         run_harness(
+            show_thoughts=show_thoughts,
             verbose=verbose,
             show_model=show_model,
             show_commands=show_commands,

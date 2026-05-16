@@ -347,6 +347,7 @@ class ConversationUI:
     def __init__(
         self,
         *,
+        show_thoughts: bool = False,
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
@@ -355,6 +356,7 @@ class ConversationUI:
         debug_output: bool = False,
         console: Console | None = None,
     ) -> None:
+        self.show_thoughts = show_thoughts
         self.verbose = verbose
         self.show_model = show_model
         self.show_commands = show_commands
@@ -806,6 +808,8 @@ class ConversationUI:
     ) -> None:
         """Show the agent's reasoning and intended action."""
         if not self.verbose:
+            if self._show_thoughts and step.thought:
+                self._record("thought", text=step.thought)
             if step.message and step.action in (
                 AgentAction.NEED_USER_INPUT,
                 AgentAction.TASK_COMPLETE,
@@ -848,7 +852,7 @@ class ConversationUI:
                 routing_rows.append(("next reasoning", next_reasoning))
             self._record("routing", rows=routing_rows)
 
-        if step.thought:
+        if self._show_thoughts and step.thought:
             self._record("thought", text=step.thought)
 
         if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
@@ -874,6 +878,10 @@ class ConversationUI:
             AgentAction.FAILED,
         ):
             self.print_agent(step.message)
+
+    @property
+    def _show_thoughts(self) -> bool:
+        return self.show_thoughts or self.verbose
 
     @property
     def _show_tool_io(self) -> bool:

@@ -248,14 +248,20 @@ Turn 4 — finish:
 - Expecting run_shell to search the web — use switch_tools + web_search instead."""
 
 
-def format_user_visibility_section(*, debug: bool) -> str:
+def format_user_visibility_section(*, debug: bool, show_thoughts: bool = False) -> str:
     """Explain what the user can see in the terminal for this session."""
     if debug:
         return """## User visibility (this session — full transparency)
 Command visibility (`goodboy -c` or `-d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
+    if show_thoughts:
+        return """## User visibility (this session — thoughts visible)
+Thought visibility (`goodboy -f`) is **on**. The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed.
+They do **not** see run_shell commands, run_python code, or tool stdout/stderr.
+Tool commands and output appear in your prior-turn context only — do not assume the user saw them.
+When the user asks to show, print, display, list, or report information, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless that message contains what they asked for."""
     return """## User visibility (this session — stealth mode, not sneaky mode)
-Debug mode is **off** (default). The user does **not** see run_shell commands, run_python code, or tool stdout/stderr.
-They only see: optional thought, and your `message` on need_user_input, task_complete, or failed.
+Debug mode is **off** (default). The user does **not** see run_shell commands, run_python code, tool stdout/stderr, or your `thought` field.
+They only see your `message` on need_user_input, task_complete, or failed.
 Tool commands and output appear in your prior-turn context only — do not assume the user saw them.
 When the user asks to show, print, display, list, or report information, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless that message contains what they asked for."""
 
@@ -270,13 +276,14 @@ def build_system_prompt(
     allowed_models: list[str],
     tools: tuple | None = None,
     debug: bool = False,
+    show_thoughts: bool = False,
 ) -> str:
     """Compose full system prompt with catalogs and cost policy."""
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
         _BASE_RULES,
         format_configuration_guide_section(),
-        format_user_visibility_section(debug=debug),
+        format_user_visibility_section(debug=debug, show_thoughts=show_thoughts),
         format_hosted_tools_reference(),
         format_cost_policy_section(),
         format_models_section(allowed_models),

@@ -115,8 +115,19 @@ def test_build_system_prompt_visibility_without_debug():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=False)
     assert "Debug mode is **off**" in prompt
     assert "does **not** see run_shell commands" in prompt
+    assert "does **not** see" in prompt and "thought" in prompt
     assert "run_python code" in prompt
     assert "shell command or Python preview" not in prompt
+
+
+def test_build_system_prompt_visibility_with_thoughts():
+    prompt = build_system_prompt(
+        allowed_models=["gpt-4o-mini"],
+        debug=False,
+        show_thoughts=True,
+    )
+    assert "goodboy -f" in prompt
+    assert "optional `thought`" in prompt
 
 
 def test_build_system_prompt_visibility_with_debug():

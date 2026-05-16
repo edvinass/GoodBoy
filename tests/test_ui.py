@@ -217,6 +217,20 @@ def test_default_print_agent_step_only_final_message(capsys):
     assert "Enable hosted" not in out
 
 
+def test_follow_print_agent_step_shows_thought(capsys):
+    ui = ConversationUI(show_thoughts=True)
+    ui.print_agent_step(
+        AgentStep(
+            action=AgentAction.RUN_SHELL,
+            thought="Inspect the working tree",
+            command="git status",
+        ),
+    )
+    out = capsys.readouterr().out
+    assert "Inspect the working tree" in out
+    assert "thought" in out.lower()
+
+
 def test_verbose_print_agent_step_shows_tool_switch(capsys):
     ui = ConversationUI(verbose=True)
     ui.print_agent_step(

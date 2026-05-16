@@ -20,6 +20,7 @@ class AgentHarness:
     def __init__(
         self,
         *,
+        show_thoughts: bool = False,
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
@@ -30,6 +31,7 @@ class AgentHarness:
         ui: ConversationUI | None = None,
     ) -> None:
         self._ui = ui or ConversationUI(
+            show_thoughts=show_thoughts,
             verbose=verbose,
             show_model=show_model,
             show_commands=show_commands,
@@ -158,6 +160,7 @@ class AgentHarness:
 
 def run_harness(
     *,
+    show_thoughts: bool = False,
     verbose: bool = False,
     show_model: bool = False,
     show_commands: bool = False,
@@ -171,6 +174,7 @@ def run_harness(
         click.echo("Not configured yet. Run: goodboy setup", err=True)
         raise SystemExit(1)
     harness = AgentHarness(
+        show_thoughts=show_thoughts,
         verbose=verbose,
         show_model=show_model,
         show_commands=show_commands,

@@ -98,9 +98,13 @@ class AgentLoop:
         debug_mode = (
             (ui.show_commands or ui.debug) if ui is not None else False
         )
+        thoughts_visible = (
+            (ui.show_thoughts or ui.verbose) if ui is not None else False
+        )
         self._instructions = build_system_prompt(
             allowed_models=self._allowed_models,
             debug=debug_mode,
+            show_thoughts=thoughts_visible,
         )
 
     def run(
