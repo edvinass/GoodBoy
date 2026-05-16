@@ -267,7 +267,7 @@ class ConversationUI:
     def __init__(
         self,
         *,
-        compact: bool = False,
+        verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
         debug: bool = False,
@@ -275,7 +275,7 @@ class ConversationUI:
         debug_output: bool = False,
         console: Console | None = None,
     ) -> None:
-        self.compact = compact
+        self.verbose = verbose
         self.show_model = show_model
         self.show_commands = show_commands
         self.debug = debug
@@ -299,13 +299,13 @@ class ConversationUI:
         )
 
     def print_task_complete(self) -> None:
-        if self.compact:
+        if not self.verbose:
             return
         self._console.print()
         self._console.print("[success]✓[/] [success]Task complete[/]")
 
     def print_failed(self, message: str | None = None) -> None:
-        if self.compact:
+        if not self.verbose:
             if message:
                 self.print_agent(message)
             return
@@ -315,7 +315,7 @@ class ConversationUI:
             self._err.print(Panel(message, border_style="red", box=ROUNDED))
 
     def print_stopped(self, message: str) -> None:
-        if self.compact:
+        if not self.verbose:
             if message:
                 self.print_agent(message)
             return
@@ -453,13 +453,32 @@ class ConversationUI:
         hosted_tools: list[str] | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
-        if self.compact:
+        if not self.verbose:
             if step.message and step.action in (
                 AgentAction.NEED_USER_INPUT,
                 AgentAction.TASK_COMPLETE,
                 AgentAction.FAILED,
             ):
                 self.print_agent(step.message)
+            if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
+                self.print_agent(step.command, subtitle="shell")
+            elif self._show_tool_io and step.action == AgentAction.RUN_PYTHON and step.code:
+                preview = step.code.strip()
+                if "\n" in preview:
+                    preview = preview.splitlines()[0] + " ..."
+                self.print_agent(preview, subtitle="python")
+            elif self.show_model and (model or reasoning):
+                routing = Table(
+                    show_header=False, box=ROUNDED, border_style="dim", padding=(0, 1)
+                )
+                routing.add_column(style="muted")
+                routing.add_column()
+                if model:
+                    routing.add_row("model", model)
+                if reasoning:
+                    routing.add_row("reasoning", reasoning)
+                self._console.print()
+                self._console.print(routing)
             return
 
         show_routing = (
@@ -522,7 +541,7 @@ class ConversationUI:
 
     @property
     def _show_tool_io(self) -> bool:
-        return not self.compact and (self.show_commands or self.debug)
+        return self.show_commands or self.debug
 
     def print_tool_result(self, result: ToolResult) -> None:
         """Brief tool output summary after execution (-c / -d)."""

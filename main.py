@@ -62,9 +62,8 @@ def run_setup() -> None:
 @click.option(
     "-v",
     "--verbose",
-    "compact",
     is_flag=True,
-    help="Compact conversation: only your prompts and GoodBoy replies.",
+    help="Show thoughts, tool/model switches, and task status lines.",
 )
 @click.option(
     "-m",
@@ -99,7 +98,7 @@ def run_setup() -> None:
 @click.pass_context
 def cli(
     ctx: click.Context,
-    compact: bool,
+    verbose: bool,
     show_model: bool,
     show_commands: bool,
     debug: bool,
@@ -110,7 +109,7 @@ def cli(
     if ctx.invoked_subcommand is None:
         load_env()
         run_harness(
-            compact=compact,
+            verbose=verbose,
             show_model=show_model,
             show_commands=show_commands,
             debug=debug,

@@ -140,14 +140,14 @@ def test_print_tool_result_shown_with_show_commands(capsys):
     assert "stdout" in out
 
 
-def test_compact_hides_task_complete(capsys):
-    ui = ConversationUI(compact=True)
+def test_default_hides_task_complete(capsys):
+    ui = ConversationUI()
     ui.print_task_complete()
     assert capsys.readouterr().out == ""
 
 
-def test_compact_hides_failed_banner_shows_message(capsys):
-    ui = ConversationUI(compact=True)
+def test_default_hides_failed_banner_shows_message(capsys):
+    ui = ConversationUI()
     ui.print_failed("something broke")
     out = capsys.readouterr().out
     assert "Failed" not in out
@@ -155,8 +155,8 @@ def test_compact_hides_failed_banner_shows_message(capsys):
     assert "GoodBoy" in out
 
 
-def test_compact_print_agent_step_only_final_message(capsys):
-    ui = ConversationUI(compact=True)
+def test_default_print_agent_step_only_final_message(capsys):
+    ui = ConversationUI()
     ui.print_agent_step(
         AgentStep(
             action=AgentAction.SWITCH_TOOLS,
@@ -182,6 +182,20 @@ def test_compact_print_agent_step_only_final_message(capsys):
     assert "Enable hosted" not in out
 
 
+def test_verbose_print_agent_step_shows_tool_switch(capsys):
+    ui = ConversationUI(verbose=True)
+    ui.print_agent_step(
+        AgentStep(
+            action=AgentAction.SWITCH_TOOLS,
+            tools=["web_search"],
+        ),
+        hosted_tools=["web_search"],
+    )
+    out = capsys.readouterr().out
+    assert "web_search" in out
+    assert "Enable hosted" in out
+
+
 def test_print_agent_step_need_user_input(capsys):
     ui = ConversationUI()
     step = AgentStep(
@@ -191,7 +205,7 @@ def test_print_agent_step_need_user_input(capsys):
     )
     ui.print_agent_step(step)
     out = capsys.readouterr().out
-    assert "Need detail" in out
+    assert "Need detail" not in out
     assert "Which file?" in out
 
 
