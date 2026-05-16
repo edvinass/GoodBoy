@@ -93,7 +93,8 @@ def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
     assert "Cost policy" in prompt
     assert "Configuration guide" in prompt
-    assert "switch_api" in prompt
+    assert "switch_tools" in prompt
+    assert "switch_model" in prompt
     assert "reasoning_effort" in prompt
     assert "separate turn" in prompt.lower() or "separate turns" in prompt.lower()
     assert "web_search" in prompt

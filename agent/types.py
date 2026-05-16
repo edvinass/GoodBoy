@@ -13,10 +13,17 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class AgentAction(str, Enum):
     RUN_SHELL = "run_shell"
     RUN_PYTHON = "run_python"
-    SWITCH_API = "switch_api"
+    SWITCH_MODEL = "switch_model"
+    SWITCH_TOOLS = "switch_tools"
+    SWITCH_API = "switch_api"  # deprecated alias for switch_tools
     NEED_USER_INPUT = "need_user_input"
     TASK_COMPLETE = "task_complete"
     FAILED = "failed"
+
+
+_SWITCH_TOOLS_ACTIONS = frozenset(
+    {AgentAction.SWITCH_TOOLS, AgentAction.SWITCH_API}
+)
 
 
 class AgentStep(BaseModel):
@@ -80,9 +87,12 @@ class AgentStep(BaseModel):
         elif self.action == AgentAction.RUN_PYTHON:
             if not self.code:
                 raise ValueError("run_python requires non-empty 'code'")
-        elif self.action == AgentAction.SWITCH_API:
+        elif self.action == AgentAction.SWITCH_MODEL:
+            if not self.model:
+                raise ValueError("switch_model requires non-empty 'model'")
+        elif self.action in _SWITCH_TOOLS_ACTIONS:
             if not self.tools:
-                raise ValueError("switch_api requires non-empty 'tools' list")
+                raise ValueError("switch_tools requires non-empty 'tools' list")
         elif self.action in (
             AgentAction.NEED_USER_INPUT,
             AgentAction.TASK_COMPLETE,
@@ -90,6 +100,16 @@ class AgentStep(BaseModel):
         ):
             if not self.message:
                 raise ValueError(f"{self.action.value} requires non-empty 'message'")
+        if self.model is not None and self.action != AgentAction.SWITCH_MODEL:
+            raise ValueError(
+                "model is only allowed with switch_model — use "
+                '{"action": "switch_model", "model": "..."}'
+            )
+        if self.tools is not None and self.action not in _SWITCH_TOOLS_ACTIONS:
+            raise ValueError(
+                "tools is only allowed with switch_tools — use "
+                '{"action": "switch_tools", "tools": ["web_search"]}'
+            )
         return self
 
 

@@ -8,7 +8,13 @@ from typing import Literal
 from agent.types import AgentAction
 
 HARNESS_ACTIONS = frozenset({AgentAction.RUN_SHELL, AgentAction.RUN_PYTHON})
-ROUTING_ACTIONS = frozenset({AgentAction.SWITCH_API})
+ROUTING_ACTIONS = frozenset(
+    {
+        AgentAction.SWITCH_MODEL,
+        AgentAction.SWITCH_TOOLS,
+        AgentAction.SWITCH_API,
+    }
+)
 TERMINAL_ACTIONS = frozenset(
     {
         AgentAction.NEED_USER_INPUT,
@@ -85,7 +91,7 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
         lines.append(f"  - Avoid when: {spec.avoid_when}")
     lines.append("")
     lines.append(
-        "Routing: switch_api (enable OpenAI hosted tools; see hosted API section). "
+        "Routing: switch_model, switch_tools (hosted tools; see hosted tools section). "
         "Terminal: need_user_input, task_complete, failed."
     )
     return "\n".join(lines)

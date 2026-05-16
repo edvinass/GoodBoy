@@ -410,7 +410,7 @@ def format_reasoning_section() -> str:
         '  {"action": "run_shell", "command": "pytest -q", "reasoning_effort": "medium"}',
         "",
         "Rules:",
-        "- One change per concern when possible: do not set reasoning_effort on switch_api.",
+        "- One change per concern when possible: do not set reasoning_effort on switch_tools.",
         "- Start low (none/low); increase only after ambiguity or repeated failure.",
         "- gpt-4o-mini and gpt-4.1-* (non-reasoning): omit reasoning_effort entirely.",
         "",
@@ -424,7 +424,7 @@ def format_reasoning_section() -> str:
 
 def format_hosted_tools_reference() -> str:
     tool_ids = ", ".join(f'"{t.value}"' for t in OpenAITool)
-    return f"""## Hosted tool IDs (for switch_api `tools` array)
+    return f"""## Hosted tool IDs (for switch_tools `tools` array)
 Valid values: {tool_ids}
 - **web_search**: live web pages (weather, news, prices, current events).
 - **file_search**: search uploaded vector stores (not local files — use run_shell).

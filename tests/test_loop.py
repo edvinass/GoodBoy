@@ -215,8 +215,7 @@ def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
         if len(calls) == 1:
             return json.dumps(
                 AgentStep(
-                    action=AgentAction.RUN_SHELL,
-                    command="echo one",
+                    action=AgentAction.SWITCH_MODEL,
                     model="gpt-5.4-mini",
                 ).model_dump(mode="json")
             )
@@ -270,8 +269,7 @@ def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
         if calls["n"] == 1:
             return json.dumps(
                 {
-                    "action": "run_shell",
-                    "command": "echo x",
+                    "action": "switch_model",
                     "model": "not-a-real-model",
                 }
             )
@@ -293,7 +291,7 @@ def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
     assert any("Unknown model" in e for e in result.context.parse_errors)
 
 
-def test_loop_switch_api_enables_hosted_tools(tmp_path: Path):
+def test_loop_switch_tools_enables_hosted_tools(tmp_path: Path):
     calls: list[dict] = []
 
     def tracking_llm(**kwargs):
@@ -301,7 +299,7 @@ def test_loop_switch_api_enables_hosted_tools(tmp_path: Path):
         if len(calls) == 1:
             return json.dumps(
                 AgentStep(
-                    action=AgentAction.SWITCH_API,
+                    action=AgentAction.SWITCH_TOOLS,
                     tools=["web_search"],
                 ).model_dump(mode="json")
             )
@@ -328,7 +326,7 @@ def test_loop_switch_api_enables_hosted_tools(tmp_path: Path):
     assert result.context.active_hosted_tools == ["web_search"]
 
 
-def test_loop_switch_api_rejects_model_on_same_turn(tmp_path: Path):
+def test_loop_switch_tools_rejects_reasoning_on_same_turn(tmp_path: Path):
     calls = {"n": 0}
 
     def llm(**_kwargs):
@@ -336,9 +334,9 @@ def test_loop_switch_api_rejects_model_on_same_turn(tmp_path: Path):
         if calls["n"] == 1:
             return json.dumps(
                 {
-                    "action": "switch_api",
+                    "action": "switch_tools",
                     "tools": ["web_search"],
-                    "model": "gpt-5.4-mini",
+                    "reasoning_effort": "high",
                 }
             )
         return json.dumps(
@@ -356,7 +354,7 @@ def test_loop_switch_api_rejects_model_on_same_turn(tmp_path: Path):
     )
     result = loop.run("weather in London")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("Do not set model on switch_api" in e for e in result.context.parse_errors)
+    assert any("reasoning_effort on switch_tools" in e for e in result.context.parse_errors)
 
 
 def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):

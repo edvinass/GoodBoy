@@ -34,6 +34,7 @@ from agent.types import (
     AgentAction,
     AgentStep,
     TurnRecord,
+    _SWITCH_TOOLS_ACTIONS,
     parse_agent_step,
 )
 from llm import complete_structured, get_curated_models
@@ -226,18 +227,29 @@ class AgentLoop:
                     hosted_tools=list(self._hosted_tools) or None,
                 )
 
-            if step.action == AgentAction.SWITCH_API:
-                api_err = self._apply_switch_api(step, call_model)
-                if api_err:
-                    ctx.add_parse_error(api_err)
+            if step.action == AgentAction.SWITCH_MODEL:
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                continue
+
+            if step.action in _SWITCH_TOOLS_ACTIONS:
+                tools_err = self._apply_switch_tools(step, call_model)
+                if tools_err:
+                    ctx.add_parse_error(tools_err)
                     if session_log is not None:
-                        session_log.event("parse_error", turn=turn, error=api_err)
+                        session_log.event("parse_error", turn=turn, error=tools_err)
                     consecutive_parse_failures += 1
                     if consecutive_parse_failures >= 2:
                         return finish(
                             LoopResult(
                                 outcome=LoopOutcome.FAILED,
-                                message=api_err,
+                                message=tools_err,
                                 context=ctx,
                             )
                         )
@@ -446,25 +458,21 @@ class AgentLoop:
         if not is_valid_action(step.action):
             return f"Invalid action '{step.action.value}'."
 
-        if step.action == AgentAction.SWITCH_API:
-            if step.model is not None:
-                return (
-                    "Do not set model on switch_api. Switch API first; set model on "
-                    "the next turn if needed."
-                )
+        if step.action in _SWITCH_TOOLS_ACTIONS:
             if step.reasoning_effort is not None:
                 return (
-                    "Do not set reasoning_effort on switch_api. Set it on a later "
-                    "turn after API and model are configured."
+                    "Do not set reasoning_effort on switch_tools. Use switch_model "
+                    "or set reasoning_effort on a later turn."
                 )
 
-        if step.model is not None and step.model not in self._allowed_models:
-            allowed = ", ".join(self._allowed_models[:8])
-            suffix = "..." if len(self._allowed_models) > 8 else ""
-            return (
-                f"Unknown model '{step.model}'. "
-                f"Pick from allowlist: {allowed}{suffix}"
-            )
+        if step.action == AgentAction.SWITCH_MODEL:
+            if step.model not in self._allowed_models:
+                allowed = ", ".join(self._allowed_models[:8])
+                suffix = "..." if len(self._allowed_models) > 8 else ""
+                return (
+                    f"Unknown model '{step.model}'. "
+                    f"Pick from allowlist: {allowed}{suffix}"
+                )
 
         if step.reasoning_effort is not None:
             next_model = step.model or self._pending_model or call_model
@@ -477,12 +485,12 @@ class AgentLoop:
         return None
 
     def _apply_pending_routing(self, step: AgentStep) -> None:
-        if step.model is not None:
+        if step.action == AgentAction.SWITCH_MODEL and step.model is not None:
             self._pending_model = step.model
         if step.reasoning_effort is not None:
             self._pending_reasoning = step.reasoning_effort
 
-    def _apply_switch_api(self, step: AgentStep, call_model: str) -> str | None:
+    def _apply_switch_tools(self, step: AgentStep, call_model: str) -> str | None:
         tools = step.tools or []
         for tool in tools:
             if not model_supports_openai_tool(call_model, tool):
@@ -490,8 +498,8 @@ class AgentLoop:
                 if suggestion:
                     return (
                         f"Model '{call_model}' does not support hosted tool '{tool}'. "
-                        f"On your next turn, set model to '{suggestion}' (routing only — "
-                        "do not call switch_api again) and continue the task."
+                        f"On your next turn, use switch_model to '{suggestion}' "
+                        "(do not call switch_tools again) and continue the task."
                     )
                 return (
                     f"Model '{call_model}' does not support hosted tool '{tool}' and "

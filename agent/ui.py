@@ -482,10 +482,15 @@ class ConversationUI:
             if "\n" in preview:
                 preview = preview.splitlines()[0] + " ..."
             self.print_agent(preview, subtitle="python")
-        elif step.action == AgentAction.SWITCH_API and step.tools:
+        elif step.action == AgentAction.SWITCH_MODEL and step.model:
+            self.print_agent(step.model, subtitle="model")
+        elif step.action in (
+            AgentAction.SWITCH_TOOLS,
+            AgentAction.SWITCH_API,
+        ) and step.tools:
             self.print_agent(
                 f"Enable hosted tools: {', '.join(step.tools)}",
-                subtitle="api",
+                subtitle="tools",
             )
         elif step.message and step.action in (
             AgentAction.NEED_USER_INPUT,
