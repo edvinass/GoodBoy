@@ -211,8 +211,9 @@ class AgentHarness:
         self._loop.refresh_system_prompt()
         if self._ui.auto_model_switch:
             self._ui.print_notice(
-                "Automatic model switching on — the agent may change models "
-                "between turns when needed."
+                "Automatic model switching on — turn 1 uses the cheapest model "
+                "to pick the next model; the agent may change models between "
+                "turns when needed."
             )
         else:
             self._ui.print_notice(

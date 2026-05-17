@@ -459,9 +459,11 @@ _STRICT_COST_POLICY = """## Cost policy (required)
 
 _AUTO_MODEL_SWITCH_POLICY = """## Model routing (automatic switching enabled)
 The user enabled automatic model switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`).
-You may change **model** and **reasoning_effort** between turns — including **switch_model** — when complexity, failures, hosted-tool needs, or long context justify it. Do not wait for repeated failures if a stronger model is clearly needed.
+Turn 1 of each new task runs on the cheapest allowlisted model (routing). On that turn you **must** set **model** (and optional **reasoning_effort**) on any action that needs a follow-up turn, or use **switch_model** to choose the model for turn 2+ without running a tool. Pick the cheapest allowlisted model that can handle the rest of the task.
 
-- Still pick the cheapest model that can succeed; escalate proactively when the task is hard, ambiguous, or stuck.
+After turn 1 you may change **model** and **reasoning_effort** between turns — including **switch_model** — when complexity, failures, hosted-tool needs, or long context justify it. Do not wait for repeated failures if a stronger model is clearly needed.
+
+- Escalate proactively when the task is hard, ambiguous, or stuck.
 - Prefer setting **model** on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
 - After the hard part is done, step down to a cheaper model for remaining simple work.
 - Do NOT use gpt-5.5 or high/xhigh reasoning for trivial steps (ls, cat, single obvious edit).

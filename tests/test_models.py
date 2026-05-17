@@ -148,6 +148,8 @@ def test_build_system_prompt_auto_model_switch_policy():
     )
     assert "automatic switching enabled" in prompt
     assert "GOODBOY_AUTO_MODEL_SWITCH" in prompt
+    assert "Turn 1" in prompt
+    assert "routing" in prompt.lower()
     assert "Escalate one tier at a time only after a failed" not in prompt
 
 

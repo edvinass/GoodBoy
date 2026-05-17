@@ -21,6 +21,7 @@ from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
 from agent.context import SessionContext
 from agent.models import (
+    cheapest_capable_model,
     cheapest_model_with_tools,
     model_supports_openai_tool,
     resolve_reasoning_effort,
@@ -168,6 +169,7 @@ class AgentLoop:
             )
         json_schema = AgentStep.model_json_schema()
         consecutive_parse_failures = 0
+        fresh_task = len(ctx.turns) == 0
 
         def finish(result: LoopResult) -> LoopResult:
             if session_log is not None:
@@ -194,7 +196,16 @@ class AgentLoop:
             )
 
         for turn in range(1, self.max_turns + 1):
-            call_model = self._pending_model or self._default_model
+            routing_turn = (
+                fresh_task
+                and self._auto_model_switch_enabled()
+                and turn == 1
+                and self._pending_model is None
+            )
+            if routing_turn:
+                call_model = self._router_model()
+            else:
+                call_model = self._pending_model or self._default_model
             effort = self._pending_reasoning
             if effort is None:
                 effort = self._default_reasoning
@@ -284,6 +295,30 @@ class AgentLoop:
 
             consecutive_parse_failures = 0
             self._apply_pending_routing(step)
+
+            routing_err = self._routing_turn_model_required(routing_turn, step)
+            if routing_err:
+                ctx.add_parse_error(routing_err)
+                if session_log is not None:
+                    session_log.event("parse_error", turn=turn, error=routing_err)
+                consecutive_parse_failures += 1
+                if consecutive_parse_failures >= 2:
+                    return finish(
+                        LoopResult(
+                            outcome=LoopOutcome.FAILED,
+                            message=routing_err,
+                            context=ctx,
+                        )
+                    )
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                continue
 
             if session_log is not None:
                 session_log.log_agent_step(turn=turn, step=step)
@@ -536,6 +571,31 @@ class AgentLoop:
                 message=f"Exceeded maximum turns ({self.max_turns}).",
                 context=ctx,
             )
+        )
+
+    def _auto_model_switch_enabled(self) -> bool:
+        return self._ui.auto_model_switch if self._ui is not None else False
+
+    def _router_model(self) -> str:
+        return (
+            cheapest_capable_model(self._allowed_models) or self._default_model
+        )
+
+    def _routing_turn_model_required(
+        self, routing_turn: bool, step: AgentStep
+    ) -> str | None:
+        if not routing_turn:
+            return None
+        if step.action in (AgentAction.TASK_COMPLETE, AgentAction.FAILED):
+            return None
+        if step.action == AgentAction.SWITCH_MODEL:
+            return None
+        if self._pending_model is not None:
+            return None
+        return (
+            "Routing turn (automatic model switching): set **model** on this "
+            "action (or use switch_model) so the next LLM call uses an "
+            "appropriate model from the allowlist."
         )
 
     def _validate_routing(self, step: AgentStep, call_model: str) -> str | None:

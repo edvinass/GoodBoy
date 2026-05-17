@@ -5,7 +5,8 @@ from pathlib import Path
 
 from agent.context import SessionContext
 from agent.loop import AgentLoop, LoopOutcome
-from agent.types import AgentAction, AgentStep
+from agent.types import AgentAction, AgentStep, TurnRecord
+from agent.ui import ConversationUI
 
 _ALLOWED = ["gpt-4.1-nano", "gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5"]
 
@@ -271,6 +272,107 @@ def test_loop_model_field_on_run_shell_applied_on_next_call(tmp_path: Path):
     assert calls[0]["model"] == "gpt-5.4-nano"
     assert calls[1]["model"] == "gpt-5.4-mini"
     assert loop.session_model == "gpt-5.4-mini"
+
+
+def test_loop_autoswitch_routes_first_turn_on_cheapest_model(tmp_path: Path):
+    calls: list[dict] = []
+
+    def tracking_llm(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="echo hi",
+                    model="gpt-5.4-mini",
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-5.5",
+        llm_call=tracking_llm,
+        ui=ConversationUI(auto_model_switch=True),
+    )
+    result = loop.run("task")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(calls) == 2
+    assert calls[0]["model"] == "gpt-4.1-nano"
+    assert calls[1]["model"] == "gpt-5.4-mini"
+    assert loop.session_model == "gpt-5.4-mini"
+
+
+def test_loop_autoswitch_routing_turn_requires_model(tmp_path: Path):
+    calls: list[dict] = []
+
+    def tracking_llm(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            return json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="echo hi",
+                ).model_dump(mode="json")
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo hi",
+                model="gpt-5.4-mini",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-5.5",
+        llm_call=tracking_llm,
+        ui=ConversationUI(auto_model_switch=True),
+    )
+    result = loop.run("task")
+    assert any("Routing turn" in e for e in result.context.parse_errors)
+    assert calls[0]["model"] == "gpt-4.1-nano"
+    assert len(calls) >= 2
+
+
+def test_loop_autoswitch_skips_router_on_resume(tmp_path: Path):
+    calls: list[dict] = []
+
+    def tracking_llm(**kwargs):
+        calls.append(dict(kwargs))
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-5.5",
+        llm_call=tracking_llm,
+        ui=ConversationUI(auto_model_switch=True),
+    )
+    paused = SessionContext(user_task="task", workspace=str(tmp_path))
+    paused.add_turn(
+        TurnRecord(
+            turn=1,
+            step=AgentStep(action=AgentAction.RUN_SHELL, command="echo x"),
+        )
+    )
+    loop.run("task", context=paused)
+    assert calls[0]["model"] == "gpt-5.5"
 
 
 def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
