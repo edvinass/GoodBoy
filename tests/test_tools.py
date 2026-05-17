@@ -4,7 +4,7 @@ import sys
 import time
 from pathlib import Path
 
-from agent.tools import run_python, run_shell
+from agent.tools import _smart_truncate, _truncate_stream, run_python, run_shell
 
 
 def test_run_shell_echo(tmp_path: Path):
@@ -41,6 +41,45 @@ def test_run_shell_non_utf8_stderr(tmp_path: Path):
 def test_truncation(tmp_path: Path, monkeypatch):
     import agent.tools as tools_mod
 
-    monkeypatch.setattr(tools_mod, "_MAX_OUTPUT_BYTES", 8)
-    result = run_python("print('x' * 100)", cwd=tmp_path, timeout=10.0)
-    assert "[truncated]" in result.stdout
+    monkeypatch.setattr(tools_mod, "_MAX_OUTPUT_BYTES", 32)
+    result = run_python("print('x' * 500)", cwd=tmp_path, timeout=10.0)
+    # Smart truncation keeps head + tail and elides the middle.
+    assert "elided" in result.stdout
+    assert result.stdout.startswith("x")
+    assert result.stdout.rstrip().endswith("x")
+    # We never bloat output past the cap by more than the elision marker.
+    assert len(result.stdout.encode("utf-8")) < 200
+
+
+def test_smart_truncate_under_budget_passthrough():
+    text = "hello world"
+    assert _smart_truncate(text, head_bytes=10, tail_bytes=10) == text
+
+
+def test_smart_truncate_keeps_head_and_tail():
+    text = "A" * 100 + "B" * 100 + "C" * 100
+    out = _smart_truncate(text, head_bytes=20, tail_bytes=20)
+    assert out.startswith("A" * 20)
+    assert out.rstrip().endswith("C" * 20)
+    assert "elided" in out
+    # Middle B's are gone.
+    assert "B" * 50 not in out
+
+
+def test_smart_truncate_records_elided_byte_count():
+    text = "X" * 1000
+    out = _smart_truncate(text, head_bytes=10, tail_bytes=10)
+    assert "[980 bytes elided]" in out
+
+
+def test_truncate_stream_default_uses_head_tail_split():
+    text = "head_marker_" + ("." * 50_000) + "_tail_marker"
+    out = _truncate_stream(text)
+    assert "head_marker_" in out
+    assert "_tail_marker" in out
+    assert "elided" in out
+
+
+def test_truncate_stream_no_change_when_within_budget():
+    text = "small output"
+    assert _truncate_stream(text, max_bytes=1024) == text

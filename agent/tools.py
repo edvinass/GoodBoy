@@ -9,7 +9,11 @@ from pathlib import Path
 from agent.types import ToolResult
 
 # Cap per-stream output sent back to the model (bytes before decode).
-_MAX_OUTPUT_BYTES = 48 * 1024
+# Lowered from 48 KB so the *first* time output enters context it's already
+# small; the head+tail split below preserves both exploratory output (signal at
+# the top, e.g. ls/find/rg) and failure tails (signal at the bottom, e.g.
+# pytest, build errors).
+_MAX_OUTPUT_BYTES = 12 * 1024
 _TRUNCATION_SUFFIX = "\n... [truncated]"
 
 
@@ -19,13 +23,48 @@ def _decode_stream(data: bytes | None) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def _smart_truncate(
+    text: str,
+    *,
+    head_bytes: int,
+    tail_bytes: int,
+) -> str:
+    """Keep the first head_bytes and last tail_bytes, eliding the middle.
+
+    When the encoded text fits within head_bytes + tail_bytes (plus the elision
+    marker overhead) the original text is returned unchanged. Otherwise the
+    output is `<head>\\n... [N bytes elided] ...\\n<tail>` where N is the byte
+    count removed. Decoding uses errors="ignore" at the boundaries so we never
+    emit a half-codepoint.
+    """
+    if head_bytes < 0 or tail_bytes < 0:
+        raise ValueError("head_bytes and tail_bytes must be non-negative")
+    encoded = text.encode("utf-8", errors="replace")
+    budget = head_bytes + tail_bytes
+    if len(encoded) <= budget or budget == 0:
+        if budget == 0:
+            return text
+        return text
+    elided = len(encoded) - budget
+    head = encoded[:head_bytes].decode("utf-8", errors="ignore") if head_bytes else ""
+    tail = encoded[-tail_bytes:].decode("utf-8", errors="ignore") if tail_bytes else ""
+    marker = f"\n... [{elided} bytes elided] ...\n"
+    return f"{head}{marker}{tail}"
+
+
 def _truncate_stream(text: str, *, max_bytes: int | None = None) -> str:
+    """Cap a tool stream using head+tail truncation.
+
+    Splits the budget evenly between head and tail so both exploratory output
+    (signal early) and failure output (signal late) survive truncation.
+    """
     limit = max_bytes if max_bytes is not None else _MAX_OUTPUT_BYTES
     encoded = text.encode("utf-8", errors="replace")
     if len(encoded) <= limit:
         return text
-    truncated = encoded[:limit].decode("utf-8", errors="ignore")
-    return truncated + _TRUNCATION_SUFFIX
+    head = limit // 2
+    tail = limit - head
+    return _smart_truncate(text, head_bytes=head, tail_bytes=tail)
 
 
 def run_shell(

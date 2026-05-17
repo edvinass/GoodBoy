@@ -13,7 +13,7 @@ StreamTextCallback = Callable[[str], None]
 import click
 import httpx
 import questionary
-from openai import APIConnectionError, OpenAI
+from openai import APIConnectionError, BadRequestError, OpenAI
 
 from settings import get_settings
 
@@ -324,12 +324,13 @@ def _complete_structured_stream(
     kwargs: dict[str, Any],
     *,
     on_text_delta: StreamTextCallback,
-) -> str:
+) -> tuple[str, str | None]:
     with client.responses.stream(**kwargs) as stream:
         for event in stream:
             if event.type == "response.output_text.delta":
                 on_text_delta(event.delta)
-        return _extract_response_text(stream.get_final_response())
+        final = stream.get_final_response()
+        return _extract_response_text(final), getattr(final, "id", None)
 
 
 def complete_structured(
@@ -342,8 +343,41 @@ def complete_structured(
     tools: list[str] | None = None,
     stream: bool = False,
     on_text_delta: StreamTextCallback | None = None,
+    previous_response_id: str | None = None,
 ) -> str:
-    """Call Responses API with JSON schema output; fall back to plain completion."""
+    """Call Responses API with JSON schema output; return assistant text only."""
+    text, _ = complete_structured_with_id(
+        input=input,
+        instructions=instructions,
+        json_schema=json_schema,
+        model=model,
+        reasoning_effort=reasoning_effort,
+        tools=tools,
+        stream=stream,
+        on_text_delta=on_text_delta,
+        previous_response_id=previous_response_id,
+    )
+    return text
+
+
+def complete_structured_with_id(
+    *,
+    input: str,
+    instructions: str,
+    json_schema: dict[str, Any],
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+    tools: list[str] | None = None,
+    stream: bool = False,
+    on_text_delta: StreamTextCallback | None = None,
+    previous_response_id: str | None = None,
+) -> tuple[str, str | None]:
+    """Like complete_structured but also returns the OpenAI response id.
+
+    The id can be passed to a subsequent call as ``previous_response_id`` to
+    chain a stateful conversation server-side, allowing the caller to send only
+    the new turn's data instead of the full transcript each time.
+    """
     from agent.prompt import system_prompt_with_schema
 
     client = get_client()
@@ -356,6 +390,8 @@ def complete_structured(
         reasoning_effort=reasoning_effort,
         tools=tools,
     )
+    if previous_response_id is not None:
+        kwargs["previous_response_id"] = previous_response_id
     use_stream = stream and on_text_delta is not None
 
     try:
@@ -364,17 +400,44 @@ def complete_structured(
                 client, kwargs, on_text_delta=on_text_delta
             )
         response = client.responses.create(**kwargs)
-        return _extract_response_text(response)
+        return _extract_response_text(response), getattr(response, "id", None)
     except APIConnectionError as exc:
         raise click.ClickException(format_api_connection_error(exc)) from exc
+    except BadRequestError as exc:
+        # Chain breakage (expired/unknown previous_response_id) needs to bubble
+        # up so the caller can reset and retry; falling back silently to the
+        # plain completion path here would mask the chain reset.
+        if previous_response_id is not None and _looks_like_chain_broken(exc):
+            raise ResponseChainBroken(str(exc)) from exc
+        raise
     except Exception:
         fallback_instructions = system_prompt_with_schema()
-        return complete(
-            input,
-            model=resolved_model,
-            instructions=fallback_instructions,
-            reasoning_effort=reasoning_effort,
+        return (
+            complete(
+                input,
+                model=resolved_model,
+                instructions=fallback_instructions,
+                reasoning_effort=reasoning_effort,
+            ),
+            None,
         )
+
+
+class ResponseChainBroken(Exception):
+    """Raised when the OpenAI server rejected previous_response_id (expired/missing)."""
+
+
+_CHAIN_BROKEN_MARKERS = (
+    "previous_response_id",
+    "previous response",
+    "response not found",
+    "no such response",
+)
+
+
+def _looks_like_chain_broken(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _CHAIN_BROKEN_MARKERS)
 
 
 @click.command()

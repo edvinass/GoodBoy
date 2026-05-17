@@ -20,7 +20,7 @@ from agent.clarifications import (
 )
 from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
-from agent.context import SessionContext
+from agent.context import ContextWatermark, SessionContext
 from agent.models import (
     cheapest_capable_model,
     cheapest_model_with_tools,
@@ -43,7 +43,9 @@ from openai import APIConnectionError
 
 from llm import (
     REASONING_EFFORT,
+    ResponseChainBroken,
     complete_structured,
+    complete_structured_with_id,
     format_api_connection_error,
     get_curated_models,
 )
@@ -83,6 +85,8 @@ class AgentLoop:
         llm_call: LLMCall | None = None,
         ui: ConversationUI | None = None,
         max_clarifications: int | None = None,
+        recent_full_turns: int | None = None,
+        response_chain_enabled: bool | None = None,
     ) -> None:
         cfg = get_settings()
         self.workspace = resolve_workspace(workspace or Path.cwd())
@@ -95,13 +99,27 @@ class AgentLoop:
             if max_clarifications is not None
             else cfg.max_clarifications
         )
+        self.recent_full_turns = (
+            recent_full_turns
+            if recent_full_turns is not None
+            else cfg.context_recent_full_turns
+        )
         self._default_model = model or cfg.default_model
         self._default_reasoning: str | None = cfg.default_reasoning_effort
         self._allowed_models = allowed_models or get_curated_models()
         self._pending_model: str | None = None
         self._pending_reasoning: str | None = None
         self._hosted_tools: tuple[str, ...] = ()
-        self._llm_call = llm_call or complete_structured
+        # Custom llm_call hooks (tests, mocks) bypass response chaining; only
+        # the production path through complete_structured_with_id can chain.
+        self._llm_call = llm_call
+        self._chain_enabled = bool(
+            response_chain_enabled
+            if response_chain_enabled is not None
+            else cfg.response_chain_enabled
+        ) and llm_call is None
+        self._last_response_id: str | None = None
+        self._chain_watermark: ContextWatermark | None = None
         self._ui = ui
         self._instructions = self._build_instructions()
 
@@ -137,6 +155,7 @@ class AgentLoop:
             raise ValueError(f"Model not in allowlist: {model}")
         self._default_model = model
         self._pending_model = None
+        self._reset_response_chain()
 
     def set_session_reasoning(self, effort: str | None) -> None:
         """Set the default reasoning effort for subsequent LLM calls in this session."""
@@ -157,9 +176,18 @@ class AgentLoop:
         ctx = context or SessionContext(
             user_task=task,
             workspace=str(self.workspace),
+            recent_full_turns=self.recent_full_turns,
         )
         if ctx.workspace is None:
             ctx = ctx.model_copy(update={"workspace": str(self.workspace)})
+        # Honour the loop's window size even when callers (harness resume,
+        # tests) pass a pre-built context that still carries the model default.
+        if ctx.recent_full_turns != self.recent_full_turns:
+            ctx = ctx.model_copy(
+                update={"recent_full_turns": self.recent_full_turns}
+            )
+        # Each task runs an independent server-side response chain.
+        self._reset_response_chain()
         if context is not None and ctx.active_hosted_tools:
             self._hosted_tools = tuple(ctx.active_hosted_tools)
         if session_log is not None:
@@ -211,8 +239,9 @@ class AgentLoop:
             self._pending_model = None
             self._pending_reasoning = None
 
+            input_text, prev_id = self._build_llm_input(ctx)
             llm_kwargs = {
-                "input": ctx.to_prompt(),
+                "input": input_text,
                 "instructions": self._instructions,
                 "json_schema": json_schema,
                 "model": call_model,
@@ -220,6 +249,8 @@ class AgentLoop:
             }
             if self._hosted_tools:
                 llm_kwargs["tools"] = list(self._hosted_tools)
+            if prev_id is not None:
+                llm_kwargs["previous_response_id"] = prev_id
 
             if session_log is not None:
                 session_log.log_llm_request(
@@ -231,33 +262,9 @@ class AgentLoop:
                 )
 
             try:
-                if self._ui is not None:
-                    self._ui.print_llm_request(
-                        turn=turn,
-                        model=call_model,
-                        reasoning_effort=call_reasoning,
-                        instructions=self._instructions,
-                        input_text=llm_kwargs["input"],
-                    )
-                    streamed = self._ui.stream_output
-                    if streamed:
-                        self._ui.begin_model_stream(turn=turn)
-                        try:
-                            raw = self._llm_call(
-                                **llm_kwargs,
-                                stream=True,
-                                on_text_delta=self._ui.write_model_stream_delta,
-                            )
-                        finally:
-                            self._ui.end_model_stream()
-                    else:
-                        with self._ui.thinking():
-                            raw = self._llm_call(**llm_kwargs)
-                    self._ui.print_llm_response(
-                        turn=turn, raw=raw, streamed=streamed
-                    )
-                else:
-                    raw = self._llm_call(**llm_kwargs)
+                raw, response_id = self._invoke_llm(
+                    llm_kwargs, ctx=ctx, turn=turn, session_log=session_log
+                )
             except APIConnectionError as exc:
                 return finish(
                     LoopResult(
@@ -266,6 +273,8 @@ class AgentLoop:
                         context=ctx,
                     )
                 )
+
+            self._record_chain_progress(ctx, response_id)
 
             if session_log is not None:
                 session_log.log_llm_response(turn=turn, raw=raw)
@@ -346,6 +355,9 @@ class AgentLoop:
                 )
 
             if step.action == AgentAction.SWITCH_MODEL:
+                # The chain is bound to the prior model; switching invalidates
+                # the server-side conversation state.
+                self._reset_response_chain()
                 ctx.add_turn(
                     TurnRecord(
                         turn=turn,
@@ -385,6 +397,9 @@ class AgentLoop:
                     continue
 
                 consecutive_parse_failures = 0
+                # Hosted-tool set changed; restart the chain so the new tools
+                # take effect on the next call.
+                self._reset_response_chain()
                 ctx = ctx.model_copy(
                     update={"active_hosted_tools": list(self._hosted_tools)}
                 )
@@ -581,6 +596,123 @@ class AgentLoop:
             )
         )
 
+    def _reset_response_chain(self) -> None:
+        self._last_response_id = None
+        self._chain_watermark = None
+
+    def _build_llm_input(
+        self, ctx: SessionContext
+    ) -> tuple[str, str | None]:
+        """Pick between full and delta input based on chain state.
+
+        Returns (input_text, previous_response_id_or_None). The id is only set
+        when chaining is on AND we have a prior response to chain from AND we
+        recorded a watermark to compute a delta against.
+        """
+        if (
+            self._chain_enabled
+            and self._last_response_id is not None
+            and self._chain_watermark is not None
+        ):
+            return (
+                ctx.to_prompt_delta(self._chain_watermark),
+                self._last_response_id,
+            )
+        return ctx.to_prompt(), None
+
+    def _record_chain_progress(
+        self, ctx: SessionContext, response_id: str | None
+    ) -> None:
+        if not self._chain_enabled or response_id is None:
+            return
+        self._last_response_id = response_id
+        # Snapshot what the model has now seen on the server side so the next
+        # turn's delta only includes items appended after this point.
+        self._chain_watermark = ctx.watermark()
+
+    def _do_llm_call(
+        self, llm_kwargs: dict, *, stream: bool, on_text_delta=None
+    ) -> tuple[str, str | None]:
+        """Dispatch to the id-aware client when available, else legacy str path.
+
+        When a custom ``llm_call`` was injected (tests), we cannot capture a
+        response id; chaining is disabled in __init__ for that case.
+        """
+        if self._llm_call is not None:
+            extras: dict = {}
+            if stream:
+                extras["stream"] = True
+                extras["on_text_delta"] = on_text_delta
+            text = self._llm_call(**llm_kwargs, **extras)
+            return text, None
+        if stream:
+            return complete_structured_with_id(
+                **llm_kwargs,
+                stream=True,
+                on_text_delta=on_text_delta,
+            )
+        return complete_structured_with_id(**llm_kwargs)
+
+    def _invoke_llm(
+        self,
+        llm_kwargs: dict,
+        *,
+        ctx: SessionContext,
+        turn: int,
+        session_log: SessionLog | None,
+    ) -> tuple[str, str | None]:
+        """Wrap the LLM call with UI plumbing and chain-broken recovery."""
+
+        def _call_through_ui() -> tuple[str, str | None]:
+            if self._ui is None:
+                return self._do_llm_call(llm_kwargs, stream=False)
+            self._ui.print_llm_request(
+                turn=turn,
+                model=llm_kwargs["model"],
+                reasoning_effort=llm_kwargs.get("reasoning_effort"),
+                instructions=llm_kwargs["instructions"],
+                input_text=llm_kwargs["input"],
+            )
+            streamed = self._ui.stream_output
+            if streamed:
+                self._ui.begin_model_stream(turn=turn)
+                try:
+                    raw_text, rid = self._do_llm_call(
+                        llm_kwargs,
+                        stream=True,
+                        on_text_delta=self._ui.write_model_stream_delta,
+                    )
+                finally:
+                    self._ui.end_model_stream()
+            else:
+                with self._ui.thinking():
+                    raw_text, rid = self._do_llm_call(llm_kwargs, stream=False)
+            self._ui.print_llm_response(
+                turn=turn, raw=raw_text, streamed=streamed
+            )
+            return raw_text, rid
+
+        try:
+            return _call_through_ui()
+        except ResponseChainBroken as exc:
+            # Server-side chain expired or was rejected. Drop the chain, fall
+            # back to a stateless full prompt for this turn, and continue.
+            if session_log is not None:
+                session_log.event(
+                    "response_chain_reset",
+                    turn=turn,
+                    reason=str(exc),
+                )
+            if self._ui is not None:
+                self._ui.print_notice(
+                    "Response chain expired — resending full context."
+                )
+            self._reset_response_chain()
+            llm_kwargs = dict(llm_kwargs)
+            llm_kwargs.pop("previous_response_id", None)
+            llm_kwargs["input"] = ctx.to_prompt()
+            return _call_through_ui()
+
     def _auto_model_switch_enabled(self) -> bool:
         return self._ui.auto_model_switch if self._ui is not None else False
 
@@ -668,6 +800,9 @@ class AgentLoop:
         if not self._auto_model_switch_enabled():
             return
         if step.model is not None:
+            if step.model != self._default_model:
+                # New model means a new chain on the server side.
+                self._reset_response_chain()
             self._pending_model = step.model
             self._default_model = step.model
             if self._ui is not None:

@@ -760,3 +760,203 @@ def test_loop_rejects_reasoning_effort_when_autoswitch_off(tmp_path: Path):
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert any("reasoning_effort" in e and "automatic model switching is off" in e for e in result.context.parse_errors)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: previous_response_id chaining
+# ---------------------------------------------------------------------------
+
+
+def test_response_chain_sends_delta_and_previous_id_after_first_call(
+    tmp_path: Path, monkeypatch
+):
+    calls: list[dict] = []
+    payloads = [
+        json.dumps(
+            AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo chain-test",
+            ).model_dump(mode="json")
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        ),
+    ]
+
+    def fake_with_id(**kwargs):
+        calls.append(dict(kwargs))
+        idx = len(calls) - 1
+        return payloads[idx], f"resp_{idx}"
+
+    monkeypatch.setattr(
+        "agent.loop.complete_structured_with_id", fake_with_id
+    )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        # llm_call=None enables chaining when response_chain_enabled is True.
+        response_chain_enabled=True,
+    )
+    result = loop.run("explore")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(calls) == 2
+
+    # First call: full prompt, no previous_response_id.
+    first = calls[0]
+    assert "previous_response_id" not in first
+    assert "## User task" in first["input"]
+
+    # Second call: delta input, chained.
+    second = calls[1]
+    assert second["previous_response_id"] == "resp_0"
+    # Delta drops the user_task header and only includes the new tool result.
+    assert "## User task" not in second["input"]
+    assert "chain-test" in second["input"]
+
+
+def test_response_chain_recovers_when_server_drops_chain(
+    tmp_path: Path, monkeypatch
+):
+    from llm import ResponseChainBroken
+
+    calls: list[dict] = []
+    payloads = [
+        (
+            json.dumps(
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="echo first",
+                ).model_dump(mode="json")
+            ),
+            "resp_0",
+        ),
+        # Second call raises chain-broken; loop should recover and retry once.
+        ResponseChainBroken("Previous response with id resp_0 not found"),
+        (
+            json.dumps(
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="recovered",
+                ).model_dump(mode="json")
+            ),
+            "resp_2",
+        ),
+    ]
+
+    def fake_with_id(**kwargs):
+        calls.append(dict(kwargs))
+        outcome = payloads[len(calls) - 1]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(
+        "agent.loop.complete_structured_with_id", fake_with_id
+    )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        response_chain_enabled=True,
+    )
+    result = loop.run("explore")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert result.message == "recovered"
+
+    # Three underlying calls: first ok, second chain-broken, third recovery.
+    assert len(calls) == 3
+    # The recovery call drops previous_response_id and re-sends a full prompt.
+    recovery = calls[2]
+    assert "previous_response_id" not in recovery
+    assert "## User task" in recovery["input"]
+
+
+def test_response_chain_disabled_uses_full_prompt_each_turn(
+    tmp_path: Path, monkeypatch
+):
+    """With chaining off, every call gets the full prompt and no previous id."""
+    calls: list[dict] = []
+    payloads = [
+        json.dumps(
+            AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo a",
+            ).model_dump(mode="json")
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="ok",
+            ).model_dump(mode="json")
+        ),
+    ]
+
+    def fake_with_id(**kwargs):
+        calls.append(dict(kwargs))
+        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}"
+
+    monkeypatch.setattr(
+        "agent.loop.complete_structured_with_id", fake_with_id
+    )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        response_chain_enabled=False,
+    )
+    result = loop.run("explore")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(calls) == 2
+    for call in calls:
+        assert "previous_response_id" not in call
+        assert "## User task" in call["input"]
+
+
+def test_response_chain_resets_on_switch_model(tmp_path: Path, monkeypatch):
+    """Switching the model invalidates the server-side chain."""
+    calls: list[dict] = []
+    payloads = [
+        json.dumps(
+            AgentStep(
+                action=AgentAction.SWITCH_MODEL,
+                model="gpt-5.4-mini",
+            ).model_dump(mode="json")
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        ),
+    ]
+
+    def fake_with_id(**kwargs):
+        calls.append(dict(kwargs))
+        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}"
+
+    monkeypatch.setattr(
+        "agent.loop.complete_structured_with_id", fake_with_id
+    )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        ui=ConversationUI(auto_model_switch=True),
+        response_chain_enabled=True,
+    )
+    result = loop.run("plan")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(calls) == 2
+    # Second call after switch_model must NOT carry previous_response_id and
+    # must re-send the full prompt.
+    second = calls[1]
+    assert "previous_response_id" not in second
+    assert "## User task" in second["input"]
