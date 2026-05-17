@@ -5,6 +5,7 @@ from agent.repl_commands import (
     CLEAR_COMMAND_NAMES,
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
+    STREAM_COMMAND_NAMES,
     REPL_COMMANDS,
     active_slash_command_query,
     search_slash_commands,
@@ -26,7 +27,15 @@ def test_search_slash_commands_filters_by_prefix():
     assert names == ["clear"]
 
     names = [command.name for command in search_slash_commands("")]
-    assert names == ["clear", "model", "reasoning", "commands", "autoswitch", "exit"]
+    assert names == [
+        "clear",
+        "model",
+        "reasoning",
+        "commands",
+        "autoswitch",
+        "stream",
+        "exit",
+    ]
 
     names = [command.name for command in search_slash_commands("model")]
     assert names == ["model"]
@@ -41,6 +50,10 @@ def test_slash_command_display_meta_shows_toggle_state():
     assert "(off)" in slash_command_display_meta(commands["autoswitch"])
     assert "(on)" in slash_command_display_meta(
         commands["autoswitch"], auto_model_switch=True
+    )
+    assert "(off)" in slash_command_display_meta(commands["stream"])
+    assert "(on)" in slash_command_display_meta(
+        commands["stream"], stream_output=True
     )
     assert "(off)" not in slash_command_display_meta(commands["clear"])
     assert "(on)" not in slash_command_display_meta(commands["model"])
@@ -78,4 +91,5 @@ def test_command_name_sets_match_harness():
         {"commands", "cmds", "show-commands"}
     )
     assert AUTOSWITCH_COMMAND_NAMES == frozenset({"autoswitch", "auto"})
+    assert STREAM_COMMAND_NAMES == frozenset({"stream", "streaming"})
     assert EXIT_COMMAND_NAMES == frozenset({"exit", "quit", "q"})

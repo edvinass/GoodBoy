@@ -14,6 +14,7 @@ from agent.repl_commands import (
     EXIT_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
     REASONING_COMMAND_NAMES,
+    STREAM_COMMAND_NAMES,
     is_repl_slash_command,
 )
 from agent.ui import ConversationUI
@@ -142,6 +143,15 @@ class AgentHarness:
                         )
                     continue
 
+                if self._is_stream_command(task):
+                    self._toggle_stream()
+                    if session_log is not None:
+                        session_log.event(
+                            "stream_output_changed",
+                            stream_output=self._ui.stream_output,
+                        )
+                    continue
+
                 first_prompt = False
                 ctx = self._build_session_context(task)
                 result = self._loop.run(
@@ -185,6 +195,10 @@ class AgentHarness:
     def _is_autoswitch_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in AUTOSWITCH_COMMAND_NAMES
 
+    @classmethod
+    def _is_stream_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in STREAM_COMMAND_NAMES
+
     def _toggle_commands(self) -> None:
         self._ui.show_commands = not self._ui.show_commands
         save_env(
@@ -201,6 +215,15 @@ class AgentHarness:
             )
         else:
             self._ui.print_notice("Command visibility off.")
+
+    def _toggle_stream(self) -> None:
+        self._ui.stream_output = not self._ui.stream_output
+        if self._ui.stream_output:
+            self._ui.print_notice(
+                "Stream output on — model responses print as they are generated."
+            )
+        else:
+            self._ui.print_notice("Stream output off.")
 
     def _toggle_autoswitch(self) -> None:
         self._ui.auto_model_switch = not self._ui.auto_model_switch

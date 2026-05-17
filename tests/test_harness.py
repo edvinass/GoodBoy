@@ -30,6 +30,7 @@ class FakeUI:
         self.prompts = prompts
         self.show_commands = show_commands
         self.auto_model_switch = False
+        self.stream_output = False
         self.clear_session_calls = 0
         self.notices: list[str] = []
         self._session_model = None
@@ -306,6 +307,22 @@ def test_harness_slash_commands_toggles_visibility(monkeypatch):
     assert loop.refresh_system_prompt.call_count >= 2
     assert "on" in ui.notices[0].lower()
     assert saved == {"GOODBOY_SHOW_COMMANDS": "true"}
+
+
+def test_harness_slash_stream_toggles_mid_session():
+    loop = Mock()
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    ui = FakeUI(prompts=iter(["/stream", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 0
+    assert ui.stream_output is True
+    assert "on" in ui.notices[0].lower()
 
 
 def test_harness_slash_autoswitch_toggles_and_persists(monkeypatch):

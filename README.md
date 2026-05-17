@@ -81,6 +81,7 @@ Common options:
 - `-c` / `--show-commands`: print shell/Python commands the agent runs (not their output)
 - `/commands`: toggle command visibility during a session (same as `-c`)
 - `/autoswitch`: toggle automatic model switching (agent may escalate models between turns)
+- `-s` / `--stream-output` or `/stream`: stream each model response to the console as it is generated
 - `-d` / `--debug`: show commands and stdout/stderr from shell and Python tool runs
 - `-i` / `--debug-input`: print the full prompt sent to the model each turn
 - `-o` / `--debug-output`: print the model’s raw response in full each turn

@@ -41,6 +41,11 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         ("auto",),
     ),
     ReplCommand(
+        "stream",
+        "Toggle streaming model output as it is generated",
+        ("streaming",),
+    ),
+    ReplCommand(
         "exit",
         "Exit GoodBoy",
         ("quit", "q"),
@@ -84,10 +89,17 @@ AUTOSWITCH_COMMAND_NAMES = frozenset(
     if command.name == "autoswitch"
     for name in (command.name, *command.aliases)
 )
+STREAM_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "stream"
+    for name in (command.name, *command.aliases)
+)
 
 _TOGGLE_COMMAND_STATE: dict[str, str] = {
     "commands": "show_commands",
     "autoswitch": "auto_model_switch",
+    "stream": "stream_output",
 }
 
 _ALL_COMMAND_NAMES: frozenset[str] = frozenset(
@@ -110,6 +122,7 @@ def slash_command_display_meta(
     *,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
 ) -> str:
@@ -131,7 +144,12 @@ def slash_command_display_meta(
     state_key = _TOGGLE_COMMAND_STATE.get(command.name)
     if state_key is None:
         return command.description
-    enabled = show_commands if state_key == "show_commands" else auto_model_switch
+    toggle_state = {
+        "show_commands": show_commands,
+        "auto_model_switch": auto_model_switch,
+        "stream_output": stream_output,
+    }
+    enabled = toggle_state[state_key]
     state = "on" if enabled else "off"
     return f"{command.description} ({state})"
 

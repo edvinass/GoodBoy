@@ -188,12 +188,14 @@ class _UserInputCompleter(Completer):
         *,
         show_commands: bool = False,
         auto_model_switch: bool = False,
+        stream_output: bool = False,
         session_model: str | None = None,
         default_reasoning_effort: str | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._show_commands = show_commands
         self._auto_model_switch = auto_model_switch
+        self._stream_output = stream_output
         self._session_model = session_model
         self._default_reasoning_effort = default_reasoning_effort
 
@@ -213,6 +215,7 @@ class _UserInputCompleter(Completer):
                         command,
                         show_commands=self._show_commands,
                         auto_model_switch=self._auto_model_switch,
+                        stream_output=self._stream_output,
                         session_model=self._session_model,
                         default_reasoning_effort=self._default_reasoning_effort,
                     ),
@@ -278,6 +281,7 @@ def _prompt_user_line(
     workspace: Path | None = None,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
 ) -> str | None:
@@ -313,6 +317,7 @@ def _prompt_user_line(
             root,
             show_commands=show_commands,
             auto_model_switch=auto_model_switch,
+            stream_output=stream_output,
             session_model=session_model,
             default_reasoning_effort=default_reasoning_effort,
         ),
@@ -995,6 +1000,7 @@ class ConversationUI:
                 workspace=self._workspace or resolve_workspace(),
                 show_commands=self.show_commands,
                 auto_model_switch=self.auto_model_switch,
+                stream_output=self.stream_output,
                 session_model=self.session_model,
                 default_reasoning_effort=self._session_reasoning,
             )
