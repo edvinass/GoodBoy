@@ -20,9 +20,11 @@ from agent.ui import (
     _PasteState,
     _THEME,
     _USER_INPUT_FOOTER,
+    _USER_INPUT_MAX_LINES,
     _USER_INPUT_PLACEHOLDER,
     _accept_active_completion,
     _configure_prompt_toolkit,
+    _input_window_line_count,
     _user_input_placeholder,
     _wrap_long_lines,
     activity_label,
@@ -34,6 +36,15 @@ def test_user_input_placeholder_and_footer_are_separate():
     assert _USER_INPUT_PLACEHOLDER == "Ask anything"
     assert _USER_INPUT_FOOTER == "@ files, / commands"
     assert _user_input_placeholder() == [("class:placeholder", "Ask anything")]
+
+
+def test_input_window_line_count_grows_with_buffer_lines():
+    buffer = Buffer(multiline=False)
+    assert _input_window_line_count(buffer) == 1
+    buffer.text = "line one\nline two"
+    assert _input_window_line_count(buffer) == 2
+    buffer.text = "\n".join(f"line {i}" for i in range(_USER_INPUT_MAX_LINES + 5))
+    assert _input_window_line_count(buffer) == _USER_INPUT_MAX_LINES
 
 
 def test_input_frame_fragments_use_dim_style_classes():
@@ -149,6 +160,17 @@ def test_print_user_format(capsys):
     assert "You" in out
     assert "hello" in out
     assert "world" in out
+
+
+def test_print_session_log_path_only_in_debug(capsys):
+    path = "/tmp/session-test.jsonl"
+    ConversationUI().print_session_log_path(path)
+    assert "Session log" not in capsys.readouterr().err
+
+    ConversationUI(debug=True).print_session_log_path(path)
+    err = capsys.readouterr().err
+    assert "Session log" in err
+    assert path in err
 
 
 def test_print_agent_with_subtitle(capsys):

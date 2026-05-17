@@ -23,7 +23,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document, PasteMode
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
-from prompt_toolkit.filters import Condition, has_completions, has_focus
+from prompt_toolkit.filters import Condition, has_completions, has_focus, in_paste_mode
 from prompt_toolkit.formatted_text import AnyFormattedText
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.key_binding.defaults import load_key_bindings
@@ -97,6 +97,7 @@ _LS_SECTION = re.compile(r"^\./(.+):$")
 _USER_INPUT_PLACEHOLDER = "Ask anything"
 _USER_INPUT_FOOTER = "@ files, / commands"
 _USER_INPUT_MENU_RESERVE = 8
+_USER_INPUT_MAX_LINES = 16
 
 _MAX_ACTIVITY_DIFF_LINES = 40
 
@@ -364,6 +365,25 @@ def _prompt_submit_key_bindings() -> KeyBindings:
     return kb
 
 
+def _prompt_newline_key_bindings() -> KeyBindings:
+    """Shift+Enter (often sent as c-j / line-feed) inserts a newline."""
+    kb = KeyBindings()
+
+    @kb.add("c-j", eager=True)
+    def _insert_newline(event: KeyPressEvent) -> None:
+        event.current_buffer.newline(copy_margin=not in_paste_mode())
+
+    return kb
+
+
+def _input_window_line_count(buffer: Buffer) -> int:
+    return max(1, min(buffer.document.line_count, _USER_INPUT_MAX_LINES))
+
+
+def _input_window_height(buffer: Buffer) -> Dimension:
+    return Dimension.exact(_input_window_line_count(buffer))
+
+
 _PROMPT_TOOLKIT_CONFIGURED = False
 
 
@@ -426,7 +446,11 @@ def _run_framed_user_prompt(
             ),
         ],
     )
-    input_window = Window(input_control, height=Dimension.exact(1))
+    input_window = Window(
+        input_control,
+        height=lambda: _input_window_height(buffer),
+        wrap_lines=False,
+    )
 
     def _accept(buff: Buffer) -> bool:
         get_app().exit(result=buff.text)
@@ -481,6 +505,7 @@ def _run_framed_user_prompt(
         layout=Layout(root_container, input_window),
         key_bindings=merge_key_bindings(
             [
+                _prompt_newline_key_bindings(),
                 load_key_bindings(),
                 _user_prompt_key_bindings(),
                 _prompt_submit_key_bindings(),
@@ -506,7 +531,7 @@ def _prompt_user_line(
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
 ) -> str | None:
-    """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
+    """Prompt: Enter sends; Shift+Enter (c-j) adds a line; multiline paste collapses."""
     _configure_prompt_toolkit()
     root = (workspace or resolve_workspace()).resolve()
     style = merge_styles(
@@ -550,7 +575,11 @@ def _prompt_user_line(
         except (KeyboardInterrupt, EOFError):
             return None
 
-    buffer = Buffer(completer=completer, complete_while_typing=True)
+    buffer = Buffer(
+        completer=completer,
+        complete_while_typing=True,
+        multiline=False,
+    )
     _attach_paste_handler(buffer, paste_state)
     return _run_framed_user_prompt(buffer, style=style)
 
@@ -1218,7 +1247,9 @@ class ConversationUI:
         self._err.print(f"[warning]{message}[/]")
 
     def print_session_log_path(self, path: Path | str) -> None:
-        """Show where this session is being logged (dim, always visible)."""
+        """Show where this session is being logged (debug mode only)."""
+        if not self.debug:
+            return
         self._err.print(f"[muted]Session log: {path}[/]")
 
     def print_turn_usage(
@@ -1241,7 +1272,7 @@ class ConversationUI:
         self._console.print()
 
     def prompt_user(self) -> str:
-        """Read user input; Enter sends; multiline paste shows a collapsed label."""
+        """Read user input; Enter sends; Shift+Enter adds a line; paste collapses."""
         self._sync_redraw()
         # Drop any stop flag left over from a prior step's escape listener so
         # it can't abort the next task before it runs.
