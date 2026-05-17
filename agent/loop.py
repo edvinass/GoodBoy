@@ -39,7 +39,12 @@ from agent.types import (
 )
 from openai import APIConnectionError
 
-from llm import complete_structured, format_api_connection_error, get_curated_models
+from llm import (
+    REASONING_EFFORT,
+    complete_structured,
+    format_api_connection_error,
+    get_curated_models,
+)
 from settings import get_settings
 
 LLMCall = Callable[..., str]
@@ -89,6 +94,7 @@ class AgentLoop:
             else cfg.max_clarifications
         )
         self._default_model = model or cfg.default_model
+        self._default_reasoning: str | None = cfg.default_reasoning_effort
         self._allowed_models = allowed_models or get_curated_models()
         self._pending_model: str | None = None
         self._pending_reasoning: str | None = None
@@ -119,12 +125,23 @@ class AgentLoop:
     def session_model(self) -> str:
         return self._default_model
 
+    @property
+    def session_reasoning(self) -> str | None:
+        return self._default_reasoning
+
     def set_session_model(self, model: str) -> None:
         """Set the default model for subsequent tasks in this harness session."""
         if model not in self._allowed_models:
             raise ValueError(f"Model not in allowlist: {model}")
         self._default_model = model
         self._pending_model = None
+
+    def set_session_reasoning(self, effort: str | None) -> None:
+        """Set the default reasoning effort for subsequent LLM calls in this session."""
+        if effort is not None and effort not in REASONING_EFFORT:
+            raise ValueError(f"Unknown reasoning effort: {effort}")
+        self._default_reasoning = effort
+        self._pending_reasoning = None
 
     def run(
         self,
@@ -178,9 +195,10 @@ class AgentLoop:
 
         for turn in range(1, self.max_turns + 1):
             call_model = self._pending_model or self._default_model
-            call_reasoning = resolve_reasoning_effort(
-                call_model, self._pending_reasoning
-            )
+            effort = self._pending_reasoning
+            if effort is None:
+                effort = self._default_reasoning
+            call_reasoning = resolve_reasoning_effort(call_model, effort)
             self._pending_model = None
             self._pending_reasoning = None
 

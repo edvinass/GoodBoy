@@ -33,6 +33,7 @@ class FakeUI:
         self.clear_session_calls = 0
         self.notices: list[str] = []
         self._session_model = None
+        self._session_reasoning = None
 
     def prompt_user(self) -> str:
         return next(self.prompts)
@@ -54,6 +55,9 @@ class FakeUI:
 
     def print_notice(self, message: str) -> None:
         self.notices.append(message)
+
+    def set_session_reasoning(self, effort: str | None) -> None:
+        self._session_reasoning = effort
 
     def newline(self) -> None:
         pass
@@ -215,6 +219,34 @@ def test_harness_clear_resets_conversation_history():
         ConversationExchange(user="weather in Paris", assistant="Paris: rainy")
     ]
     assert harness._last_active_hosted_tools == []
+
+
+def test_harness_reasoning_command_changes_loop_and_persists(monkeypatch):
+    loop = Mock()
+    loop.workspace = "/tmp"
+    loop.session_model = "gpt-5.4-nano"
+    loop.session_reasoning = None
+    loop.set_session_reasoning = Mock()
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    ui = FakeUI(prompts=iter(["/reasoning", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    monkeypatch.setattr(
+        "agent.harness.select_reasoning_interactive",
+        lambda **_: "low",
+    )
+    saved: dict[str, str] = {}
+    monkeypatch.setattr("agent.harness.save_env", saved.update)
+
+    assert harness.run() == 0
+    loop.set_session_reasoning.assert_called_once_with("low")
+    assert ui._session_reasoning == "low"
+    assert saved == {"GOODBOY_REASONING_EFFORT": "low"}
+    loop.run.assert_not_called()
 
 
 def test_harness_model_command_changes_loop_and_persists(monkeypatch, tmp_path):

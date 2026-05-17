@@ -13,11 +13,13 @@ from agent.repl_commands import (
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
+    REASONING_COMMAND_NAMES,
 )
 from agent.ui import ConversationUI
-from llm import MODEL_LABELS, select_model_interactive
+from llm import MODEL_LABELS, select_model_interactive, select_reasoning_interactive
 from settings import (
     GOODBOY_AUTO_MODEL_SWITCH_VAR,
+    GOODBOY_REASONING_EFFORT_VAR,
     GOODBOY_SHOW_COMMANDS_VAR,
     OPENAI_MODEL_VAR,
     get_settings,
@@ -61,6 +63,10 @@ class AgentHarness:
             self._ui._workspace = self._loop.workspace
         if self._ui._session_model is None:
             self._ui.set_session_model(self._loop.session_model)
+        if getattr(self._ui, "_session_reasoning", None) is None:
+            setter = getattr(self._ui, "set_session_reasoning", None)
+            if setter is not None:
+                setter(self._loop.session_reasoning)
         self._loop.refresh_system_prompt()
         self._conversation_history: list[ConversationExchange] = []
         self._last_active_hosted_tools: list[str] = []
@@ -104,6 +110,15 @@ class AgentHarness:
                     self._change_model()
                     if session_log is not None:
                         session_log.event("model_changed", model=self._loop.session_model)
+                    continue
+
+                if self._is_reasoning_command(task):
+                    self._change_reasoning()
+                    if session_log is not None:
+                        session_log.event(
+                            "reasoning_changed",
+                            reasoning_effort=self._loop.session_reasoning,
+                        )
                     continue
 
                 if self._is_commands_command(task):
@@ -154,6 +169,10 @@ class AgentHarness:
     @classmethod
     def _is_model_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in MODEL_COMMAND_NAMES
+
+    @classmethod
+    def _is_reasoning_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in REASONING_COMMAND_NAMES
 
     @classmethod
     def _is_commands_command(cls, task: str) -> bool:
@@ -215,6 +234,26 @@ class AgentHarness:
         self._ui.set_session_model(chosen)
         label = MODEL_LABELS.get(chosen, chosen)
         self._ui.print_notice(f"Model set to {label} ({chosen}).")
+
+    def _change_reasoning(self) -> None:
+        try:
+            chosen = select_reasoning_interactive(
+                default=self._loop.session_reasoning,
+            )
+        except click.ClickException as exc:
+            self._ui.print_notice(str(exc))
+            return
+
+        self._loop.set_session_reasoning(chosen)
+        self._ui.set_session_reasoning(chosen)
+        if chosen is None:
+            save_env({GOODBOY_REASONING_EFFORT_VAR: ""})
+            self._ui.print_notice(
+                "Default reasoning effort cleared — reasoning models use the API default."
+            )
+        else:
+            save_env({GOODBOY_REASONING_EFFORT_VAR: chosen})
+            self._ui.print_notice(f"Default reasoning effort set to {chosen}.")
 
     def _clear_conversation(self) -> None:
         """Drop cross-task model context and reset the on-screen transcript."""

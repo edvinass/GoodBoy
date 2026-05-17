@@ -25,7 +25,8 @@ DESCRIPTION = (
     "Autonomous coding agent for your machine. Describe a task — GoodBoy "
     "explores the repo, edits files, runs tests and builds, and reports back "
     "when done. Type @ to reference a file or folder in your message; type / "
-    "for commands (/clear to reset, /model to change the LLM, /exit to quit)."
+    "for commands (/clear to reset, /model to change the LLM, /reasoning for "
+    "default reasoning effort, /exit to quit)."
 )
 
 

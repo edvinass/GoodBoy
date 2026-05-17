@@ -26,7 +26,7 @@ def test_search_slash_commands_filters_by_prefix():
     assert names == ["clear"]
 
     names = [command.name for command in search_slash_commands("")]
-    assert names == ["clear", "model", "commands", "autoswitch", "exit"]
+    assert names == ["clear", "model", "reasoning", "commands", "autoswitch", "exit"]
 
     names = [command.name for command in search_slash_commands("model")]
     assert names == ["model"]
@@ -44,6 +44,10 @@ def test_slash_command_display_meta_shows_toggle_state():
     )
     assert "(off)" not in slash_command_display_meta(commands["clear"])
     assert "(on)" not in slash_command_display_meta(commands["model"])
+    assert "current: not set" in slash_command_display_meta(commands["reasoning"])
+    assert "current: low" in slash_command_display_meta(
+        commands["reasoning"], default_reasoning_effort="low"
+    )
 
 
 def test_command_name_sets_match_harness():

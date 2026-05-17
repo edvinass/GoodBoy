@@ -26,6 +26,11 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         "Choose the LLM for this session",
     ),
     ReplCommand(
+        "reasoning",
+        "Choose default reasoning effort for reasoning models",
+        ("reason",),
+    ),
+    ReplCommand(
         "commands",
         "Toggle showing shell/Python commands (no output)",
         ("cmds", "show-commands"),
@@ -46,6 +51,12 @@ MODEL_COMMAND_NAMES = frozenset(
     name
     for command in REPL_COMMANDS
     if command.name == "model"
+    for name in (command.name, *command.aliases)
+)
+REASONING_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "reasoning"
     for name in (command.name, *command.aliases)
 )
 
@@ -85,8 +96,12 @@ def slash_command_display_meta(
     *,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    default_reasoning_effort: str | None = None,
 ) -> str:
     """Completion description; toggle commands include current on/off (default off)."""
+    if command.name == "reasoning":
+        current = default_reasoning_effort or "not set"
+        return f"{command.description} (current: {current})"
     state_key = _TOGGLE_COMMAND_STATE.get(command.name)
     if state_key is None:
         return command.description

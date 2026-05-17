@@ -184,10 +184,12 @@ class _UserInputCompleter(Completer):
         *,
         show_commands: bool = False,
         auto_model_switch: bool = False,
+        default_reasoning_effort: str | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._show_commands = show_commands
         self._auto_model_switch = auto_model_switch
+        self._default_reasoning_effort = default_reasoning_effort
 
     def get_completions(self, document: Document, complete_event: object) -> Iterator[Completion]:
         del complete_event
@@ -205,6 +207,7 @@ class _UserInputCompleter(Completer):
                         command,
                         show_commands=self._show_commands,
                         auto_model_switch=self._auto_model_switch,
+                        default_reasoning_effort=self._default_reasoning_effort,
                     ),
                 )
             return
@@ -227,6 +230,7 @@ def _prompt_user_line(
     workspace: Path | None = None,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    default_reasoning_effort: str | None = None,
 ) -> str | None:
     """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
     root = (workspace or resolve_workspace()).resolve()
@@ -258,6 +262,7 @@ def _prompt_user_line(
             root,
             show_commands=show_commands,
             auto_model_switch=auto_model_switch,
+            default_reasoning_effort=default_reasoning_effort,
         ),
         complete_while_typing=True,
         complete_style=CompleteStyle.COLUMN,
@@ -448,6 +453,7 @@ class ConversationUI:
             Path(workspace).resolve() if workspace is not None else None
         )
         self._session_model = model
+        self._session_reasoning: str | None = get_settings().default_reasoning_effort
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
         self._last_terminal_width: int | None = None
@@ -796,6 +802,14 @@ class ConversationUI:
                 break
         self._sync_redraw()
 
+    @property
+    def session_reasoning(self) -> str | None:
+        return self._session_reasoning
+
+    def set_session_reasoning(self, effort: str | None) -> None:
+        """Update the default reasoning effort used for slash-command completion."""
+        self._session_reasoning = effort
+
     def print_startup(self) -> None:
         self._record("startup", model=self.session_model)
 
@@ -857,6 +871,7 @@ class ConversationUI:
                 workspace=self._workspace or resolve_workspace(),
                 show_commands=self.show_commands,
                 auto_model_switch=self.auto_model_switch,
+                default_reasoning_effort=self._session_reasoning,
             )
             if result is None:
                 raise click.Abort()

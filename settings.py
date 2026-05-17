@@ -24,6 +24,7 @@ GOODBOY_SSL_CA_BUNDLE_VAR = "GOODBOY_SSL_CA_BUNDLE"
 GOODBOY_SSL_VERIFY_VAR = "GOODBOY_SSL_VERIFY"
 GOODBOY_SHOW_COMMANDS_VAR = "GOODBOY_SHOW_COMMANDS"
 GOODBOY_AUTO_MODEL_SWITCH_VAR = "GOODBOY_AUTO_MODEL_SWITCH"
+GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
 DEFAULT_MODEL = "gpt-5.4-nano"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
@@ -136,6 +137,7 @@ class Settings:
     ssl_verify: bool = True
     show_commands: bool = False
     auto_model_switch: bool = False
+    default_reasoning_effort: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -148,6 +150,10 @@ class Settings:
             or os.getenv("REQUESTS_CA_BUNDLE")
         )
         ssl_ca_bundle = ssl_ca.strip() if ssl_ca and ssl_ca.strip() else None
+        reasoning_raw = os.getenv(GOODBOY_REASONING_EFFORT_VAR)
+        default_reasoning: str | None = None
+        if reasoning_raw is not None and reasoning_raw.strip():
+            default_reasoning = reasoning_raw.strip()
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
@@ -164,6 +170,7 @@ class Settings:
             ssl_verify=_env_bool(GOODBOY_SSL_VERIFY_VAR, True),
             show_commands=_env_bool(GOODBOY_SHOW_COMMANDS_VAR, False),
             auto_model_switch=_env_bool(GOODBOY_AUTO_MODEL_SWITCH_VAR, False),
+            default_reasoning_effort=default_reasoning,
         )
 
     @property

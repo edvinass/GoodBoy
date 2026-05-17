@@ -22,6 +22,37 @@ def _llm_responses(responses: list[AgentStep]):
     return fake_llm
 
 
+def test_loop_default_reasoning_effort_applied(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("GOODBOY_REASONING_EFFORT=low\n", encoding="utf-8")
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    from settings import get_settings
+
+    get_settings.cache_clear()
+
+    captured: dict[str, object] = {}
+
+    def fake_llm(**kwargs):
+        captured.update(kwargs)
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="ok",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-5.4-nano",
+        llm_call=fake_llm,
+    )
+    loop.run("task")
+    assert captured.get("reasoning_effort") == "low"
+    get_settings.cache_clear()
+
+
 def test_loop_task_complete(tmp_path: Path):
     loop = AgentLoop(
         workspace=tmp_path,

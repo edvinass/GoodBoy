@@ -133,6 +133,46 @@ def select_model_interactive(
     return choice
 
 
+_REASONING_LABELS: dict[str, str] = {
+    "none": "None — no reasoning tokens",
+    "minimal": "Minimal — very light planning",
+    "low": "Low — routine coding and tool use",
+    "medium": "Medium — non-trivial agent steps",
+    "high": "High — complex debugging",
+    "xhigh": "Extra high — hardest problems",
+}
+
+
+def _reasoning_choice(level: str) -> questionary.Choice:
+    label = _REASONING_LABELS.get(level, level)
+    return questionary.Choice(title=label, value=level)
+
+
+def select_reasoning_interactive(*, default: str | None = None) -> str | None:
+    """Show an arrow-key menu and return the chosen reasoning effort, or None to clear."""
+    resolved_default = (
+        default if default is not None else get_settings().default_reasoning_effort
+    )
+    choices: list[questionary.Choice] = [
+        questionary.Choice(title="Not set (model API default)", value=""),
+    ]
+    choices.extend(_reasoning_choice(level) for level in REASONING_EFFORT)
+    default_value = resolved_default if resolved_default in REASONING_EFFORT else ""
+
+    choice = questionary.select(
+        "Select default reasoning effort",
+        choices=choices,
+        default=default_value,
+        use_indicator=True,
+        use_arrow_keys=True,
+        instruction="(↑↓ to move, Enter to confirm)",
+    ).ask()
+
+    if choice is None:
+        raise click.ClickException("Reasoning effort selection cancelled.")
+    return choice or None
+
+
 def _resolve_ssl_verify() -> bool | str:
     """Return httpx verify: True (default CAs), path to CA bundle, or False."""
     cfg = get_settings()
