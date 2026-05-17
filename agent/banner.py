@@ -22,11 +22,10 @@ def _brown_dog_art() -> str:
     return "\n".join(f"[{_BRAND_STYLE}]{line}[/]" for line in DOG_ASCII.rstrip().splitlines())
 
 DESCRIPTION = (
-    "Autonomous coding agent for your machine. Describe a task — GoodBoy "
-    "explores the repo, edits files, runs tests and builds, and reports back "
-    "when done. Type @ to reference a file or folder in your message. Use /? "
-    "to see available commands. Use -s or /stream to stream model output as "
-    "it is generated."
+    "Autonomous coding agent for your machine. Describe what you want to do, "
+    "and GoodBoy will explore the repo, edit files, run tests and builds, "
+    "and report back when it is done. Use @ to reference a file or folder in "
+    "your message, and type ? to see help for available commands and session settings."
 )
 
 
