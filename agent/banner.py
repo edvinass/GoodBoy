@@ -27,7 +27,7 @@ DESCRIPTION = (
     "when done. Type @ to reference a file or folder in your message; type / "
     "for commands (/clear to reset, /model to change the LLM, /reasoning for "
     "default reasoning effort, /autoswitch to let the agent pick models, "
-    "/exit to quit)."
+    "/exit to quit). Use -s to stream model output as it is generated."
 )
 
 

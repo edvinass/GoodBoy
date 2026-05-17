@@ -42,6 +42,7 @@ class AgentHarness:
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
+        stream_output: bool = False,
         loop: AgentLoop | None = None,
         ui: ConversationUI | None = None,
     ) -> None:
@@ -54,6 +55,7 @@ class AgentHarness:
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
+            stream_output=stream_output,
             workspace=None,
             model=None,
         )
@@ -351,6 +353,7 @@ def run_harness(
     debug: bool = False,
     debug_input: bool = False,
     debug_output: bool = False,
+    stream_output: bool = False,
 ) -> None:
     """Entry point for the GoodBoy harness."""
     cfg = get_settings()
@@ -366,5 +369,6 @@ def run_harness(
         debug=debug,
         debug_input=debug_input,
         debug_output=debug_output,
+        stream_output=stream_output,
     )
     raise SystemExit(harness.run())

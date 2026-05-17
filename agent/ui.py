@@ -188,11 +188,13 @@ class _UserInputCompleter(Completer):
         *,
         show_commands: bool = False,
         auto_model_switch: bool = False,
+        session_model: str | None = None,
         default_reasoning_effort: str | None = None,
     ) -> None:
         self._workspace = workspace.resolve()
         self._show_commands = show_commands
         self._auto_model_switch = auto_model_switch
+        self._session_model = session_model
         self._default_reasoning_effort = default_reasoning_effort
 
     def get_completions(self, document: Document, complete_event: object) -> Iterator[Completion]:
@@ -211,6 +213,7 @@ class _UserInputCompleter(Completer):
                         command,
                         show_commands=self._show_commands,
                         auto_model_switch=self._auto_model_switch,
+                        session_model=self._session_model,
                         default_reasoning_effort=self._default_reasoning_effort,
                     ),
                 )
@@ -275,6 +278,7 @@ def _prompt_user_line(
     workspace: Path | None = None,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    session_model: str | None = None,
     default_reasoning_effort: str | None = None,
 ) -> str | None:
     """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
@@ -309,6 +313,7 @@ def _prompt_user_line(
             root,
             show_commands=show_commands,
             auto_model_switch=auto_model_switch,
+            session_model=session_model,
             default_reasoning_effort=default_reasoning_effort,
         ),
         complete_while_typing=True,
@@ -522,6 +527,7 @@ class ConversationUI:
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
+        stream_output: bool = False,
         console: Console | None = None,
         workspace: Path | str | None = None,
         model: str | None = None,
@@ -534,6 +540,7 @@ class ConversationUI:
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
+        self.stream_output = stream_output
         self._workspace = (
             Path(workspace).resolve() if workspace is not None else None
         )
@@ -988,6 +995,7 @@ class ConversationUI:
                 workspace=self._workspace or resolve_workspace(),
                 show_commands=self.show_commands,
                 auto_model_switch=self.auto_model_switch,
+                session_model=self.session_model,
                 default_reasoning_effort=self._session_reasoning,
             )
             if result is None:
@@ -1039,11 +1047,33 @@ class ConversationUI:
             input_text=input_text,
         )
 
-    def print_llm_response(self, *, turn: int, raw: str) -> None:
+    def print_llm_response(
+        self, *, turn: int, raw: str, streamed: bool = False
+    ) -> None:
         """Print raw model response without truncation (debug -o)."""
-        if not self.debug_output:
+        if not self.debug_output or streamed:
             return
         self._record("llm_response", turn=turn, raw=raw)
+
+    def begin_model_stream(self, *, turn: int) -> None:
+        """Start streaming model output to the console (-s)."""
+        if not self.stream_output:
+            return
+        self._err.print(f"[dim]Model output (turn {turn}):[/]")
+
+    def write_model_stream_delta(self, text: str) -> None:
+        """Emit one chunk of streamed model text to stderr."""
+        if not self.stream_output or not text:
+            return
+        self._err.file.write(text)
+        self._err.file.flush()
+
+    def end_model_stream(self) -> None:
+        """Finish a streamed model response with a newline."""
+        if not self.stream_output:
+            return
+        self._err.file.write("\n")
+        self._err.file.flush()
 
     def print_agent_step(
         self,

@@ -5,7 +5,10 @@ from __future__ import annotations
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
+
+StreamTextCallback = Callable[[str], None]
 
 import click
 import httpx
@@ -286,21 +289,15 @@ def complete(
     return _extract_response_text(response)
 
 
-def complete_structured(
+def _structured_request_kwargs(
     *,
     input: str,
     instructions: str,
     json_schema: dict[str, Any],
-    model: str | None = None,
-    reasoning_effort: str | None = None,
-    tools: list[str] | None = None,
-) -> str:
-    """Call Responses API with JSON schema output; fall back to plain completion."""
-    from agent.prompt import system_prompt_with_schema
-
-    client = get_client()
-    resolved_model = model or get_settings().default_model
-
+    model: str,
+    reasoning_effort: str | None,
+    tools: list[str] | None,
+) -> dict[str, Any]:
     text_config: dict[str, Any] = {
         "format": {
             "type": "json_schema",
@@ -310,7 +307,7 @@ def complete_structured(
         }
     }
     kwargs: dict[str, Any] = {
-        "model": resolved_model,
+        "model": model,
         "input": input,
         "instructions": instructions,
         "text": text_config,
@@ -319,8 +316,53 @@ def complete_structured(
         kwargs["reasoning"] = {"effort": reasoning_effort}
     if tools:
         kwargs["tools"] = [{"type": tool} for tool in tools]
+    return kwargs
+
+
+def _complete_structured_stream(
+    client: OpenAI,
+    kwargs: dict[str, Any],
+    *,
+    on_text_delta: StreamTextCallback,
+) -> str:
+    with client.responses.stream(**kwargs) as stream:
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                on_text_delta(event.delta)
+        return _extract_response_text(stream.get_final_response())
+
+
+def complete_structured(
+    *,
+    input: str,
+    instructions: str,
+    json_schema: dict[str, Any],
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+    tools: list[str] | None = None,
+    stream: bool = False,
+    on_text_delta: StreamTextCallback | None = None,
+) -> str:
+    """Call Responses API with JSON schema output; fall back to plain completion."""
+    from agent.prompt import system_prompt_with_schema
+
+    client = get_client()
+    resolved_model = model or get_settings().default_model
+    kwargs = _structured_request_kwargs(
+        input=input,
+        instructions=instructions,
+        json_schema=json_schema,
+        model=resolved_model,
+        reasoning_effort=reasoning_effort,
+        tools=tools,
+    )
+    use_stream = stream and on_text_delta is not None
 
     try:
+        if use_stream:
+            return _complete_structured_stream(
+                client, kwargs, on_text_delta=on_text_delta
+            )
         response = client.responses.create(**kwargs)
         return _extract_response_text(response)
     except APIConnectionError as exc:

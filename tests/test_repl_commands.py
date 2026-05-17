@@ -55,8 +55,20 @@ def test_slash_command_display_meta_shows_toggle_state():
         default_reasoning_effort="low",
         auto_model_switch=False,
     )
+    assert "session: gpt-5.4-mini" in slash_command_display_meta(
+        commands["model"],
+        session_model="gpt-5.4-mini",
+        auto_model_switch=False,
+    )
     assert "agent cannot change" in slash_command_display_meta(
-        commands["model"], auto_model_switch=False
+        commands["model"],
+        session_model="gpt-5.4-mini",
+        auto_model_switch=False,
+    )
+    assert "current: gpt-5.4-nano" in slash_command_display_meta(
+        commands["model"],
+        session_model="gpt-5.4-nano",
+        auto_model_switch=True,
     )
 
 

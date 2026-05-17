@@ -105,6 +105,12 @@ def run_setup() -> None:
     is_flag=True,
     help="Print the model's raw response in full each turn.",
 )
+@click.option(
+    "-s",
+    "stream_output",
+    is_flag=True,
+    help="Stream each model response to the console as it is generated.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -115,6 +121,7 @@ def cli(
     debug: bool,
     debug_input: bool,
     debug_output: bool,
+    stream_output: bool,
 ) -> None:
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
@@ -129,6 +136,7 @@ def cli(
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
+            stream_output=stream_output,
         )
 
 

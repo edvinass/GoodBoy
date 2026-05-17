@@ -110,6 +110,7 @@ def slash_command_display_meta(
     *,
     show_commands: bool = False,
     auto_model_switch: bool = False,
+    session_model: str | None = None,
     default_reasoning_effort: str | None = None,
 ) -> str:
     """Completion description; toggle commands include current on/off (default off)."""
@@ -120,8 +121,13 @@ def slash_command_display_meta(
         return (
             f"{command.description} (session: {current}; agent cannot change per turn)"
         )
-    if command.name == "model" and not auto_model_switch:
-        return f"{command.description} (session; agent cannot change per turn)"
+    if command.name == "model":
+        current = session_model or "not set"
+        if auto_model_switch:
+            return f"{command.description} (current: {current})"
+        return (
+            f"{command.description} (session: {current}; agent cannot change per turn)"
+        )
     state_key = _TOGGLE_COMMAND_STATE.get(command.name)
     if state_key is None:
         return command.description

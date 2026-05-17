@@ -427,6 +427,35 @@ def test_print_llm_response_hidden_without_flag(capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_model_stream_writes_deltas_to_stderr(capsys):
+    ui = ConversationUI(stream_output=True)
+    ui.begin_model_stream(turn=1)
+    ui.write_model_stream_delta('{"action":')
+    ui.write_model_stream_delta('"task_complete"}')
+    ui.end_model_stream()
+    captured = capsys.readouterr()
+    assert "turn 1" in captured.err
+    assert '{"action":"task_complete"}' in captured.err
+
+
+def test_model_stream_hidden_when_disabled(capsys):
+    ui = ConversationUI(stream_output=False)
+    ui.begin_model_stream(turn=1)
+    ui.write_model_stream_delta("hidden")
+    ui.end_model_stream()
+    assert capsys.readouterr().err == ""
+
+
+def test_print_llm_response_skipped_when_already_streamed(capsys):
+    ui = ConversationUI(debug_output=True, stream_output=True)
+    ui.print_llm_response(
+        turn=1,
+        raw='{"action":"task_complete"}',
+        streamed=True,
+    )
+    assert capsys.readouterr().out == ""
+
+
 def test_directory_listing_renders_tree(capsys):
     ui = ConversationUI()
     listing = """__pycache__

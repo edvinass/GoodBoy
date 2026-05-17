@@ -239,9 +239,23 @@ class AgentLoop:
                         instructions=self._instructions,
                         input_text=llm_kwargs["input"],
                     )
-                    with self._ui.thinking():
-                        raw = self._llm_call(**llm_kwargs)
-                    self._ui.print_llm_response(turn=turn, raw=raw)
+                    streamed = self._ui.stream_output
+                    if streamed:
+                        self._ui.begin_model_stream(turn=turn)
+                        try:
+                            raw = self._llm_call(
+                                **llm_kwargs,
+                                stream=True,
+                                on_text_delta=self._ui.write_model_stream_delta,
+                            )
+                        finally:
+                            self._ui.end_model_stream()
+                    else:
+                        with self._ui.thinking():
+                            raw = self._llm_call(**llm_kwargs)
+                    self._ui.print_llm_response(
+                        turn=turn, raw=raw, streamed=streamed
+                    )
                 else:
                     raw = self._llm_call(**llm_kwargs)
             except APIConnectionError as exc:
