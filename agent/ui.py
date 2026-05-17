@@ -1335,6 +1335,12 @@ class ConversationUI:
             return
 
         failed = result.timed_out or result.exit_code not in (0, None)
+        if (
+            not failed
+            and step.action in (AgentAction.RUN_SHELL, AgentAction.RUN_PYTHON)
+        ):
+            return
+
         label = activity_label(step, phase="done")
         if failed:
             err_hint = (result.stderr or "failed").strip().splitlines()[0]

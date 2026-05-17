@@ -276,14 +276,24 @@ def test_activity_label_read_file_uses_basename():
     assert activity_label(step, phase="done") == "read foo.py"
 
 
-def test_print_harness_activity_shell_status_only(capsys):
+def test_print_harness_activity_shell_success_not_in_history(capsys):
     ui = ConversationUI()
     step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s example.com")
     result = ToolResult(executed="run_shell", exit_code=0)
     ui.print_harness_activity(step, result)
     out = capsys.readouterr().out
-    assert "ran terminal command" in out
+    assert "ran terminal command" not in out
     assert "curl" not in out
+
+
+def test_print_harness_activity_shell_failure_still_shown(capsys):
+    ui = ConversationUI()
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="false")
+    result = ToolResult(executed="run_shell", exit_code=1, stderr="command failed")
+    ui.print_harness_activity(step, result)
+    out = capsys.readouterr().out
+    assert "ran terminal command" in out
+    assert "command failed" in out
 
 
 def test_print_harness_activity_shows_file_diff(capsys):

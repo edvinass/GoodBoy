@@ -24,10 +24,9 @@ def _brown_dog_art() -> str:
 DESCRIPTION = (
     "Autonomous coding agent for your machine. Describe a task — GoodBoy "
     "explores the repo, edits files, runs tests and builds, and reports back "
-    "when done. Type @ to reference a file or folder in your message; type / "
-    "for commands (/clear to reset, /model to change the LLM, /reasoning for "
-    "default reasoning effort, /autoswitch to let the agent pick models, "
-    "/exit to quit). Use -s or /stream to stream model output as it is generated."
+    "when done. Type @ to reference a file or folder in your message. Use /? "
+    "to see available commands. Use -s or /stream to stream model output as "
+    "it is generated."
 )
 
 
