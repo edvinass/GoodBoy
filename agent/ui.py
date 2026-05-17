@@ -51,6 +51,7 @@ from agent.repl_commands import (
 from agent.workspace import resolve_workspace
 from settings import get_settings
 from agent.types import AgentAction, AgentStep, ToolResult
+from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(139,69,19)"
 
@@ -978,6 +979,26 @@ class ConversationUI:
     def print_notice(self, message: str) -> None:
         self._err.print(f"[warning]{message}[/]")
 
+    def print_session_log_path(self, path: Path | str) -> None:
+        """Show where this session is being logged (dim, always visible)."""
+        self._err.print(f"[muted]Session log: {path}[/]")
+
+    def print_turn_usage(
+        self,
+        *,
+        turn: int,
+        model: str,
+        usage: TokenUsage,
+    ) -> None:
+        """Brief token usage line after each LLM call when verbose or show_model."""
+        if not (self.verbose or self.show_model):
+            return
+        self._err.print(
+            f"[muted]turn {turn} · {model} · "
+            f"in {usage.input_tokens:,} · out {usage.output_tokens:,} · "
+            f"total {usage.total_tokens:,}[/]"
+        )
+
     def newline(self) -> None:
         self._console.print()
 
@@ -1221,10 +1242,14 @@ class ConversationUI:
 
 
 @contextmanager
-def tool_activity(ui: ConversationUI, subtitle: str) -> Iterator[None]:
-    """Spinner while a shell or Python tool runs (TTY only)."""
+def tool_activity(ui: ConversationUI, label: str) -> Iterator[None]:
+    """Spinner while a harness tool runs (TTY only).
+
+    ``label`` is shown after "is running" — often a shell command preview or
+    ``read_file: path/to/file``.
+    """
     if not sys.stderr.isatty():
         yield
         return
-    with ui.thinking(label=f"is running {subtitle}"):
+    with ui.thinking(label=f"is running {label}"):
         yield

@@ -17,9 +17,19 @@ class ReplCommand:
 
 REPL_COMMANDS: tuple[ReplCommand, ...] = (
     ReplCommand(
+        "help",
+        "List slash commands and current session settings",
+        ("?", "h"),
+    ),
+    ReplCommand(
         "clear",
         "Clear conversation history",
         ("new", "reset"),
+    ),
+    ReplCommand(
+        "retry",
+        "Re-run the previous task",
+        ("again",),
     ),
     ReplCommand(
         "model",
@@ -65,6 +75,18 @@ REASONING_COMMAND_NAMES = frozenset(
     for name in (command.name, *command.aliases)
 )
 
+HELP_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "help"
+    for name in (command.name, *command.aliases)
+)
+RETRY_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "retry"
+    for name in (command.name, *command.aliases)
+)
 CLEAR_COMMAND_NAMES = frozenset(
     name
     for command in REPL_COMMANDS
@@ -163,6 +185,33 @@ def active_slash_command_query(text_before_cursor: str) -> tuple[str, int] | Non
         return None
     query = match.group(1)
     return query, -len(query)
+
+
+def format_help_text(
+    *,
+    show_commands: bool = False,
+    auto_model_switch: bool = False,
+    stream_output: bool = False,
+    session_model: str | None = None,
+    default_reasoning_effort: str | None = None,
+) -> str:
+    """Human-readable slash-command reference for ``/help``."""
+    lines = ["Slash commands:"]
+    for command in REPL_COMMANDS:
+        names = "/".join((command.name, *command.aliases))
+        meta = slash_command_display_meta(
+            command,
+            show_commands=show_commands,
+            auto_model_switch=auto_model_switch,
+            stream_output=stream_output,
+            session_model=session_model,
+            default_reasoning_effort=default_reasoning_effort,
+        )
+        lines.append(f"  /{names} — {meta}")
+    lines.append("")
+    lines.append(f"Model: {session_model or 'not set'}")
+    lines.append(f"Reasoning: {default_reasoning_effort or 'not set'}")
+    return "\n".join(lines)
 
 
 def search_slash_commands(query: str) -> list[ReplCommand]:

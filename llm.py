@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -9,6 +10,13 @@ from collections.abc import Callable
 from typing import Any
 
 StreamTextCallback = Callable[[str], None]
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
 
 import click
 import httpx
@@ -239,6 +247,24 @@ def get_client(*, api_key: str | None = None) -> OpenAI:
     return _openai_client(resolved_key, cfg.ssl_verify, cfg.ssl_ca_bundle)
 
 
+def _extract_token_usage(response: Any) -> TokenUsage | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    total = int(getattr(usage, "total_tokens", 0) or 0)
+    if total == 0 and (input_tokens or output_tokens):
+        total = input_tokens + output_tokens
+    if not (input_tokens or output_tokens or total):
+        return None
+    return TokenUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total,
+    )
+
+
 def _extract_response_text(response: Any) -> str:
     if getattr(response, "output_text", None):
         return response.output_text
@@ -297,13 +323,14 @@ def _structured_request_kwargs(
     model: str,
     reasoning_effort: str | None,
     tools: list[str] | None,
+    strict_json: bool = True,
 ) -> dict[str, Any]:
     text_config: dict[str, Any] = {
         "format": {
             "type": "json_schema",
             "name": "agent_step",
             "schema": json_schema,
-            "strict": False,
+            "strict": strict_json,
         }
     }
     kwargs: dict[str, Any] = {
@@ -324,13 +351,17 @@ def _complete_structured_stream(
     kwargs: dict[str, Any],
     *,
     on_text_delta: StreamTextCallback,
-) -> tuple[str, str | None]:
+) -> tuple[str, str | None, TokenUsage | None]:
     with client.responses.stream(**kwargs) as stream:
         for event in stream:
             if event.type == "response.output_text.delta":
                 on_text_delta(event.delta)
         final = stream.get_final_response()
-        return _extract_response_text(final), getattr(final, "id", None)
+        return (
+            _extract_response_text(final),
+            getattr(final, "id", None),
+            _extract_token_usage(final),
+        )
 
 
 def complete_structured(
@@ -346,7 +377,7 @@ def complete_structured(
     previous_response_id: str | None = None,
 ) -> str:
     """Call Responses API with JSON schema output; return assistant text only."""
-    text, _ = complete_structured_with_id(
+    text, _, _ = complete_structured_with_id(
         input=input,
         instructions=instructions,
         json_schema=json_schema,
@@ -371,8 +402,8 @@ def complete_structured_with_id(
     stream: bool = False,
     on_text_delta: StreamTextCallback | None = None,
     previous_response_id: str | None = None,
-) -> tuple[str, str | None]:
-    """Like complete_structured but also returns the OpenAI response id.
+) -> tuple[str, str | None, TokenUsage | None]:
+    """Like complete_structured but also returns the OpenAI response id and usage.
 
     The id can be passed to a subsequent call as ``previous_response_id`` to
     chain a stateful conversation server-side, allowing the caller to send only
@@ -382,6 +413,7 @@ def complete_structured_with_id(
 
     client = get_client()
     resolved_model = model or get_settings().default_model
+    cfg = get_settings()
     kwargs = _structured_request_kwargs(
         input=input,
         instructions=instructions,
@@ -389,24 +421,38 @@ def complete_structured_with_id(
         model=resolved_model,
         reasoning_effort=reasoning_effort,
         tools=tools,
+        strict_json=cfg.strict_json_schema,
     )
     if previous_response_id is not None:
         kwargs["previous_response_id"] = previous_response_id
     use_stream = stream and on_text_delta is not None
 
-    try:
+    def _call(strict: bool) -> tuple[str, str | None, TokenUsage | None]:
+        call_kwargs = dict(kwargs)
+        call_kwargs["text"] = dict(kwargs["text"])
+        call_kwargs["text"]["format"] = dict(kwargs["text"]["format"])
+        call_kwargs["text"]["format"]["strict"] = strict
         if use_stream:
             return _complete_structured_stream(
-                client, kwargs, on_text_delta=on_text_delta
+                client, call_kwargs, on_text_delta=on_text_delta
             )
-        response = client.responses.create(**kwargs)
-        return _extract_response_text(response), getattr(response, "id", None)
+        response = client.responses.create(**call_kwargs)
+        return (
+            _extract_response_text(response),
+            getattr(response, "id", None),
+            _extract_token_usage(response),
+        )
+
+    try:
+        try:
+            return _call(cfg.strict_json_schema)
+        except Exception:
+            if not cfg.strict_json_schema:
+                raise
+            return _call(False)
     except APIConnectionError as exc:
         raise click.ClickException(format_api_connection_error(exc)) from exc
     except BadRequestError as exc:
-        # Chain breakage (expired/unknown previous_response_id) needs to bubble
-        # up so the caller can reset and retry; falling back silently to the
-        # plain completion path here would mask the chain reset.
         if previous_response_id is not None and _looks_like_chain_broken(exc):
             raise ResponseChainBroken(str(exc)) from exc
         raise
@@ -419,6 +465,7 @@ def complete_structured_with_id(
                 instructions=fallback_instructions,
                 reasoning_effort=reasoning_effort,
             ),
+            None,
             None,
         )
 

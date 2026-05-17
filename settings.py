@@ -27,6 +27,7 @@ GOODBOY_AUTO_MODEL_SWITCH_VAR = "GOODBOY_AUTO_MODEL_SWITCH"
 GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
 GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR = "GOODBOY_CONTEXT_RECENT_FULL_TURNS"
 GOODBOY_RESPONSE_CHAIN_VAR = "GOODBOY_RESPONSE_CHAIN"
+GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
 DEFAULT_MODEL = "gpt-5.4-nano"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
@@ -143,6 +144,7 @@ class Settings:
     default_reasoning_effort: str | None = None
     context_recent_full_turns: int = DEFAULT_CONTEXT_RECENT_FULL_TURNS
     response_chain_enabled: bool = False
+    strict_json_schema: bool = True
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -184,6 +186,7 @@ class Settings:
                 ),
             ),
             response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, False),
+            strict_json_schema=_env_bool(GOODBOY_STRICT_JSON_VAR, True),
         )
 
     @property

@@ -99,7 +99,7 @@ def test_build_system_prompt_coding_agent_identity():
     assert "powerful autonomous coding agent" in prompt
     assert "Core objective" in prompt
     assert "Inspect the codebase before making changes" in prompt
-    assert "rg " in prompt
+    assert "run_shell" in prompt and "rg" in prompt
     assert "perform" in prompt.lower()
 
 

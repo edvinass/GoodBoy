@@ -28,13 +28,17 @@ from agent.models import (
     resolve_reasoning_effort,
     validate_reasoning_effort_for_model,
 )
-from agent.prompt import build_system_prompt
+from agent.file_tools import apply_patch, read_file, str_replace
+from agent.prompt import build_session_prompt_suffix, build_stable_system_prompt
+from agent.routing import should_skip_routing_turn
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.tools import run_python, run_shell
+from llm import TokenUsage
 from agent.ui import ConversationUI, tool_activity
 from agent.types import (
     AgentAction,
     AgentStep,
+    ToolResult,
     TurnRecord,
     _SWITCH_TOOLS_ACTIONS,
     parse_agent_step,
@@ -121,25 +125,49 @@ class AgentLoop:
         self._last_response_id: str | None = None
         self._chain_watermark: ContextWatermark | None = None
         self._ui = ui
-        self._instructions = self._build_instructions()
+        self._stable_instructions = self._build_stable_instructions()
+        self._session_suffix = self._build_session_suffix()
+        self._instructions = self._compose_instructions()
 
-    def _build_instructions(self) -> str:
+    def _build_stable_instructions(self) -> str:
         ui = self._ui
-        return build_system_prompt(
+        return build_stable_system_prompt(
             allowed_models=self._allowed_models,
-            debug=ui.debug if ui is not None else False,
-            show_thoughts=(
-                (ui.show_thoughts or ui.verbose) if ui is not None else False
-            ),
-            show_commands=ui.show_commands if ui is not None else False,
             auto_model_switch=(
                 ui.auto_model_switch if ui is not None else False
             ),
         )
 
-    def refresh_system_prompt(self) -> None:
-        """Rebuild the system prompt after runtime UI toggles."""
-        self._instructions = self._build_instructions()
+    def _build_session_suffix(self) -> str:
+        ui = self._ui
+        return build_session_prompt_suffix(
+            debug=ui.debug if ui is not None else False,
+            show_thoughts=(
+                (ui.show_thoughts or ui.verbose) if ui is not None else False
+            ),
+            show_commands=ui.show_commands if ui is not None else False,
+        )
+
+    def _compose_instructions(self) -> str:
+        return f"{self._stable_instructions}\n\n{self._session_suffix}"
+
+    def refresh_system_prompt(self, *, rebuild_stable: bool = False) -> None:
+        """Rebuild instructions after runtime UI toggles.
+
+        By default only the session suffix (visibility) is refreshed so
+        ``/commands`` does not bust the cached stable prefix. Pass
+        ``rebuild_stable=True`` after ``/autoswitch``.
+        """
+        if rebuild_stable:
+            ui = self._ui
+            self._stable_instructions = build_stable_system_prompt(
+                allowed_models=self._allowed_models,
+                auto_model_switch=(
+                    ui.auto_model_switch if ui is not None else False
+                ),
+            )
+        self._session_suffix = self._build_session_suffix()
+        self._instructions = self._compose_instructions()
 
     @property
     def session_model(self) -> str:
@@ -227,6 +255,7 @@ class AgentLoop:
                 and self._auto_model_switch_enabled()
                 and turn == 1
                 and self._pending_model is None
+                and not should_skip_routing_turn(ctx.user_task)
             )
             if routing_turn:
                 call_model = self._router_model()
@@ -262,7 +291,7 @@ class AgentLoop:
                 )
 
             try:
-                raw, response_id = self._invoke_llm(
+                raw, response_id, usage = self._invoke_llm(
                     llm_kwargs, ctx=ctx, turn=turn, session_log=session_log
                 )
             except APIConnectionError as exc:
@@ -275,6 +304,12 @@ class AgentLoop:
                 )
 
             self._record_chain_progress(ctx, response_id)
+            if self._ui is not None and usage is not None:
+                self._ui.print_turn_usage(
+                    turn=turn,
+                    model=call_model,
+                    usage=usage,
+                )
 
             if session_log is not None:
                 session_log.log_llm_response(turn=turn, raw=raw)
@@ -525,26 +560,12 @@ class AgentLoop:
                     )
                     continue
 
-                if step.action == AgentAction.RUN_SHELL:
-                    runner = run_shell
-                    payload = step.command or ""
-                else:
-                    runner = run_python
-                    payload = step.code or ""
-
+                activity_label = self._tool_activity_label(step)
                 if self._ui is not None:
-                    with tool_activity(self._ui, spec.name.replace("run_", "")):
-                        tool_result = runner(
-                            payload,
-                            cwd=self.workspace,
-                            timeout=self.tool_timeout,
-                        )
+                    with tool_activity(self._ui, activity_label):
+                        tool_result = self._run_harness_tool(step)
                 else:
-                    tool_result = runner(
-                        payload,
-                        cwd=self.workspace,
-                        timeout=self.tool_timeout,
-                    )
+                    tool_result = self._run_harness_tool(step)
 
             if self._ui is not None and tool_result is not None:
                 self._ui.print_tool_result(tool_result)
@@ -630,21 +651,58 @@ class AgentLoop:
         # turn's delta only includes items appended after this point.
         self._chain_watermark = ctx.watermark()
 
+    def _tool_activity_label(self, step: AgentStep) -> str:
+        if step.action == AgentAction.RUN_SHELL and step.command:
+            preview = step.command.strip().replace("\n", " ")
+            if len(preview) > 72:
+                preview = preview[:69] + "..."
+            return preview
+        if step.action == AgentAction.RUN_PYTHON:
+            return "python"
+        if step.path:
+            return f"{step.action.value}: {step.path}"
+        return step.action.value.replace("_", " ")
+
+    def _run_harness_tool(self, step: AgentStep) -> ToolResult:
+        ws = self.workspace
+        timeout = self.tool_timeout
+        if step.action == AgentAction.RUN_SHELL:
+            return run_shell(step.command or "", cwd=ws, timeout=timeout)
+        if step.action == AgentAction.RUN_PYTHON:
+            return run_python(step.code or "", cwd=ws, timeout=timeout)
+        if step.action == AgentAction.READ_FILE:
+            return read_file(
+                step.path or "",
+                workspace=ws,
+                start_line=step.start_line,
+                end_line=step.end_line,
+            )
+        if step.action == AgentAction.STR_REPLACE:
+            return str_replace(
+                step.path or "",
+                step.old_string or "",
+                step.new_string or "",
+                workspace=ws,
+            )
+        if step.action == AgentAction.APPLY_PATCH:
+            return apply_patch(step.path or "", step.patch or "", workspace=ws)
+        return ToolResult(
+            executed=step.action.value,
+            stderr=f"Unhandled tool: {step.action.value}",
+            exit_code=1,
+        )
+
     def _do_llm_call(
         self, llm_kwargs: dict, *, stream: bool, on_text_delta=None
-    ) -> tuple[str, str | None]:
-        """Dispatch to the id-aware client when available, else legacy str path.
-
-        When a custom ``llm_call`` was injected (tests), we cannot capture a
-        response id; chaining is disabled in __init__ for that case.
-        """
+    ) -> tuple[str, str | None, TokenUsage | None]:
+        """Dispatch to the id-aware client when available, else legacy str path."""
         if self._llm_call is not None:
             extras: dict = {}
             if stream:
                 extras["stream"] = True
                 extras["on_text_delta"] = on_text_delta
             text = self._llm_call(**llm_kwargs, **extras)
-            return text, None
+            return text, None, None
         if stream:
             return complete_structured_with_id(
                 **llm_kwargs,
@@ -660,10 +718,10 @@ class AgentLoop:
         ctx: SessionContext,
         turn: int,
         session_log: SessionLog | None,
-    ) -> tuple[str, str | None]:
+    ) -> tuple[str, str | None, TokenUsage | None]:
         """Wrap the LLM call with UI plumbing and chain-broken recovery."""
 
-        def _call_through_ui() -> tuple[str, str | None]:
+        def _call_through_ui() -> tuple[str, str | None, TokenUsage | None]:
             if self._ui is None:
                 return self._do_llm_call(llm_kwargs, stream=False)
             self._ui.print_llm_request(
@@ -677,7 +735,7 @@ class AgentLoop:
             if streamed:
                 self._ui.begin_model_stream(turn=turn)
                 try:
-                    raw_text, rid = self._do_llm_call(
+                    raw_text, rid, usage = self._do_llm_call(
                         llm_kwargs,
                         stream=True,
                         on_text_delta=self._ui.write_model_stream_delta,
@@ -686,11 +744,11 @@ class AgentLoop:
                     self._ui.end_model_stream()
             else:
                 with self._ui.thinking():
-                    raw_text, rid = self._do_llm_call(llm_kwargs, stream=False)
+                    raw_text, rid, usage = self._do_llm_call(llm_kwargs, stream=False)
             self._ui.print_llm_response(
                 turn=turn, raw=raw_text, streamed=streamed
             )
-            return raw_text, rid
+            return raw_text, rid, usage
 
         try:
             return _call_through_ui()

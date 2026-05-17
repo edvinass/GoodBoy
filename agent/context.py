@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from agent.memory import load_project_memory
 from agent.types import TurnRecord
 
 DEFAULT_RECENT_FULL_TURNS = 3
@@ -164,6 +166,9 @@ class SessionContext(BaseModel):
                     f"run_shell and run_python use cwd: {self.workspace}",
                 ]
             )
+            memory = load_project_memory(Path(self.workspace))
+            if memory:
+                sections.extend(["\n## Project memory", memory])
 
         if self.active_hosted_tools:
             tools = ", ".join(self.active_hosted_tools)
@@ -236,6 +241,12 @@ class SessionContext(BaseModel):
         if record.parse_error:
             lines.append(f"Parse note: {record.parse_error}")
 
+        if step.path:
+            lines.append(f"Path: {step.path}")
+        if step.start_line is not None or step.end_line is not None:
+            lines.append(
+                f"Lines: {step.start_line or 1}-{step.end_line or 'end'}"
+            )
         if step.command:
             lines.append(f"Command: {step.command}")
         if step.code:
@@ -244,6 +255,17 @@ class SessionContext(BaseModel):
                 lines.append(f"Code (first line): {_preview_line(first)}")
             else:
                 lines.append(f"Code:\n```python\n{step.code}\n```")
+        if step.patch and mode == "full":
+            lines.append(f"Patch:\n```diff\n{step.patch}\n```")
+        elif step.patch and mode == "summary":
+            first = _first_nonempty_line(step.patch) or ""
+            lines.append(f"Patch (first line): {_preview_line(first)}")
+        if step.old_string is not None:
+            preview = _preview_line(step.old_string.replace("\n", "\\n"))
+            lines.append(f"Old: {preview}")
+        if step.new_string is not None:
+            preview = _preview_line(step.new_string.replace("\n", "\\n"))
+            lines.append(f"New: {preview}")
         if step.message:
             # Routing/terminal turns carry their entire signal in `message`;
             # keep it whole even when summarising.

@@ -30,7 +30,7 @@ _CODING_METHODOLOGY = """## Coding methodology
 - **Explore first**: list dirs, search with `rg` / `grep`, read files (`cat`/`sed`/`head`), check git history before editing.
 - **Match the repo**: follow existing naming, patterns, imports, and test layout.
 - **Small safe edits**: focused diffs, verified per step with tests/linters when available.
-- **No write_file action** — create/edit files via shell (heredoc/`sed`/`tee`/patch) or short run_python scripts.
+- **Prefer structured file tools** — `read_file`, `str_replace`, `apply_patch` for edits; fall back to shell when needed.
 - **cwd** is the project workspace (see Workspace in the user message).
 - **Secrets**: never print, commit, or exfiltrate credentials (.env, API keys, tokens).
 - **Dependencies**: install only when needed for the task, via the project's package manager."""
@@ -39,8 +39,11 @@ _AVAILABLE_TOOLS = """## Available tools (harness)
 
 One JSON object per turn → one action runs.
 
-- **run_shell**: navigate/search (`ls`, `find`, rg "pattern", `grep`), read (`cat`, `head`, `tail`), git (`status`, `diff`, `log`), edit (heredoc, `sed`, `tee`, patches), run tests/builds/linters (`pytest`, `npm test`, `cargo test`, `go test`, `make`), install deps, run any project CLI. Pipelines, `&&`, and redirects work. On non-zero exit, diagnose from prior-turn output — don't blindly retry the same failing command.
-- **run_python**: structured parsing or multi-step file transforms when shell is awkward; stdout/stderr return next turn.
+- **read_file**: read a workspace file (`path`, optional `start_line`/`end_line`). Prefer over `cat` for edits you will make next.
+- **str_replace**: replace one unique `old_string` with `new_string` in `path`. Include enough context that the match is unique.
+- **apply_patch**: apply a unified diff in `patch` to `path`. Use for multi-line changes.
+- **run_shell**: navigate/search, git, tests/builds/linters, installs, any project CLI. On non-zero exit, diagnose — don't blindly retry.
+- **run_python**: structured parsing or transforms when shell is awkward.
 - **switch_tools**: enable hosted OpenAI tools (live web, etc.) — NOT for local file search. Use run_shell + `rg` for the codebase."""
 
 _HARNESS_RULES = """## Harness rules (strict)
@@ -55,11 +58,11 @@ _HARNESS_RULES = """## Harness rules (strict)
 
 ## Routing fields (each turn)
 
-- **action** (required): run_shell | run_python | switch_model | switch_tools | need_user_input | task_complete | failed.
+- **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | switch_model | switch_tools | need_user_input | task_complete | failed.
 - **model**: optional on any action except switch_tools (next LLM call); required for switch_model.
 - **tools**: required for switch_tools (hosted tool IDs for next call).
 - **reasoning_effort**: optional on any action except switch_tools (next call only).
-- **thought**, **command**, **code**, **message**: as required by action.
+- **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
 """
 
 _HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
@@ -74,9 +77,9 @@ _HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
 
 ## Routing fields (each turn)
 
-- **action** (required): run_shell | run_python | switch_tools | need_user_input | task_complete | failed.
+- **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | switch_tools | need_user_input | task_complete | failed.
 - **tools**: required for switch_tools (hosted tool IDs for next call).
-- **thought**, **command**, **code**, **message**: as required by action.
+- **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
 
 Session **model** and **reasoning_effort** are fixed for this run (user sets them with `/model` and `/reasoning`). Do not set `model` or `reasoning_effort` in JSON."""
 
@@ -173,25 +176,21 @@ def _base_rules_section(*, auto_model_switch: bool) -> str:
     )
 
 
-def build_system_prompt(
+def build_stable_system_prompt(
     *,
     allowed_models: list[str],
     tools: tuple | None = None,
-    debug: bool = False,
-    show_thoughts: bool = False,
-    show_commands: bool = False,
     auto_model_switch: bool = False,
 ) -> str:
-    """Compose full system prompt with catalogs and cost policy."""
+    """Cache-friendly instructions: stable across visibility toggles.
+
+    Put session-varying text (user visibility) in ``build_session_prompt_suffix``
+    so toggling ``/commands`` or ``-f`` does not bust the cached prefix.
+    """
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
         _base_rules_section(auto_model_switch=auto_model_switch),
         format_configuration_guide_section(auto_model_switch=auto_model_switch),
-        format_user_visibility_section(
-            debug=debug,
-            show_thoughts=show_thoughts,
-            show_commands=show_commands,
-        ),
         format_hosted_tools_reference(),
         format_cost_policy_section(auto_model_switch=auto_model_switch),
     ]
@@ -204,6 +203,43 @@ def build_system_prompt(
         )
     sections.append(format_tools_section(tool_specs))
     return "\n\n".join(sections)
+
+
+def build_session_prompt_suffix(
+    *,
+    debug: bool = False,
+    show_thoughts: bool = False,
+    show_commands: bool = False,
+) -> str:
+    """Per-session suffix appended after the stable system prompt."""
+    return format_user_visibility_section(
+        debug=debug,
+        show_thoughts=show_thoughts,
+        show_commands=show_commands,
+    )
+
+
+def build_system_prompt(
+    *,
+    allowed_models: list[str],
+    tools: tuple | None = None,
+    debug: bool = False,
+    show_thoughts: bool = False,
+    show_commands: bool = False,
+    auto_model_switch: bool = False,
+) -> str:
+    """Compose full system prompt (stable core + session suffix)."""
+    stable = build_stable_system_prompt(
+        allowed_models=allowed_models,
+        tools=tools,
+        auto_model_switch=auto_model_switch,
+    )
+    suffix = build_session_prompt_suffix(
+        debug=debug,
+        show_thoughts=show_thoughts,
+        show_commands=show_commands,
+    )
+    return f"{stable}\n\n{suffix}"
 
 
 def system_prompt_with_schema() -> str:

@@ -789,7 +789,7 @@ def test_response_chain_sends_delta_and_previous_id_after_first_call(
     def fake_with_id(**kwargs):
         calls.append(dict(kwargs))
         idx = len(calls) - 1
-        return payloads[idx], f"resp_{idx}"
+        return payloads[idx], f"resp_{idx}", None
 
     monkeypatch.setattr(
         "agent.loop.complete_structured_with_id", fake_with_id
@@ -853,7 +853,8 @@ def test_response_chain_recovers_when_server_drops_chain(
         outcome = payloads[len(calls) - 1]
         if isinstance(outcome, BaseException):
             raise outcome
-        return outcome
+        text, rid = outcome
+        return text, rid, None
 
     monkeypatch.setattr(
         "agent.loop.complete_structured_with_id", fake_with_id
@@ -899,7 +900,7 @@ def test_response_chain_disabled_uses_full_prompt_each_turn(
 
     def fake_with_id(**kwargs):
         calls.append(dict(kwargs))
-        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}"
+        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}", None
 
     monkeypatch.setattr(
         "agent.loop.complete_structured_with_id", fake_with_id
@@ -939,7 +940,7 @@ def test_response_chain_resets_on_switch_model(tmp_path: Path, monkeypatch):
 
     def fake_with_id(**kwargs):
         calls.append(dict(kwargs))
-        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}"
+        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}", None
 
     monkeypatch.setattr(
         "agent.loop.complete_structured_with_id", fake_with_id

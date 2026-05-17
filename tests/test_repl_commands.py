@@ -28,7 +28,9 @@ def test_search_slash_commands_filters_by_prefix():
 
     names = [command.name for command in search_slash_commands("")]
     assert names == [
+        "help",
         "clear",
+        "retry",
         "model",
         "reasoning",
         "commands",

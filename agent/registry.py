@@ -7,7 +7,15 @@ from typing import Literal
 
 from agent.types import AgentAction
 
-HARNESS_ACTIONS = frozenset({AgentAction.RUN_SHELL, AgentAction.RUN_PYTHON})
+HARNESS_ACTIONS = frozenset(
+    {
+        AgentAction.RUN_SHELL,
+        AgentAction.RUN_PYTHON,
+        AgentAction.READ_FILE,
+        AgentAction.APPLY_PATCH,
+        AgentAction.STR_REPLACE,
+    }
+)
 ROUTING_ACTIONS = frozenset(
     {
         AgentAction.SWITCH_MODEL,
@@ -60,6 +68,27 @@ DEFAULT_TOOLS: tuple[ToolSpec, ...] = (
         ),
         avoid_when="A focused shell command (rg, sed, pytest, git) is enough.",
     ),
+    ToolSpec(
+        action=AgentAction.READ_FILE,
+        name="read_file",
+        description="Read a workspace file with optional line range (numbered output).",
+        when_to_use="Inspect source before editing; read specific functions or config sections.",
+        avoid_when="You only need a quick grep — use run_shell + rg.",
+    ),
+    ToolSpec(
+        action=AgentAction.STR_REPLACE,
+        name="str_replace",
+        description="Replace one exact unique occurrence of old_string with new_string in a file.",
+        when_to_use="Small, precise edits when the old text is unique in the file.",
+        avoid_when="The match is ambiguous, spans many lines, or needs a multi-hunk diff — use apply_patch.",
+    ),
+    ToolSpec(
+        action=AgentAction.APPLY_PATCH,
+        name="apply_patch",
+        description="Apply a unified diff patch to a workspace file via patch(1).",
+        when_to_use="Multi-line edits, refactors, or changes best expressed as a unified diff.",
+        avoid_when="A one-line str_replace is enough.",
+    ),
 )
 
 _TOOLS_BY_ACTION = {t.action: t for t in DEFAULT_TOOLS}
@@ -90,7 +119,7 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
     specs = tools if tools is not None else DEFAULT_TOOLS
     lines = [
         "## Harness tools (local codebase work)",
-        "Set `action` to a tool below, or a terminal action (need_user_input, task_complete, failed). No read_file/write_file — use run_shell.",
+        "Set `action` to a tool below, or a terminal action (need_user_input, task_complete, failed).",
         "",
     ]
     for spec in specs:

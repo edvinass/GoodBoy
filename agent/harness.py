@@ -12,9 +12,12 @@ from agent.repl_commands import (
     CLEAR_COMMAND_NAMES,
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
+    HELP_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
     REASONING_COMMAND_NAMES,
+    RETRY_COMMAND_NAMES,
     STREAM_COMMAND_NAMES,
+    format_help_text,
     is_repl_slash_command,
 )
 from agent.ui import ConversationUI
@@ -75,6 +78,7 @@ class AgentHarness:
         self._conversation_history: list[ConversationExchange] = []
         self._last_active_hosted_tools: list[str] = []
         self._paused_context: SessionContext | None = None
+        self._last_task: str | None = None
 
     def run(self) -> int:
         """Run the interactive harness; return process exit code."""
@@ -83,8 +87,8 @@ class AgentHarness:
         first_prompt = True
 
         with open_session_log(workspace=self._loop.workspace) as session_log:
-            if session_log is not None and self._ui.debug:
-                self._ui.print_notice(f"Session log: {session_log.path}")
+            if session_log is not None:
+                self._ui.print_session_log_path(session_log.path)
 
             while True:
                 try:
@@ -103,6 +107,20 @@ class AgentHarness:
                         self._ui.print_notice("No task provided.")
                         return 1
                     return exit_code
+
+                if self._is_help_command(task):
+                    self._print_help()
+                    continue
+
+                if self._is_retry_command(task):
+                    if self._last_task is None:
+                        self._ui.print_notice("No previous task to retry.")
+                        continue
+                    task = self._last_task
+                    if session_log is not None:
+                        session_log.event("task_retry", task=task)
+                elif not is_repl_slash_command(task):
+                    self._last_task = task
 
                 if self._is_clear_command(task):
                     self._clear_conversation()
@@ -176,8 +194,26 @@ class AgentHarness:
         return not normalized or normalized in EXIT_COMMAND_NAMES
 
     @classmethod
+    def _is_help_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in HELP_COMMAND_NAMES
+
+    @classmethod
+    def _is_retry_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in RETRY_COMMAND_NAMES
+
+    @classmethod
     def _is_clear_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in CLEAR_COMMAND_NAMES
+
+    def _print_help(self) -> None:
+        text = format_help_text(
+            show_commands=self._ui.show_commands,
+            auto_model_switch=self._ui.auto_model_switch,
+            stream_output=self._ui.stream_output,
+            session_model=self._loop.session_model,
+            default_reasoning_effort=self._loop.session_reasoning,
+        )
+        self._ui.print_notice(text)
 
     @classmethod
     def _is_model_command(cls, task: str) -> bool:
@@ -234,7 +270,7 @@ class AgentHarness:
                 )
             }
         )
-        self._loop.refresh_system_prompt()
+        self._loop.refresh_system_prompt(rebuild_stable=True)
         if self._ui.auto_model_switch:
             self._ui.print_notice(
                 "Automatic model switching on — turn 1 uses the cheapest model "

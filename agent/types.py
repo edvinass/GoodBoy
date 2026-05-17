@@ -13,6 +13,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class AgentAction(str, Enum):
     RUN_SHELL = "run_shell"
     RUN_PYTHON = "run_python"
+    READ_FILE = "read_file"
+    APPLY_PATCH = "apply_patch"
+    STR_REPLACE = "str_replace"
     SWITCH_MODEL = "switch_model"
     SWITCH_TOOLS = "switch_tools"
     SWITCH_API = "switch_api"  # deprecated alias for switch_tools
@@ -33,13 +36,28 @@ class AgentStep(BaseModel):
     thought: str | None = None
     command: str | None = None
     code: str | None = None
+    path: str | None = None
+    patch: str | None = None
+    old_string: str | None = None
+    new_string: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
     message: str | None = None
     tools: list[str] | None = None
     model: str | None = None
     reasoning_effort: str | None = None
 
     @field_validator(
-        "command", "code", "message", "model", "reasoning_effort", mode="before"
+        "command",
+        "code",
+        "path",
+        "patch",
+        "old_string",
+        "new_string",
+        "message",
+        "model",
+        "reasoning_effort",
+        mode="before",
     )
     @classmethod
     def _strip_optional_strings(cls, value: Any) -> Any:
@@ -87,6 +105,21 @@ class AgentStep(BaseModel):
         elif self.action == AgentAction.RUN_PYTHON:
             if not self.code:
                 raise ValueError("run_python requires non-empty 'code'")
+        elif self.action == AgentAction.READ_FILE:
+            if not self.path:
+                raise ValueError("read_file requires non-empty 'path'")
+        elif self.action == AgentAction.APPLY_PATCH:
+            if not self.path:
+                raise ValueError("apply_patch requires non-empty 'path'")
+            if not self.patch:
+                raise ValueError("apply_patch requires non-empty 'patch'")
+        elif self.action == AgentAction.STR_REPLACE:
+            if not self.path:
+                raise ValueError("str_replace requires non-empty 'path'")
+            if self.old_string is None or self.old_string == "":
+                raise ValueError("str_replace requires non-empty 'old_string'")
+            if self.new_string is None:
+                raise ValueError("str_replace requires 'new_string' (may be empty)")
         elif self.action == AgentAction.SWITCH_MODEL:
             if not self.model:
                 raise ValueError("switch_model requires non-empty 'model'")
