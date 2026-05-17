@@ -14,16 +14,19 @@ from agent.repl_commands import (
     EXIT_COMMAND_NAMES,
     HELP_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
+    PLAN_COMMAND_NAMES,
     REASONING_COMMAND_NAMES,
     RETRY_COMMAND_NAMES,
     STREAM_COMMAND_NAMES,
     format_help_text,
     is_repl_slash_command,
+    next_plan_mode,
 )
 from agent.ui import ConversationUI
 from llm import MODEL_LABELS, select_model_interactive, select_reasoning_interactive
 from settings import (
     GOODBOY_AUTO_MODEL_SWITCH_VAR,
+    GOODBOY_PLAN_MODE_VAR,
     GOODBOY_REASONING_EFFORT_VAR,
     GOODBOY_SHOW_COMMANDS_VAR,
     OPENAI_MODEL_VAR,
@@ -143,6 +146,15 @@ class AgentHarness:
                         )
                     continue
 
+                if self._is_plan_command(task):
+                    self._change_plan_mode()
+                    if session_log is not None:
+                        session_log.event(
+                            "plan_mode_changed",
+                            plan_mode=self._loop._plan_mode,
+                        )
+                    continue
+
                 if self._is_commands_command(task):
                     self._toggle_commands()
                     if session_log is not None:
@@ -212,6 +224,7 @@ class AgentHarness:
             stream_output=self._ui.stream_output,
             session_model=self._loop.session_model,
             default_reasoning_effort=self._loop.session_reasoning,
+            plan_mode=self._loop._plan_mode,
         )
         self._ui.print_notice(text)
 
@@ -222,6 +235,10 @@ class AgentHarness:
     @classmethod
     def _is_reasoning_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in REASONING_COMMAND_NAMES
+
+    @classmethod
+    def _is_plan_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in PLAN_COMMAND_NAMES
 
     @classmethod
     def _is_commands_command(cls, task: str) -> bool:
@@ -321,6 +338,14 @@ class AgentHarness:
         else:
             save_env({GOODBOY_REASONING_EFFORT_VAR: chosen})
             self._ui.print_notice(f"Default reasoning effort set to {chosen}.")
+
+    def _change_plan_mode(self) -> None:
+        chosen = next_plan_mode(self._loop._plan_mode)
+        self._loop._plan_mode = chosen
+        save_env({GOODBOY_PLAN_MODE_VAR: chosen})
+        self._ui.set_plan_mode(chosen)
+        self._loop.refresh_system_prompt()
+        self._ui.print_notice(f"Plan mode set to {chosen}.")
 
     def _clear_conversation(self) -> None:
         """Drop cross-task model context and reset the on-screen transcript."""

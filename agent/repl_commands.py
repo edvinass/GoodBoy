@@ -41,6 +41,11 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         ("reason",),
     ),
     ReplCommand(
+        "plan",
+        "Cycle plan mode (auto/off/always)",
+        ("planmode",),
+    ),
+    ReplCommand(
         "commands",
         "Toggle showing shell/Python commands (no output)",
         ("cmds", "show-commands"),
@@ -72,6 +77,12 @@ REASONING_COMMAND_NAMES = frozenset(
     name
     for command in REPL_COMMANDS
     if command.name == "reasoning"
+    for name in (command.name, *command.aliases)
+)
+PLAN_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "plan"
     for name in (command.name, *command.aliases)
 )
 
@@ -124,6 +135,8 @@ _TOGGLE_COMMAND_STATE: dict[str, str] = {
     "stream": "stream_output",
 }
 
+_PLAN_MODES: tuple[str, ...] = ("auto", "off", "always")
+
 _ALL_COMMAND_NAMES: frozenset[str] = frozenset(
     name
     for command in REPL_COMMANDS
@@ -139,6 +152,16 @@ def is_repl_slash_command(text: str) -> bool:
     return normalized[1:] in _ALL_COMMAND_NAMES
 
 
+def next_plan_mode(current: str | None) -> str:
+    """Return the next plan mode in the user-facing cycle."""
+    normalized = (current or "auto").strip().lower()
+    try:
+        index = _PLAN_MODES.index(normalized)
+    except ValueError:
+        index = 0
+    return _PLAN_MODES[(index + 1) % len(_PLAN_MODES)]
+
+
 def slash_command_display_meta(
     command: ReplCommand,
     *,
@@ -147,6 +170,7 @@ def slash_command_display_meta(
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
+    plan_mode: str = "auto",
 ) -> str:
     """Completion description; toggle commands include current on/off (default off)."""
     if command.name == "reasoning":
@@ -163,6 +187,9 @@ def slash_command_display_meta(
         return (
             f"{command.description} (session: {current}; agent cannot change per turn)"
         )
+    if command.name == "plan":
+        current = (plan_mode or "auto").strip().lower() or "auto"
+        return f"{command.description} (current: {current})"
     state_key = _TOGGLE_COMMAND_STATE.get(command.name)
     if state_key is None:
         return command.description
@@ -194,6 +221,7 @@ def format_help_text(
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
+    plan_mode: str = "auto",
 ) -> str:
     """Human-readable slash-command reference for ``/help``."""
     lines = ["Slash commands:"]
@@ -206,11 +234,13 @@ def format_help_text(
             stream_output=stream_output,
             session_model=session_model,
             default_reasoning_effort=default_reasoning_effort,
+            plan_mode=plan_mode,
         )
         lines.append(f"  /{names} — {meta}")
     lines.append("")
     lines.append(f"Model: {session_model or 'not set'}")
     lines.append(f"Reasoning: {default_reasoning_effort or 'not set'}")
+    lines.append(f"Plan mode: {plan_mode}")
     return "\n".join(lines)
 
 

@@ -5,6 +5,7 @@ from agent.repl_commands import (
     CLEAR_COMMAND_NAMES,
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
+    PLAN_COMMAND_NAMES,
     STREAM_COMMAND_NAMES,
     REPL_COMMANDS,
     active_slash_command_query,
@@ -33,6 +34,7 @@ def test_search_slash_commands_filters_by_prefix():
         "retry",
         "model",
         "reasoning",
+        "plan",
         "commands",
         "autoswitch",
         "stream",
@@ -80,6 +82,10 @@ def test_slash_command_display_meta_shows_toggle_state():
         session_model="gpt-5.4-mini",
         auto_model_switch=False,
     )
+    assert "current: auto" in slash_command_display_meta(commands["plan"])
+    assert "current: always" in slash_command_display_meta(
+        commands["plan"], plan_mode="always"
+    )
     assert "current: gpt-5.4-nano" in slash_command_display_meta(
         commands["model"],
         session_model="gpt-5.4-nano",
@@ -92,6 +98,7 @@ def test_command_name_sets_match_harness():
     assert COMMANDS_COMMAND_NAMES == frozenset(
         {"commands", "cmds", "show-commands"}
     )
+    assert PLAN_COMMAND_NAMES == frozenset({"plan", "planmode"})
     assert AUTOSWITCH_COMMAND_NAMES == frozenset({"autoswitch", "auto"})
     assert STREAM_COMMAND_NAMES == frozenset({"stream", "streaming"})
     assert EXIT_COMMAND_NAMES == frozenset({"exit", "quit", "q"})

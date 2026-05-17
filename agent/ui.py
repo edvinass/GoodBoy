@@ -301,6 +301,7 @@ class _UserInputCompleter(Completer):
         stream_output: bool = False,
         session_model: str | None = None,
         default_reasoning_effort: str | None = None,
+        plan_mode: str = "auto",
     ) -> None:
         self._workspace = workspace.resolve()
         self._show_commands = show_commands
@@ -308,6 +309,7 @@ class _UserInputCompleter(Completer):
         self._stream_output = stream_output
         self._session_model = session_model
         self._default_reasoning_effort = default_reasoning_effort
+        self._plan_mode = plan_mode
 
     def get_completions(self, document: Document, complete_event: object) -> Iterator[Completion]:
         del complete_event
@@ -328,6 +330,7 @@ class _UserInputCompleter(Completer):
                         stream_output=self._stream_output,
                         session_model=self._session_model,
                         default_reasoning_effort=self._default_reasoning_effort,
+                        plan_mode=self._plan_mode,
                     ),
                 )
             return
@@ -655,6 +658,7 @@ def _prompt_user_line(
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
+    plan_mode: str = "auto",
 ) -> str | None:
     """Prompt: Enter sends; Shift+Enter (c-j) adds a line; multiline paste collapses."""
     _configure_prompt_toolkit()
@@ -937,6 +941,7 @@ class ConversationUI:
         )
         self._session_model = model
         self._session_reasoning: str | None = get_settings().default_reasoning_effort
+        self._plan_mode: str = get_settings().plan_mode
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
         self._last_terminal_width: int | None = None
@@ -1335,6 +1340,11 @@ class ConversationUI:
         self._session_reasoning = effort
         self.refresh_startup_banner()
 
+    def set_plan_mode(self, mode: str) -> None:
+        """Update the plan mode shown in slash-command completion/help."""
+        self._plan_mode = mode
+        self.refresh_startup_banner()
+
     def print_startup(self) -> None:
         self._record("startup", **self._startup_data())
 
@@ -1419,6 +1429,7 @@ class ConversationUI:
                 stream_output=self.stream_output,
                 session_model=self.session_model,
                 default_reasoning_effort=self._session_reasoning,
+                plan_mode=self._plan_mode,
             )
             if result is None:
                 raise click.Abort()
