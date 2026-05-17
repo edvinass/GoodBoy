@@ -445,15 +445,20 @@ def _run_framed_user_prompt(
     bottom_window = _frame_row(_input_border_fragments)
     footer_window = _frame_row(_input_footer_fragments)
 
+    completions_open = Condition(lambda: buffer.complete_state is not None)
+    frame_footer_visible = Condition(lambda: buffer.complete_state is None)
+
     # Reserve space below the input so the completion menu opens downward
     # (prompt_toolkit flips upward when there is more room above the cursor).
     menu_spacer = ConditionalContainer(
         Window(height=Dimension(min=_USER_INPUT_MENU_RESERVE)),
-        filter=Condition(lambda: buffer.complete_state is not None),
+        filter=completions_open,
     )
+    bottom_row = ConditionalContainer(bottom_window, filter=frame_footer_visible)
+    footer_row = ConditionalContainer(footer_window, filter=frame_footer_visible)
 
     input_frame = HSplit(
-        [top_window, input_window, menu_spacer, bottom_window, footer_window]
+        [top_window, input_window, menu_spacer, bottom_row, footer_row]
     )
 
     root_container = FloatContainer(
