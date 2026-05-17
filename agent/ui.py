@@ -344,6 +344,8 @@ def _accept_active_completion(buffer: Buffer) -> bool:
 
 
 _KITTY_CSI_U_ENTER_RE = re.compile(r"^\x1b\[13(?:;(\d+))?(?::\d+)?u$")
+_KITTY_CSI_U_D_RE = re.compile(r"^\x1b\[100(?:;(\d+))?(?::\d+)?u$")
+_XTERM_MODIFYOTHERKEYS_RE = re.compile(r"^\x1b\[27;(\d+);(\d+)~$")
 _ENHANCED_KEYBOARD_SEQUENCES_REGISTERED = False
 
 
@@ -384,8 +386,11 @@ def _register_enhanced_keyboard_sequences() -> None:
         "\x1b[13;2u",
         "\x1b[13;2:1u",
         "\x1b[13;2:3u",
+        "\x1b[100;9u",
+        "\x1b[27;9;100~",
     ):
-        ANSI_SEQUENCES.setdefault(sequence, Keys.ControlM)
+        key = Keys.ControlM if sequence.startswith("\x1b[13") else Keys.ControlD
+        ANSI_SEQUENCES.setdefault(sequence, key)
     _ENHANCED_KEYBOARD_SEQUENCES_REGISTERED = True
 
 
@@ -413,6 +418,46 @@ def _enhanced_keyboard_reporting() -> Iterator[None]:
 
 def _insert_input_newline(buffer: Buffer) -> None:
     buffer.newline(copy_margin=not in_paste_mode())
+
+
+def _clear_user_input(buffer: Buffer) -> None:
+    buffer.reset(Document())
+
+
+@Condition
+def _input_has_text() -> bool:
+    return bool(get_app().current_buffer.text)
+
+
+def _is_cmd_d_data(data: str) -> bool:
+    """True for Cmd+D / Ctrl+D encodings (clear input, not EOF)."""
+    if data == "\x04":
+        return True
+    match = _KITTY_CSI_U_D_RE.match(data)
+    if match is not None:
+        modifier = match.group(1)
+        if modifier is None:
+            return False
+        # Kitty: encoded value is 1 + bitmask; super (Cmd) is bit 3.
+        return (int(modifier) - 1) & 8 != 0
+    match = _XTERM_MODIFYOTHERKEYS_RE.match(data)
+    if match is not None and int(match.group(2)) == 100:
+        modifier = int(match.group(1))
+        return (modifier - 1) & 8 != 0
+    return False
+
+
+def _prompt_clear_input_key_bindings() -> KeyBindings:
+    """Cmd+D / Ctrl+D clears the prompt when it has text."""
+    kb = KeyBindings()
+
+    @kb.add("c-d", filter=_input_has_text, eager=True)
+    def _clear_on_cmd_d(event: KeyPressEvent) -> None:
+        if not _is_cmd_d_data(event.data):
+            return
+        _clear_user_input(event.current_buffer)
+
+    return kb
 
 
 def _prompt_enter_key_bindings() -> KeyBindings:
@@ -576,6 +621,7 @@ def _run_framed_user_prompt(
                 _prompt_newline_key_bindings(),
                 load_key_bindings(),
                 _prompt_enter_key_bindings(),
+                _prompt_clear_input_key_bindings(),
             ]
         ),
         style=style,
@@ -637,6 +683,7 @@ def _prompt_user_line(
                 [
                     _prompt_newline_key_bindings(),
                     _prompt_enter_key_bindings(),
+                    _prompt_clear_input_key_bindings(),
                 ]
             ),
             completer=completer,

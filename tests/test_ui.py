@@ -24,6 +24,8 @@ from agent.ui import (
     _USER_INPUT_PLACEHOLDER,
     _accept_active_completion,
     _configure_prompt_toolkit,
+    _clear_user_input,
+    _is_cmd_d_data,
     _is_shift_enter_data,
     _input_window_line_count,
     _user_input_placeholder,
@@ -80,6 +82,20 @@ def test_is_shift_enter_data_detects_xterm_shift_enter():
     assert _is_shift_enter_data("\x1b[13u") is False
     assert _is_shift_enter_data("\r") is False
     assert _is_shift_enter_data("\x0d") is False
+
+
+def test_is_cmd_d_data_detects_cmd_d_encodings():
+    assert _is_cmd_d_data("\x04") is True
+    assert _is_cmd_d_data("\x1b[100;9u") is True
+    assert _is_cmd_d_data("\x1b[27;9;100~") is True
+    assert _is_cmd_d_data("\x1b[100u") is False
+
+
+def test_clear_user_input_resets_buffer():
+    buffer = Buffer()
+    buffer.text = "hello"
+    _clear_user_input(buffer)
+    assert buffer.text == ""
 
 
 def test_accept_active_completion_uses_first_when_none_highlighted():
