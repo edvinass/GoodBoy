@@ -47,11 +47,16 @@ def test_format_models_section_includes_cost_policy_fields():
     assert "$" in text
 
 
-def test_format_cost_policy_section():
+def test_format_cost_policy_section_fixed_session():
     text = format_cost_policy_section()
-    assert "Cost policy" in text
-    assert "Escalation ladder" in text
-    assert "gpt-5.4-nano" in text
+    assert "session model fixed" in text.lower()
+    assert "Escalation ladder" not in text
+
+
+def test_format_cost_policy_section_autoswitch():
+    text = format_cost_policy_section(auto_model_switch=True)
+    assert "automatic switching enabled" in text
+    assert "Escalation ladder" not in text
 
 
 def test_resolve_reasoning_effort_non_reasoning_model():
@@ -101,15 +106,30 @@ def test_build_system_prompt_coding_agent_identity():
 def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-5.4-nano", "gpt-5.5"])
     assert "Cost policy" in prompt
-    assert "Escalate one tier at a time only after a failed" in prompt
-    assert "Configuration guide" in prompt
+    assert "session model fixed" in prompt.lower()
+    assert "Configuration (hosted tools only)" in prompt
     assert "switch_tools" in prompt
-    assert "switch_model" in prompt
+    assert "Configuration guide" not in prompt
+    assert "Do not set `model`" in prompt
     assert "reasoning_effort" in prompt
-    assert "separate turn" in prompt.lower() or "separate turns" in prompt.lower()
     assert "web_search" in prompt
     assert "run_shell" in prompt
+    assert "gpt-5.4-nano" not in prompt
+    assert "Reasoning effort catalog" not in prompt
+    assert "Available models" not in prompt
+
+
+def test_build_system_prompt_autoswitch_includes_model_catalogs():
+    prompt = build_system_prompt(
+        allowed_models=["gpt-5.4-nano", "gpt-5.5"],
+        auto_model_switch=True,
+    )
+    assert "Configuration guide" in prompt
+    assert "switch_model" in prompt
+    assert "Escalate one tier at a time only after a failed" not in prompt
+    assert "automatic switching enabled" in prompt
     assert "gpt-5.4-nano" in prompt
+    assert "Reasoning effort catalog" in prompt
 
 
 def test_build_system_prompt_visibility_without_debug():
@@ -150,7 +170,7 @@ def test_build_system_prompt_auto_model_switch_policy():
     assert "GOODBOY_AUTO_MODEL_SWITCH" in prompt
     assert "Turn 1" in prompt
     assert "routing" in prompt.lower()
-    assert "Escalate one tier at a time only after a failed" not in prompt
+    assert "session model fixed" not in prompt.lower()
 
 
 def test_build_system_prompt_visibility_with_debug():

@@ -62,6 +62,24 @@ _HARNESS_RULES = """## Harness rules (strict)
 - **thought**, **command**, **code**, **message**: as required by action.
 """
 
+_HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
+
+1. One JSON object per turn. No markdown fences or prose outside JSON.
+2. Small verifiable steps; read tool output before task_complete.
+3. **need_user_input** only when required info is missing (which file, which API). Never use it for permission — if the user said proceed/yes/go ahead, continue.
+4. Never re-ask the same question after a user clarification.
+5. **task_complete** only when the request is fully satisfied (or analysis-only task is done).
+6. **failed** when you cannot continue safely.
+7. `message` is user-facing: clear, professional, with concrete results when asked. No emojis or prose in `command`/`code`.
+
+## Routing fields (each turn)
+
+- **action** (required): run_shell | run_python | switch_tools | need_user_input | task_complete | failed.
+- **tools**: required for switch_tools (hosted tool IDs for next call).
+- **thought**, **command**, **code**, **message**: as required by action.
+
+Session **model** and **reasoning_effort** are fixed for this run (user sets them with `/model` and `/reasoning`). Do not set `model` or `reasoning_effort` in JSON."""
+
 _BASE_RULES = "\n\n".join(
     [
         _CODING_AGENT_IDENTITY,
@@ -73,8 +91,18 @@ _BASE_RULES = "\n\n".join(
 )
 
 
-def format_configuration_guide_section() -> str:
+def format_configuration_guide_section(*, auto_model_switch: bool = False) -> str:
     """Step-by-step instructions for API, model, reasoning, and tool changes."""
+    if not auto_model_switch:
+        return """## Configuration (hosted tools only)
+
+Automatic model switching is **off**. Session model and reasoning effort are fixed — the user changes them with `/model` and `/reasoning`. Do not set `model` or `reasoning_effort` in JSON.
+
+**switch_tools** enables hosted OpenAI tools for subsequent LLM calls:
+`{"action": "switch_tools", "tools": ["web_search"]}`
+Don't re-call if already active. Check **Active API** in the user message after switch_tools.
+
+If the current session model lacks a hosted tool, use **need_user_input** and ask the user to run `/model` with a model that supports the tool."""
     return """## Configuration guide (model, reasoning, hosted tools)
 
 **switch_tools** is a routing action. **model** and **reasoning_effort** are optional fields on any other action (including **switch_model** for a model-only turn) and configure the **next** LLM call only. Never set model or reasoning_effort on switch_tools.
@@ -132,6 +160,19 @@ SYSTEM_PROMPT = _BASE_RULES
 _JSON_SCHEMA = AgentStep.model_json_schema()
 
 
+def _base_rules_section(*, auto_model_switch: bool) -> str:
+    harness = _HARNESS_RULES if auto_model_switch else _HARNESS_RULES_FIXED_SESSION
+    return "\n\n".join(
+        [
+            _CODING_AGENT_IDENTITY,
+            _CORE_OBJECTIVE,
+            _CODING_METHODOLOGY,
+            _AVAILABLE_TOOLS,
+            harness,
+        ]
+    )
+
+
 def build_system_prompt(
     *,
     allowed_models: list[str],
@@ -144,8 +185,8 @@ def build_system_prompt(
     """Compose full system prompt with catalogs and cost policy."""
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
-        _BASE_RULES,
-        format_configuration_guide_section(),
+        _base_rules_section(auto_model_switch=auto_model_switch),
+        format_configuration_guide_section(auto_model_switch=auto_model_switch),
         format_user_visibility_section(
             debug=debug,
             show_thoughts=show_thoughts,
@@ -153,10 +194,15 @@ def build_system_prompt(
         ),
         format_hosted_tools_reference(),
         format_cost_policy_section(auto_model_switch=auto_model_switch),
-        format_models_section(allowed_models),
-        format_reasoning_section(),
-        format_tools_section(tool_specs),
     ]
+    if auto_model_switch:
+        sections.extend(
+            [
+                format_models_section(allowed_models),
+                format_reasoning_section(),
+            ]
+        )
+    sections.append(format_tools_section(tool_specs))
     return "\n\n".join(sections)
 
 

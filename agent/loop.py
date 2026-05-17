@@ -596,6 +596,23 @@ class AgentLoop:
         if not is_valid_action(step.action):
             return f"Invalid action '{step.action.value}'."
 
+        if not self._auto_model_switch_enabled():
+            if step.action == AgentAction.SWITCH_MODEL:
+                return (
+                    "switch_model is disabled while automatic model switching is off. "
+                    "The user sets the session model with /model."
+                )
+            if step.model is not None:
+                return (
+                    "Do not set model in JSON while automatic model switching is off. "
+                    "The user sets the session model with /model."
+                )
+            if step.reasoning_effort is not None:
+                return (
+                    "Do not set reasoning_effort in JSON while automatic model "
+                    "switching is off. The user sets default reasoning with /reasoning."
+                )
+
         if step.action in _SWITCH_TOOLS_ACTIONS:
             if step.model is not None:
                 return (
@@ -634,6 +651,8 @@ class AgentLoop:
         return None
 
     def _apply_pending_routing(self, step: AgentStep) -> None:
+        if not self._auto_model_switch_enabled():
+            return
         if step.model is not None:
             self._pending_model = step.model
             self._default_model = step.model
@@ -648,11 +667,17 @@ class AgentLoop:
             if not model_supports_openai_tool(call_model, tool):
                 suggestion = cheapest_model_with_tools(self._allowed_models, tools)
                 if suggestion:
+                    if self._auto_model_switch_enabled():
+                        return (
+                            f"Model '{call_model}' does not support hosted tool '{tool}'. "
+                            f"On your next turn, set model to '{suggestion}' "
+                            "(run_shell/switch_model; do not call switch_tools again) "
+                            "and continue the task."
+                        )
                     return (
                         f"Model '{call_model}' does not support hosted tool '{tool}'. "
-                        f"On your next turn, set model to '{suggestion}' "
-                        "(run_shell/switch_model; do not call switch_tools again) "
-                        "and continue the task."
+                        f"Use need_user_input and ask the user to run /model and choose "
+                        f"'{suggestion}', then continue the task."
                     )
                 return (
                     f"Model '{call_model}' does not support hosted tool '{tool}' and "

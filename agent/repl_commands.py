@@ -115,7 +115,13 @@ def slash_command_display_meta(
     """Completion description; toggle commands include current on/off (default off)."""
     if command.name == "reasoning":
         current = default_reasoning_effort or "not set"
-        return f"{command.description} (current: {current})"
+        if auto_model_switch:
+            return f"{command.description} (current: {current})"
+        return (
+            f"{command.description} (session: {current}; agent cannot change per turn)"
+        )
+    if command.name == "model" and not auto_model_switch:
+        return f"{command.description} (session; agent cannot change per turn)"
     state_key = _TOGGLE_COMMAND_STATE.get(command.name)
     if state_key is None:
         return command.description

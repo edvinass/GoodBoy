@@ -431,6 +431,10 @@ Valid: {tool_ids}
 Other IDs: see model catalog — not every model supports every tool."""
 
 
+_FIXED_SESSION_COST_POLICY = """## Cost policy (session model fixed)
+Automatic model switching is **off**. Use efficient steps: explore with run_shell, small edits, verify with tests/linters.
+The session model and reasoning effort are fixed unless the user changes them with `/model` or `/reasoning` — do not set `model` or `reasoning_effort` in JSON."""
+
 _STRICT_COST_POLICY = """## Cost policy (required)
 - Pick the cheapest model + lowest reasoning effort that can succeed.
 - Simple steps (ls/cat/echo/single-file edit/running tests/formatting): minimal tier, no reasoning effort.
@@ -460,7 +464,7 @@ After turn 1, change **model** and **reasoning_effort** between turns (including
 def format_cost_policy_section(*, auto_model_switch: bool = False) -> str:
     if auto_model_switch:
         return _AUTO_MODEL_SWITCH_POLICY
-    return _STRICT_COST_POLICY
+    return _FIXED_SESSION_COST_POLICY
 
 
 def assert_catalog_covers_model_choices() -> None:

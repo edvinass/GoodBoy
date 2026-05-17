@@ -552,9 +552,8 @@ class ConversationUI:
 
     def _iter_history_block(self, kind: str, data: dict[str, Any]) -> Iterator[RenderableType | str]:
         if kind == "startup":
-            model = data.get("model", self.session_model)
             yield self._panel(
-                Text.from_markup(format_startup(model=model)),
+                Text.from_markup(self._startup_markup(data)),
                 border_style=_BRAND_STYLE,
                 padding=(0, 2),
             )
@@ -794,14 +793,36 @@ class ConversationUI:
     def session_model(self) -> str:
         return self._session_model or get_settings().default_model
 
+    def _startup_data(self) -> dict[str, Any]:
+        return {
+            "model": self.session_model,
+            "auto_model_switch": self.auto_model_switch,
+            "reasoning_effort": self._session_reasoning,
+        }
+
+    def _startup_markup(self, data: dict[str, Any] | None = None) -> str:
+        payload = data or self._startup_data()
+        return format_startup(
+            model=payload.get("model", self.session_model),
+            auto_model_switch=bool(payload.get("auto_model_switch")),
+            reasoning_effort=payload.get("reasoning_effort"),
+        )
+
+    def refresh_startup_banner(self) -> None:
+        """Update the startup panel after session routing toggles."""
+        data = self._startup_data()
+        for index, (kind, _item) in enumerate(self._history):
+            if kind == "startup":
+                self._history[index] = ("startup", data)
+                break
+        else:
+            return
+        self._sync_redraw()
+
     def set_session_model(self, model: str) -> None:
         """Update the model shown on the startup banner for this session."""
         self._session_model = model
-        for index, (kind, data) in enumerate(self._history):
-            if kind == "startup":
-                self._history[index] = ("startup", {"model": model})
-                break
-        self._sync_redraw()
+        self.refresh_startup_banner()
 
     @property
     def session_reasoning(self) -> str | None:
@@ -810,9 +831,10 @@ class ConversationUI:
     def set_session_reasoning(self, effort: str | None) -> None:
         """Update the default reasoning effort used for slash-command completion."""
         self._session_reasoning = effort
+        self.refresh_startup_banner()
 
     def print_startup(self) -> None:
-        self._record("startup", model=self.session_model)
+        self._record("startup", **self._startup_data())
 
     def clear_session(self) -> None:
         """Clear the on-screen transcript and show the startup banner again."""
@@ -822,7 +844,7 @@ class ConversationUI:
         if self._is_interactive_tty():
             with self._display_lock:
                 self._console.clear()
-        self._record("startup", model=self.session_model)
+        self._record("startup", **self._startup_data())
 
     def print_task_complete(self) -> None:
         if not self.verbose:

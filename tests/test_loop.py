@@ -264,12 +264,13 @@ def test_loop_model_field_on_run_shell_applied_on_next_call(tmp_path: Path):
         max_turns=5,
         allowed_models=_ALLOWED,
         model="gpt-5.4-nano",
+        ui=ConversationUI(auto_model_switch=True),
         llm_call=tracking_llm,
     )
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-5.4-nano"
+    assert calls[0]["model"] == "gpt-4.1-nano"
     assert calls[1]["model"] == "gpt-5.4-mini"
     assert loop.session_model == "gpt-5.4-mini"
 
@@ -399,12 +400,13 @@ def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
         max_turns=5,
         allowed_models=_ALLOWED,
         model="gpt-5.4-nano",
+        ui=ConversationUI(auto_model_switch=True),
         llm_call=tracking_llm,
     )
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-5.4-nano"
+    assert calls[0]["model"] == "gpt-4.1-nano"
     assert calls[1]["model"] == "gpt-5.4-mini"
     assert loop.session_model == "gpt-5.4-mini"
 
@@ -453,6 +455,7 @@ def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
+        ui=ConversationUI(auto_model_switch=True),
         llm_call=llm,
     )
     result = loop.run("task")
@@ -519,6 +522,7 @@ def test_loop_switch_tools_rejects_reasoning_on_same_turn(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
+        ui=ConversationUI(auto_model_switch=True),
         llm_call=llm,
     )
     result = loop.run("weather in London")
@@ -582,6 +586,7 @@ def test_loop_reasoning_effort_rejected_for_non_reasoning_model(tmp_path: Path):
         max_turns=5,
         allowed_models=_ALLOWED,
         model="gpt-4.1-nano",
+        ui=ConversationUI(auto_model_switch=True),
         llm_call=llm,
     )
     result = loop.run("task")
@@ -690,3 +695,68 @@ def test_loop_resume_after_stop_continues_from_existing_context(tmp_path: Path):
     assert second.message == "resumed"
     assert calls["n"] == 2
     assert len(second.context.turns) == 2
+
+
+def test_loop_rejects_model_when_autoswitch_off(tmp_path: Path):
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                {
+                    "action": "run_shell",
+                    "command": "echo hi",
+                    "model": "gpt-5.4-mini",
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        ui=ConversationUI(auto_model_switch=False),
+        llm_call=llm,
+    )
+    result = loop.run("task")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any("automatic model switching is off" in e for e in result.context.parse_errors)
+
+
+def test_loop_rejects_reasoning_effort_when_autoswitch_off(tmp_path: Path):
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                {
+                    "action": "task_complete",
+                    "message": "ok",
+                    "reasoning_effort": "high",
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="ok",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-5.4-mini",
+        ui=ConversationUI(auto_model_switch=False),
+        llm_call=llm,
+    )
+    result = loop.run("task")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any("reasoning_effort" in e and "automatic model switching is off" in e for e in result.context.parse_errors)

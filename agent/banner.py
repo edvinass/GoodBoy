@@ -26,7 +26,8 @@ DESCRIPTION = (
     "explores the repo, edits files, runs tests and builds, and reports back "
     "when done. Type @ to reference a file or folder in your message; type / "
     "for commands (/clear to reset, /model to change the LLM, /reasoning for "
-    "default reasoning effort, /exit to quit)."
+    "default reasoning effort, /autoswitch to let the agent pick models, "
+    "/exit to quit)."
 )
 
 
@@ -39,11 +40,27 @@ def get_version() -> str:
         return match.group(1) if match else "unknown"
 
 
-def format_startup(*, model: str) -> str:
+def format_startup(
+    *,
+    model: str,
+    auto_model_switch: bool = False,
+    reasoning_effort: str | None = None,
+) -> str:
     ver = get_version()
+    routing = (
+        "[dim]Routing[/] [green]agent[/] (/autoswitch on)"
+        if auto_model_switch
+        else "[dim]Routing[/] [yellow]session[/] (/model, /reasoning; /autoswitch off)"
+    )
+    reasoning_line = ""
+    if reasoning_effort:
+        reasoning_line = (
+            f"\n[dim]Reasoning[/] [{_BRAND_STYLE}]{reasoning_effort}[/]"
+        )
     return (
         f"{_brown_dog_art()}\n"
         f"[bold {_BRAND_STYLE}]GoodBoy[/] [dim]v{ver}[/]\n"
-        f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]\n"
+        f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
+        f"{routing}\n"
         f"{DESCRIPTION}"
     )

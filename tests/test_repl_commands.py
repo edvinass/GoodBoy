@@ -44,9 +44,19 @@ def test_slash_command_display_meta_shows_toggle_state():
     )
     assert "(off)" not in slash_command_display_meta(commands["clear"])
     assert "(on)" not in slash_command_display_meta(commands["model"])
-    assert "current: not set" in slash_command_display_meta(commands["reasoning"])
+    assert "session: not set" in slash_command_display_meta(commands["reasoning"])
     assert "current: low" in slash_command_display_meta(
-        commands["reasoning"], default_reasoning_effort="low"
+        commands["reasoning"],
+        default_reasoning_effort="low",
+        auto_model_switch=True,
+    )
+    assert "session" in slash_command_display_meta(
+        commands["reasoning"],
+        default_reasoning_effort="low",
+        auto_model_switch=False,
+    )
+    assert "agent cannot change" in slash_command_display_meta(
+        commands["model"], auto_model_switch=False
     )
 
 

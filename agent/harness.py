@@ -213,13 +213,15 @@ class AgentHarness:
         if self._ui.auto_model_switch:
             self._ui.print_notice(
                 "Automatic model switching on — turn 1 uses the cheapest model "
-                "to pick the next model; the agent may change models between "
-                "turns when needed."
+                "to pick the next model; the agent may change models and "
+                "reasoning effort between turns when needed."
             )
         else:
             self._ui.print_notice(
-                "Automatic model switching off — strict cost policy applies."
+                "Automatic model switching off — model and reasoning are session-only "
+                "(/model, /reasoning). The agent cannot change them per turn."
             )
+        self._ui.refresh_startup_banner()
 
     def _change_model(self) -> None:
         try:
@@ -234,6 +236,7 @@ class AgentHarness:
         self._loop.set_session_model(chosen)
         save_env({OPENAI_MODEL_VAR: chosen})
         self._ui.set_session_model(chosen)
+        self._loop.refresh_system_prompt()
         label = MODEL_LABELS.get(chosen, chosen)
         self._ui.print_notice(f"Model set to {label} ({chosen}).")
 
@@ -248,6 +251,7 @@ class AgentHarness:
 
         self._loop.set_session_reasoning(chosen)
         self._ui.set_session_reasoning(chosen)
+        self._loop.refresh_system_prompt()
         if chosen is None:
             save_env({GOODBOY_REASONING_EFFORT_VAR: ""})
             self._ui.print_notice(

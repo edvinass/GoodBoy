@@ -65,6 +65,9 @@ class FakeUI:
     def set_session_model(self, model: str) -> None:
         self._session_model = model
 
+    def refresh_startup_banner(self) -> None:
+        pass
+
 
 def _harness(outcome: LoopOutcome, prompts: list[str]) -> AgentHarness:
     loop = Mock()
