@@ -249,6 +249,26 @@ def _user_prompt_key_bindings() -> KeyBindings:
     return kb
 
 
+_PROMPT_TOOLKIT_CONFIGURED = False
+
+
+def _configure_prompt_toolkit() -> None:
+    """Avoid CPR on terminals that mishandle cursor position reports."""
+    global _PROMPT_TOOLKIT_CONFIGURED
+    if _PROMPT_TOOLKIT_CONFIGURED:
+        return
+    _PROMPT_TOOLKIT_CONFIGURED = True
+    if os.environ.get("PROMPT_TOOLKIT_NO_CPR") == "1":
+        return
+    term = os.environ.get("TERM", "").lower()
+    if term in ("dumb", "unknown"):
+        os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
+        return
+    # Cursor and VS Code integrated terminals often leak CPR as visible input (e.g. "28;1R").
+    if os.environ.get("TERM_PROGRAM", "").lower() == "vscode":
+        os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
+
+
 def _prompt_user_line(
     paste_state: _PasteState,
     *,
@@ -258,6 +278,7 @@ def _prompt_user_line(
     default_reasoning_effort: str | None = None,
 ) -> str | None:
     """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
+    _configure_prompt_toolkit()
     root = (workspace or resolve_workspace()).resolve()
     style = merge_styles(
         [

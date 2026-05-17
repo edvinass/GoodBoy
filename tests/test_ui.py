@@ -12,12 +12,14 @@ from prompt_toolkit.buffer import Buffer, CompletionState
 from prompt_toolkit.completion import Completion
 from prompt_toolkit.document import Document
 
+import agent.ui as ui_module
 from agent.ui import (
     ConversationUI,
     _AutoWidthConsole,
     _PasteState,
     _THEME,
     _accept_active_completion,
+    _configure_prompt_toolkit,
     _wrap_long_lines,
     format_pasted_text_label,
 )
@@ -72,6 +74,23 @@ def test_paste_state_single_line_returns_none():
     state = _PasteState()
     assert state.register_paste("hello") is None
     assert state.stored is None
+
+
+def test_configure_prompt_toolkit_disables_cpr_in_vscode(monkeypatch):
+    monkeypatch.delenv("PROMPT_TOOLKIT_NO_CPR", raising=False)
+    monkeypatch.setenv("TERM_PROGRAM", "vscode")
+    monkeypatch.setenv("TERM", "xterm-256color")
+    ui_module._PROMPT_TOOLKIT_CONFIGURED = False
+    _configure_prompt_toolkit()
+    assert os.environ.get("PROMPT_TOOLKIT_NO_CPR") == "1"
+
+
+def test_configure_prompt_toolkit_respects_existing_flag(monkeypatch):
+    monkeypatch.setenv("PROMPT_TOOLKIT_NO_CPR", "1")
+    monkeypatch.setenv("TERM_PROGRAM", "Apple_Terminal")
+    ui_module._PROMPT_TOOLKIT_CONFIGURED = False
+    _configure_prompt_toolkit()
+    assert os.environ.get("PROMPT_TOOLKIT_NO_CPR") == "1"
 
 
 def test_prompt_user_multiline(monkeypatch):
