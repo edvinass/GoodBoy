@@ -20,6 +20,9 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.clipboard import ClipboardData
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document, PasteMode
+from prompt_toolkit.filters import has_completions
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
 from prompt_toolkit.styles import Style, merge_styles
 from questionary.constants import DEFAULT_STYLE
@@ -225,6 +228,27 @@ class _UserInputCompleter(Completer):
             )
 
 
+def _accept_active_completion(buffer: Buffer) -> bool:
+    """Apply the highlighted completion and close the menu."""
+    state = buffer.complete_state
+    if state is None or not state.completions:
+        return False
+    completion = state.current_completion or state.completions[0]
+    buffer.apply_completion(completion)
+    return True
+
+
+def _user_prompt_key_bindings() -> KeyBindings:
+    """Enter accepts a visible completion instead of submitting the prompt."""
+    kb = KeyBindings()
+
+    @kb.add("enter", filter=has_completions, eager=True)
+    def _accept_completion_on_enter(event: KeyPressEvent) -> None:
+        _accept_active_completion(event.current_buffer)
+
+    return kb
+
+
 def _prompt_user_line(
     paste_state: _PasteState,
     *,
@@ -259,6 +283,7 @@ def _prompt_user_line(
         style=style,
         multiline=False,
         placeholder=_USER_INPUT_PLACEHOLDER,
+        key_bindings=_user_prompt_key_bindings(),
         completer=_UserInputCompleter(
             root,
             show_commands=show_commands,

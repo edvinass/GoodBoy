@@ -8,11 +8,16 @@ import pytest
 from rich.console import Console
 
 from agent.types import AgentAction, AgentStep, ToolResult
+from prompt_toolkit.buffer import Buffer, CompletionState
+from prompt_toolkit.completion import Completion
+from prompt_toolkit.document import Document
+
 from agent.ui import (
     ConversationUI,
     _AutoWidthConsole,
     _PasteState,
     _THEME,
+    _accept_active_completion,
     _wrap_long_lines,
     format_pasted_text_label,
 )
@@ -20,6 +25,39 @@ from agent.ui import (
 
 def test_format_pasted_text_label():
     assert format_pasted_text_label(1, 53) == "[Pasted text #1 +52 lines]"
+
+
+def test_accept_active_completion_applies_highlighted_choice():
+    buffer = Buffer()
+    buffer.text = "/cl"
+    buffer.cursor_position = len(buffer.text)
+    buffer.complete_state = CompletionState(
+        original_document=buffer.document,
+        completions=[Completion("clear", start_position=-2)],
+    )
+    buffer.go_to_completion(0)
+
+    assert _accept_active_completion(buffer) is True
+    assert buffer.text == "/clear"
+    assert buffer.complete_state is None
+
+
+def test_accept_active_completion_uses_first_when_none_highlighted():
+    buffer = Buffer()
+    buffer.text = "/"
+    buffer.cursor_position = len(buffer.text)
+    buffer.complete_state = CompletionState(
+        original_document=buffer.document,
+        completions=[
+            Completion("clear", start_position=0),
+            Completion("exit", start_position=0),
+        ],
+        complete_index=None,
+    )
+
+    assert _accept_active_completion(buffer) is True
+    assert buffer.text == "/clear"
+    assert buffer.complete_state is None
 
 
 def test_paste_state_register_multiline():
