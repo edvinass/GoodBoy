@@ -383,91 +383,77 @@ def _format_openai_tools(spec: ModelSpec) -> str:
 
 def format_models_section(allowed_ids: list[str]) -> str:
     lines = [
-        "## Available models (set model for the *next* LLM call)",
-        "Listed cheapest first. Pick the cheapest tier that can succeed.",
+        "## Available models (set `model` for the *next* LLM call; cheapest first)",
         "",
     ]
     for spec in models_for_prompt(allowed_ids):
         price = (
-            f"${spec.price_input_per_1m:.2f}/${spec.price_output_per_1m:.2f} "
-            "in/out per 1M"
+            f"${spec.price_input_per_1m:.2f}/${spec.price_output_per_1m:.2f}/1M"
         )
         header = (
             f"- **{spec.id}** [{spec.cost_tier.value}, {price}, "
-            f"{spec.family.value}]"
+            f"{spec.family.value}] — {spec.best_for} Avoid: {spec.avoid_when}"
         )
         lines.append(header)
-        lines.append(f"  - Best for: {spec.best_for}")
-        lines.append(f"  - Avoid when: {spec.avoid_when}")
+        extras: list[str] = []
         if spec.reasoning and spec.reasoning_efforts:
-            efforts = ", ".join(spec.reasoning_efforts)
-            lines.append(f"  - Reasoning efforts: {efforts}")
-        lines.append(f"  - OpenAI hosted tools: {_format_openai_tools(spec)}")
+            extras.append(
+                "reasoning_efforts: " + ", ".join(spec.reasoning_efforts)
+            )
+        extras.append(f"hosted tools: {_format_openai_tools(spec)}")
+        lines.append("  - " + "; ".join(extras))
     return "\n".join(lines)
 
 
 def format_reasoning_section() -> str:
     lines = [
         "## Reasoning effort catalog",
-        "Use `model` and/or `reasoning_effort` on any action except switch_tools to configure",
-        "the *next* LLM call (same turn can still run shell/python).",
-        "reasoning_effort is only valid when the *next* model (pending `model` or current default) is a",
-        "reasoning model and lists that level in Available models below. Omit otherwise.",
-        "",
-        "How to change (example — escalate after a failed shell turn):",
-        '  {"action": "run_shell", "command": "pytest -q", "reasoning_effort": "medium"}',
-        "",
-        "Rules:",
-        "- One change per concern when possible: do not set reasoning_effort on switch_tools.",
-        "- Start low (none/low); increase only after ambiguity or repeated failure.",
-        "- gpt-4.1-* (non-reasoning): omit reasoning_effort entirely.",
+        "Set `reasoning_effort` on any action except switch_tools (configures the next LLM call).",
+        "Valid only when the next model is a reasoning model that lists the level below. Omit on gpt-4.1-*.",
+        "Start low; escalate one level only after ambiguity or repeated failure.",
         "",
     ]
     for spec in REASONING_EFFORT_CATALOG:
-        lines.append(f"- **{spec.level}** (cost: {spec.cost_hint})")
-        lines.append(f"  - Best for: {spec.best_for}")
-        lines.append(f"  - Avoid when: {spec.avoid_when}")
+        lines.append(
+            f"- **{spec.level}** (cost {spec.cost_hint}): {spec.best_for}"
+        )
     return "\n".join(lines)
 
 
 def format_hosted_tools_reference() -> str:
     tool_ids = ", ".join(f'"{t.value}"' for t in OpenAITool)
     return f"""## Hosted tool IDs (for switch_tools `tools` array)
-Valid values: {tool_ids}
-- **web_search**: live web pages (weather, news, prices, current events).
-- **file_search**: search uploaded vector stores (not local files — use run_shell).
+Valid: {tool_ids}
+- **web_search**: live web pages (news, prices, current events).
+- **file_search**: uploaded vector stores (not local files — use run_shell).
 - **code_interpreter**: sandboxed Python/charts in OpenAI (not run_python).
-- Other IDs: see model catalog — not every model supports every tool."""
+Other IDs: see model catalog — not every model supports every tool."""
 
 
 _STRICT_COST_POLICY = """## Cost policy (required)
-- Minimize spend: always pick the cheapest model + lowest reasoning effort that can succeed.
-- Simple task examples (use minimal tier): ls, cat, echo, single-file edit, running tests, formatting.
+- Pick the cheapest model + lowest reasoning effort that can succeed.
+- Simple steps (ls/cat/echo/single-file edit/running tests/formatting): minimal tier, no reasoning effort.
 - Do NOT use gpt-5.5 or high/xhigh reasoning for simple tasks.
 - Escalate one tier at a time only after a failed or ambiguous turn.
-- Prefer gpt-5.4-nano, gpt-5-nano, or gpt-4.1-nano for the first planning turn unless the task is obviously hard.
-- When setting reasoning_effort on gpt-5.x: default none or low; medium only if needed; high/xhigh only if stuck.
+- Prefer gpt-5.4-nano, gpt-5-nano, or gpt-4.1-nano for turn 1 unless the task is obviously hard.
 
 ## Escalation ladder
-1. Turn 1 / simple: gpt-5.4-nano, gpt-5-nano, or gpt-4.1-nano — no reasoning effort.
-2. Mild complexity: gpt-5-mini, gpt-4.1-mini, or gpt-5.4-nano + reasoning.effort=low.
+1. Simple / turn 1: gpt-5.4-nano, gpt-5-nano, or gpt-4.1-nano — no reasoning effort.
+2. Mild: gpt-5-mini, gpt-4.1-mini, or gpt-5.4-nano + reasoning.effort=low.
 3. Multi-step or one failure: gpt-5.4-mini + medium max.
 4. Professional coding / still stuck: gpt-5.4 before gpt-5.5.
 5. Messy tool output: gpt-5.4-mini + medium.
-6. Still stuck (2+ failed turns): gpt-4.1 (long context only if stdout/history is huge).
+6. Stuck 2+ turns: gpt-4.1 (long context if stdout/history is huge).
 7. Last resort: gpt-5.5 + high — never for step 1."""
 
 _AUTO_MODEL_SWITCH_POLICY = """## Model routing (automatic switching enabled)
-The user enabled automatic model switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`).
-Turn 1 of each new task runs on the cheapest allowlisted model (routing). On that turn you **must** set **model** (and optional **reasoning_effort**) on any action that needs a follow-up turn, or use **switch_model** to choose the model for turn 2+ without running a tool. Pick the cheapest allowlisted model that can handle the rest of the task.
+User enabled automatic switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`). Turn 1 of each task runs on the cheapest allowlisted model (routing). On that turn you **must** set **model** (and optional **reasoning_effort**) on the action, or use **switch_model**, to pick the cheapest model that can handle turn 2+.
 
-After turn 1 you may change **model** and **reasoning_effort** between turns — including **switch_model** — when complexity, failures, hosted-tool needs, or long context justify it. Do not wait for repeated failures if a stronger model is clearly needed.
+After turn 1, change **model** and **reasoning_effort** between turns (including via **switch_model**) when complexity, failures, hosted-tool needs, or long context justify it — don't wait for repeated failures. Step down to a cheaper model once the hard part is done.
 
-- Escalate proactively when the task is hard, ambiguous, or stuck.
-- Prefer setting **model** on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
-- After the hard part is done, step down to a cheaper model for remaining simple work.
-- Do NOT use gpt-5.5 or high/xhigh reasoning for trivial steps (ls, cat, single obvious edit).
-- When setting reasoning_effort on gpt-5.x: default none or low; medium when needed; high/xhigh only when stuck."""
+- Prefer setting `model` on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
+- Don't use gpt-5.5 or high/xhigh reasoning for trivial steps.
+- reasoning_effort on gpt-5.x: default none/low; medium when needed; high/xhigh only when stuck."""
 
 
 def format_cost_policy_section(*, auto_model_switch: bool = False) -> str:

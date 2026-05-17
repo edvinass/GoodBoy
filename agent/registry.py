@@ -90,19 +90,11 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
     specs = tools if tools is not None else DEFAULT_TOOLS
     lines = [
         "## Harness tools (local codebase work)",
-        "Set **action** to a tool below for this turn, or a terminal action "
-        "(need_user_input, task_complete, failed). There is no separate read_file/write_file "
-        "action — use run_shell to inspect and modify the repository.",
+        "Set `action` to a tool below, or a terminal action (need_user_input, task_complete, failed). No read_file/write_file — use run_shell.",
         "",
     ]
     for spec in specs:
-        lines.append(f"- **{spec.name}**: {spec.description}")
-        lines.append(f"  - Best for: {spec.when_to_use}")
-        lines.append(f"  - Avoid when: {spec.avoid_when}")
-    lines.append("")
-    lines.append(
-        "Routing: optional model/reasoning_effort fields, switch_model (model-only), "
-        "switch_tools (hosted tools; see hosted tools section). "
-        "Terminal: need_user_input, task_complete, failed."
-    )
+        lines.append(
+            f"- **{spec.name}**: {spec.description} Best for: {spec.when_to_use} Avoid: {spec.avoid_when}"
+        )
     return "\n".join(lines)
