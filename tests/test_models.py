@@ -41,7 +41,7 @@ def test_models_sorted_cheapest_first():
 def test_format_models_section_includes_cost_policy_fields():
     text = format_models_section(["gpt-5.4-nano", "gpt-5.5"])
     assert "gpt-5.4-nano" in text
-    assert "minimal" in text
+    assert "low" in text
     assert "gpt-5.5" in text
     assert "premium" in text
     assert "$" in text

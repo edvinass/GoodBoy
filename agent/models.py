@@ -57,7 +57,8 @@ _GPT41_OPENAI_TOOLS: FrozenSet[OpenAITool] = frozenset(
     }
 )
 
-_GPT5_REASONING = ("none", "minimal", "low", "medium", "high", "xhigh")
+_GPT5_REASONING = ("none", "low", "medium", "high", "xhigh")
+_GPT5_LEGACY_REASONING = ("minimal", "low", "medium", "high")
 
 
 @dataclass(frozen=True)
@@ -129,7 +130,7 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         price_cached=0.005,
         price_out=0.40,
         reasoning=True,
-        reasoning_efforts=_GPT5_REASONING,
+        reasoning_efforts=_GPT5_LEGACY_REASONING,
         openai_tools=_NANO_OPENAI_TOOLS,
     ),
     "gpt-5.4-nano": _spec(
@@ -155,7 +156,7 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         price_cached=0.025,
         price_out=2.00,
         reasoning=True,
-        reasoning_efforts=_GPT5_REASONING,
+        reasoning_efforts=_GPT5_LEGACY_REASONING,
         openai_tools=_FULL_OPENAI_TOOLS,
     ),
     "gpt-4.1-mini": _spec(
@@ -191,7 +192,7 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         price_cached=0.125,
         price_out=10.00,
         reasoning=True,
-        reasoning_efforts=_GPT5_REASONING,
+        reasoning_efforts=_GPT5_LEGACY_REASONING,
         openai_tools=_FULL_OPENAI_TOOLS,
     ),
     "gpt-5.4": _spec(
