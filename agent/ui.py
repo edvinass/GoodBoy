@@ -334,12 +334,23 @@ def _accept_active_completion(buffer: Buffer) -> bool:
 
 
 def _user_prompt_key_bindings() -> KeyBindings:
-    """Enter accepts a visible completion instead of submitting the prompt."""
+    """Enter submits, or accepts a visible completion when the menu is open."""
     kb = KeyBindings()
 
     @kb.add("enter", filter=has_completions, eager=True)
     def _accept_completion_on_enter(event: KeyPressEvent) -> None:
         _accept_active_completion(event.current_buffer)
+
+    return kb
+
+
+def _prompt_submit_key_bindings() -> KeyBindings:
+    """Enter submits the prompt (PromptSession adds this; framed layout must too)."""
+    kb = KeyBindings()
+
+    @kb.add("enter", filter=~has_completions)
+    def _submit_on_enter(event: KeyPressEvent) -> None:
+        event.current_buffer.validate_and_handle()
 
     return kb
 
@@ -446,6 +457,7 @@ def _run_framed_user_prompt(
             [
                 load_key_bindings(),
                 _user_prompt_key_bindings(),
+                _prompt_submit_key_bindings(),
             ]
         ),
         style=style,
