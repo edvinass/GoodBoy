@@ -78,8 +78,10 @@ Common options:
 - `-f` / `--show-thoughts`: show model thoughts on each step
 - `-v` / `--verbose`: show thoughts, tool/model switches, and task status lines
 - `-m` / `--show-model`: print the model used on each agent response
-- `-c` / `--show-commands`: print shell/Python commands the agent runs and their stdout/stderr
-- `-d` / `--debug`: show stdout/stderr from shell and Python tool runs
+- `-c` / `--show-commands`: print shell/Python commands the agent runs (not their output)
+- `/commands`: toggle command visibility during a session (same as `-c`)
+- `/autoswitch`: toggle automatic model switching (agent may escalate models between turns)
+- `-d` / `--debug`: show commands and stdout/stderr from shell and Python tool runs
 - `-i` / `--debug-input`: print the full prompt sent to the model each turn
 - `-o` / `--debug-output`: print the model’s raw response in full each turn
 
@@ -90,6 +92,8 @@ GoodBoy reads configuration from `.env` (and also supports related exported env 
 Key variables:
 - `OPENAI_API_KEY` – your OpenAI API key
 - `OPENAI_MODEL` – default model id (used when selecting the model for a new run)
+- `GOODBOY_SHOW_COMMANDS` – when `true`, show shell/Python commands (no output); updated by `/commands`
+- `GOODBOY_AUTO_MODEL_SWITCH` – when `true`, allow proactive model escalation; updated by `/autoswitch`
 
 Agent behavior:
 - `GOODBOY_MAX_TURNS` – maximum agent turns per task (default: `40`)

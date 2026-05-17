@@ -95,17 +95,25 @@ class AgentLoop:
         self._hosted_tools: tuple[str, ...] = ()
         self._llm_call = llm_call or complete_structured
         self._ui = ui
-        debug_mode = (
-            (ui.show_commands or ui.debug) if ui is not None else False
-        )
-        thoughts_visible = (
-            (ui.show_thoughts or ui.verbose) if ui is not None else False
-        )
-        self._instructions = build_system_prompt(
+        self._instructions = self._build_instructions()
+
+    def _build_instructions(self) -> str:
+        ui = self._ui
+        return build_system_prompt(
             allowed_models=self._allowed_models,
-            debug=debug_mode,
-            show_thoughts=thoughts_visible,
+            debug=ui.debug if ui is not None else False,
+            show_thoughts=(
+                (ui.show_thoughts or ui.verbose) if ui is not None else False
+            ),
+            show_commands=ui.show_commands if ui is not None else False,
+            auto_model_switch=(
+                ui.auto_model_switch if ui is not None else False
+            ),
         )
+
+    def refresh_system_prompt(self) -> None:
+        """Rebuild the system prompt after runtime UI toggles."""
+        self._instructions = self._build_instructions()
 
     @property
     def session_model(self) -> str:

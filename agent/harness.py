@@ -8,13 +8,21 @@ from agent.context import ConversationExchange, SessionContext
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
 from agent.session_log import open_session_log
 from agent.repl_commands import (
+    AUTOSWITCH_COMMAND_NAMES,
     CLEAR_COMMAND_NAMES,
+    COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
 )
 from agent.ui import ConversationUI
 from llm import MODEL_LABELS, select_model_interactive
-from settings import OPENAI_MODEL_VAR, get_settings, save_env
+from settings import (
+    GOODBOY_AUTO_MODEL_SWITCH_VAR,
+    GOODBOY_SHOW_COMMANDS_VAR,
+    OPENAI_MODEL_VAR,
+    get_settings,
+    save_env,
+)
 
 
 class AgentHarness:
@@ -27,28 +35,33 @@ class AgentHarness:
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
+        auto_model_switch: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
         loop: AgentLoop | None = None,
         ui: ConversationUI | None = None,
     ) -> None:
-        self._loop = loop or AgentLoop(ui=ui)
         self._ui = ui or ConversationUI(
             show_thoughts=show_thoughts,
             verbose=verbose,
             show_model=show_model,
             show_commands=show_commands,
+            auto_model_switch=auto_model_switch,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
-            workspace=self._loop.workspace,
-            model=self._loop.session_model,
+            workspace=None,
+            model=None,
         )
+        self._loop = loop or AgentLoop(ui=self._ui)
         if self._loop._ui is None:
             self._loop._ui = self._ui
-        elif getattr(self._ui, "_workspace", None) is None:
+        if getattr(self._ui, "_workspace", None) is None:
             self._ui._workspace = self._loop.workspace
+        if self._ui._session_model is None:
+            self._ui.set_session_model(self._loop.session_model)
+        self._loop.refresh_system_prompt()
         self._conversation_history: list[ConversationExchange] = []
         self._last_active_hosted_tools: list[str] = []
         self._paused_context: SessionContext | None = None
@@ -93,6 +106,24 @@ class AgentHarness:
                         session_log.event("model_changed", model=self._loop.session_model)
                     continue
 
+                if self._is_commands_command(task):
+                    self._toggle_commands()
+                    if session_log is not None:
+                        session_log.event(
+                            "commands_visibility_changed",
+                            show_commands=self._ui.show_commands,
+                        )
+                    continue
+
+                if self._is_autoswitch_command(task):
+                    self._toggle_autoswitch()
+                    if session_log is not None:
+                        session_log.event(
+                            "auto_model_switch_changed",
+                            auto_model_switch=self._ui.auto_model_switch,
+                        )
+                    continue
+
                 first_prompt = False
                 ctx = self._build_session_context(task)
                 result = self._loop.run(
@@ -123,6 +154,51 @@ class AgentHarness:
     @classmethod
     def _is_model_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in MODEL_COMMAND_NAMES
+
+    @classmethod
+    def _is_commands_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in COMMANDS_COMMAND_NAMES
+
+    @classmethod
+    def _is_autoswitch_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in AUTOSWITCH_COMMAND_NAMES
+
+    def _toggle_commands(self) -> None:
+        self._ui.show_commands = not self._ui.show_commands
+        save_env(
+            {
+                GOODBOY_SHOW_COMMANDS_VAR: (
+                    "true" if self._ui.show_commands else "false"
+                )
+            }
+        )
+        self._loop.refresh_system_prompt()
+        if self._ui.show_commands:
+            self._ui.print_notice(
+                "Command visibility on — shell and Python runs are shown; output is hidden."
+            )
+        else:
+            self._ui.print_notice("Command visibility off.")
+
+    def _toggle_autoswitch(self) -> None:
+        self._ui.auto_model_switch = not self._ui.auto_model_switch
+        save_env(
+            {
+                GOODBOY_AUTO_MODEL_SWITCH_VAR: (
+                    "true" if self._ui.auto_model_switch else "false"
+                )
+            }
+        )
+        self._loop.refresh_system_prompt()
+        if self._ui.auto_model_switch:
+            self._ui.print_notice(
+                "Automatic model switching on — the agent may change models "
+                "between turns when needed."
+            )
+        else:
+            self._ui.print_notice(
+                "Automatic model switching off — strict cost policy applies."
+            )
 
     def _change_model(self) -> None:
         try:
@@ -226,6 +302,7 @@ def run_harness(
     verbose: bool = False,
     show_model: bool = False,
     show_commands: bool = False,
+    auto_model_switch: bool = False,
     debug: bool = False,
     debug_input: bool = False,
     debug_output: bool = False,
@@ -239,7 +316,8 @@ def run_harness(
         show_thoughts=show_thoughts,
         verbose=verbose,
         show_model=show_model,
-        show_commands=show_commands,
+        show_commands=show_commands or cfg.show_commands,
+        auto_model_switch=auto_model_switch or cfg.auto_model_switch,
         debug=debug,
         debug_input=debug_input,
         debug_output=debug_output,

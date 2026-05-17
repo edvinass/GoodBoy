@@ -26,9 +26,13 @@ def _disable_session_log(monkeypatch):
 class FakeUI:
     prompts: Iterator[str]
 
-    def __init__(self, prompts: Iterator[str]) -> None:
+    def __init__(self, prompts: Iterator[str], *, show_commands: bool = False) -> None:
         self.prompts = prompts
+        self.show_commands = show_commands
+        self.auto_model_switch = False
         self.clear_session_calls = 0
+        self.notices: list[str] = []
+        self._session_model = None
 
     def prompt_user(self) -> str:
         return next(self.prompts)
@@ -49,14 +53,19 @@ class FakeUI:
         pass
 
     def print_notice(self, message: str) -> None:
-        pass
+        self.notices.append(message)
 
     def newline(self) -> None:
         pass
 
+    def set_session_model(self, model: str) -> None:
+        self._session_model = model
+
 
 def _harness(outcome: LoopOutcome, prompts: list[str]) -> AgentHarness:
     loop = Mock()
+    loop.refresh_system_prompt = Mock()
+    loop.session_model = "gpt-4o-mini"
     loop.run.return_value = LoopResult(
         outcome=outcome,
         message="done",
@@ -231,7 +240,7 @@ def test_harness_model_command_changes_loop_and_persists(monkeypatch, tmp_path):
 
     assert harness.run() == 0
     loop.set_session_model.assert_called_once_with("gpt-5.4-mini")
-    ui.set_session_model.assert_called_once_with("gpt-5.4-mini")
+    ui.set_session_model.assert_called_with("gpt-5.4-mini")
     assert saved == {"OPENAI_MODEL": "gpt-5.4-mini"}
     loop.run.assert_not_called()
 
@@ -241,6 +250,48 @@ def test_harness_slash_clear_command():
     assert harness.run() == 0
     assert harness._ui.clear_session_calls == 1
     assert harness._loop.run.call_count == 1
+
+
+def test_harness_slash_commands_toggles_visibility(monkeypatch):
+    loop = Mock()
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    loop.refresh_system_prompt = Mock()
+    ui = FakeUI(prompts=iter(["/commands", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+    saved: dict[str, str] = {}
+    monkeypatch.setattr("agent.harness.save_env", saved.update)
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 0
+    assert ui.show_commands is True
+    assert loop.refresh_system_prompt.call_count >= 2
+    assert "on" in ui.notices[0].lower()
+    assert saved == {"GOODBOY_SHOW_COMMANDS": "true"}
+
+
+def test_harness_slash_autoswitch_toggles_and_persists(monkeypatch):
+    loop = Mock()
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    loop.refresh_system_prompt = Mock()
+    loop.session_model = "gpt-4o-mini"
+    ui = FakeUI(prompts=iter(["/autoswitch", "exit"]))
+    harness = AgentHarness(loop=loop, ui=ui)
+    saved: dict[str, str] = {}
+    monkeypatch.setattr("agent.harness.save_env", saved.update)
+
+    assert harness.run() == 0
+    assert loop.run.call_count == 0
+    assert ui.auto_model_switch is True
+    loop.refresh_system_prompt.assert_called()
+    assert saved == {"GOODBOY_AUTO_MODEL_SWITCH": "true"}
 
 
 def test_harness_clear_discards_paused_context():

@@ -26,6 +26,16 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         "Choose the LLM for this session",
     ),
     ReplCommand(
+        "commands",
+        "Toggle showing shell/Python commands (no output)",
+        ("cmds", "show-commands"),
+    ),
+    ReplCommand(
+        "autoswitch",
+        "Toggle automatic model switching",
+        ("auto",),
+    ),
+    ReplCommand(
         "exit",
         "Exit GoodBoy",
         ("quit", "q"),
@@ -51,6 +61,38 @@ EXIT_COMMAND_NAMES = frozenset(
     if command.name == "exit"
     for name in (command.name, *command.aliases)
 )
+COMMANDS_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "commands"
+    for name in (command.name, *command.aliases)
+)
+AUTOSWITCH_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "autoswitch"
+    for name in (command.name, *command.aliases)
+)
+
+_TOGGLE_COMMAND_STATE: dict[str, str] = {
+    "commands": "show_commands",
+    "autoswitch": "auto_model_switch",
+}
+
+
+def slash_command_display_meta(
+    command: ReplCommand,
+    *,
+    show_commands: bool = False,
+    auto_model_switch: bool = False,
+) -> str:
+    """Completion description; toggle commands include current on/off (default off)."""
+    state_key = _TOGGLE_COMMAND_STATE.get(command.name)
+    if state_key is None:
+        return command.description
+    enabled = show_commands if state_key == "show_commands" else auto_model_switch
+    state = "on" if enabled else "off"
+    return f"{command.description} ({state})"
 
 
 def active_slash_command_query(text_before_cursor: str) -> tuple[str, int] | None:

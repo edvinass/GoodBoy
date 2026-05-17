@@ -256,11 +256,22 @@ Turn 4 — finish:
 - Expecting run_shell to search the web — use switch_tools + web_search instead."""
 
 
-def format_user_visibility_section(*, debug: bool, show_thoughts: bool = False) -> str:
+def format_user_visibility_section(
+    *,
+    debug: bool,
+    show_thoughts: bool = False,
+    show_commands: bool = False,
+) -> str:
     """Explain what the user can see in the terminal for this session."""
     if debug:
         return """## User visibility (this session — full transparency)
-Command visibility (`goodboy -c` or `-d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
+Debug mode (`goodboy -d`) is **on**. The user sees run_shell commands, run_python code previews, tool stdout/stderr after each run, your thoughts, and terminal messages."""
+    if show_commands:
+        return """## User visibility (this session — commands visible)
+Command visibility (`goodboy -c` or `/commands`) is **on**. The user sees run_shell commands and run_python code previews as they run.
+They do **not** see tool stdout/stderr.
+Tool output appears in your prior-turn context only — do not assume the user saw it.
+When the user asks to show, print, display, list, or report information, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless that message contains what they asked for."""
     if show_thoughts:
         return """## User visibility (this session — thoughts visible)
 Thought visibility (`goodboy -f`) is **on**. The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed.
@@ -285,15 +296,21 @@ def build_system_prompt(
     tools: tuple | None = None,
     debug: bool = False,
     show_thoughts: bool = False,
+    show_commands: bool = False,
+    auto_model_switch: bool = False,
 ) -> str:
     """Compose full system prompt with catalogs and cost policy."""
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
         _BASE_RULES,
         format_configuration_guide_section(),
-        format_user_visibility_section(debug=debug, show_thoughts=show_thoughts),
+        format_user_visibility_section(
+            debug=debug,
+            show_thoughts=show_thoughts,
+            show_commands=show_commands,
+        ),
         format_hosted_tools_reference(),
-        format_cost_policy_section(),
+        format_cost_policy_section(auto_model_switch=auto_model_switch),
         format_models_section(allowed_models),
         format_reasoning_section(),
         format_tools_section(tool_specs),

@@ -101,6 +101,7 @@ def test_build_system_prompt_coding_agent_identity():
 def test_build_system_prompt_includes_cost_policy():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
     assert "Cost policy" in prompt
+    assert "Escalate one tier at a time only after a failed" in prompt
     assert "Configuration guide" in prompt
     assert "switch_tools" in prompt
     assert "switch_model" in prompt
@@ -130,9 +131,29 @@ def test_build_system_prompt_visibility_with_thoughts():
     assert "optional `thought`" in prompt
 
 
+def test_build_system_prompt_visibility_with_show_commands():
+    prompt = build_system_prompt(
+        allowed_models=["gpt-4o-mini"],
+        show_commands=True,
+    )
+    assert "goodboy -c" in prompt
+    assert "run_shell commands" in prompt
+    assert "do **not** see tool stdout/stderr" in prompt
+
+
+def test_build_system_prompt_auto_model_switch_policy():
+    prompt = build_system_prompt(
+        allowed_models=["gpt-4o-mini"],
+        auto_model_switch=True,
+    )
+    assert "automatic switching enabled" in prompt
+    assert "GOODBOY_AUTO_MODEL_SWITCH" in prompt
+    assert "Escalate one tier at a time only after a failed" not in prompt
+
+
 def test_build_system_prompt_visibility_with_debug():
     prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=True)
-    assert "goodboy -c" in prompt
+    assert "goodboy -d" in prompt
     assert "run_shell commands" in prompt
     assert "stdout/stderr" in prompt
 

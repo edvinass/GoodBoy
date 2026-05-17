@@ -166,8 +166,15 @@ def test_print_agent_step_shows_shell_with_show_commands(capsys):
     assert "shell" in out
 
 
-def test_print_tool_result_shown_with_show_commands(capsys):
+def test_print_tool_result_hidden_with_show_commands_only(capsys):
     ui = ConversationUI(show_commands=True)
+    tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)
+    ui.print_tool_result(tool)
+    assert capsys.readouterr().out == ""
+
+
+def test_print_tool_result_shown_with_debug(capsys):
+    ui = ConversationUI(debug=True)
     tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)
     ui.print_tool_result(tool)
     out = capsys.readouterr().out

@@ -433,8 +433,7 @@ Valid values: {tool_ids}
 - Other IDs: see model catalog — not every model supports every tool."""
 
 
-def format_cost_policy_section() -> str:
-    return """## Cost policy (required)
+_STRICT_COST_POLICY = """## Cost policy (required)
 - Minimize spend: always pick the cheapest model + lowest reasoning effort that can succeed.
 - Simple task examples (use minimal tier): ls, cat, echo, single-file edit, running tests, formatting.
 - Do NOT use gpt-5.5, o3, or high/xhigh reasoning for simple tasks.
@@ -449,6 +448,22 @@ def format_cost_policy_section() -> str:
 4. Messy tool output: o4-mini + medium (not o3 yet).
 5. Still stuck (2+ failed turns): o3 or gpt-4.1 (long context only if stdout/history is huge).
 6. Last resort: gpt-5.5 + high only — never for step 1."""
+
+_AUTO_MODEL_SWITCH_POLICY = """## Model routing (automatic switching enabled)
+The user enabled automatic model switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`).
+You may change **model** and **reasoning_effort** between turns — including **switch_model** — when complexity, failures, hosted-tool needs, or long context justify it. Do not wait for repeated failures if a stronger model is clearly needed.
+
+- Still pick the cheapest model that can succeed; escalate proactively when the task is hard, ambiguous, or stuck.
+- Prefer setting **model** on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
+- After the hard part is done, step down to a cheaper model for remaining simple work.
+- Do NOT use gpt-5.5, o3, or high/xhigh reasoning for trivial steps (ls, cat, single obvious edit).
+- When setting reasoning_effort on gpt-5.x: default none or low; medium when needed; high/xhigh only when stuck."""
+
+
+def format_cost_policy_section(*, auto_model_switch: bool = False) -> str:
+    if auto_model_switch:
+        return _AUTO_MODEL_SWITCH_POLICY
+    return _STRICT_COST_POLICY
 
 
 def assert_catalog_covers_model_choices() -> None:

@@ -22,6 +22,8 @@ GOODBOY_LOG_DIR_VAR = "GOODBOY_LOG_DIR"
 GOODBOY_SESSION_LOG_VAR = "GOODBOY_SESSION_LOG"
 GOODBOY_SSL_CA_BUNDLE_VAR = "GOODBOY_SSL_CA_BUNDLE"
 GOODBOY_SSL_VERIFY_VAR = "GOODBOY_SSL_VERIFY"
+GOODBOY_SHOW_COMMANDS_VAR = "GOODBOY_SHOW_COMMANDS"
+GOODBOY_AUTO_MODEL_SWITCH_VAR = "GOODBOY_AUTO_MODEL_SWITCH"
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_MAX_TURNS = 40
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
@@ -132,6 +134,8 @@ class Settings:
     session_log_dir: Path | None = None
     ssl_ca_bundle: str | None = None
     ssl_verify: bool = True
+    show_commands: bool = False
+    auto_model_switch: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -158,6 +162,8 @@ class Settings:
             session_log_dir=log_dir,
             ssl_ca_bundle=ssl_ca_bundle,
             ssl_verify=_env_bool(GOODBOY_SSL_VERIFY_VAR, True),
+            show_commands=_env_bool(GOODBOY_SHOW_COMMANDS_VAR, False),
+            auto_model_switch=_env_bool(GOODBOY_AUTO_MODEL_SWITCH_VAR, False),
         )
 
     @property

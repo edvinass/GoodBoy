@@ -82,7 +82,7 @@ def run_setup() -> None:
     "-c",
     "show_commands",
     is_flag=True,
-    help="Print shell/Python commands the agent runs and their stdout/stderr.",
+    help="Print shell/Python commands the agent runs (not their output).",
 )
 @click.option(
     "-d",
@@ -116,11 +116,13 @@ def cli(
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
         load_env()
+        cfg = get_settings()
         run_harness(
             show_thoughts=show_thoughts,
             verbose=verbose,
             show_model=show_model,
-            show_commands=show_commands,
+            show_commands=show_commands or cfg.show_commands,
+            auto_model_switch=cfg.auto_model_switch,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,

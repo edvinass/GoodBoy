@@ -39,7 +39,11 @@ from agent.mentions import (
     expand_file_mentions,
     search_workspace_paths,
 )
-from agent.repl_commands import active_slash_command_query, search_slash_commands
+from agent.repl_commands import (
+    active_slash_command_query,
+    search_slash_commands,
+    slash_command_display_meta,
+)
 from agent.workspace import resolve_workspace
 from settings import get_settings
 from agent.types import AgentAction, AgentStep, ToolResult
@@ -174,8 +178,16 @@ def _attach_paste_handler(buffer: Buffer, paste_state: _PasteState) -> None:
 class _UserInputCompleter(Completer):
     """Offer slash commands at line start or file paths after @."""
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        show_commands: bool = False,
+        auto_model_switch: bool = False,
+    ) -> None:
         self._workspace = workspace.resolve()
+        self._show_commands = show_commands
+        self._auto_model_switch = auto_model_switch
 
     def get_completions(self, document: Document, complete_event: object) -> Iterator[Completion]:
         del complete_event
@@ -189,7 +201,11 @@ class _UserInputCompleter(Completer):
                     text=command.name,
                     start_position=start_position,
                     display=[("class:mention.choice", f"+ /{command.name}")],
-                    display_meta=command.description,
+                    display_meta=slash_command_display_meta(
+                        command,
+                        show_commands=self._show_commands,
+                        auto_model_switch=self._auto_model_switch,
+                    ),
                 )
             return
 
@@ -205,7 +221,13 @@ class _UserInputCompleter(Completer):
             )
 
 
-def _prompt_user_line(paste_state: _PasteState, *, workspace: Path | None = None) -> str | None:
+def _prompt_user_line(
+    paste_state: _PasteState,
+    *,
+    workspace: Path | None = None,
+    show_commands: bool = False,
+    auto_model_switch: bool = False,
+) -> str | None:
     """Single-line prompt: Enter sends; multiline paste is collapsed to a label."""
     root = (workspace or resolve_workspace()).resolve()
     style = merge_styles(
@@ -232,7 +254,11 @@ def _prompt_user_line(paste_state: _PasteState, *, workspace: Path | None = None
         style=style,
         multiline=False,
         placeholder=_USER_INPUT_PLACEHOLDER,
-        completer=_UserInputCompleter(root),
+        completer=_UserInputCompleter(
+            root,
+            show_commands=show_commands,
+            auto_model_switch=auto_model_switch,
+        ),
         complete_while_typing=True,
         complete_style=CompleteStyle.COLUMN,
     )
@@ -402,6 +428,7 @@ class ConversationUI:
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
+        auto_model_switch: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
@@ -413,6 +440,7 @@ class ConversationUI:
         self.verbose = verbose
         self.show_model = show_model
         self.show_commands = show_commands
+        self.auto_model_switch = auto_model_switch
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
@@ -827,6 +855,8 @@ class ConversationUI:
             result = _prompt_user_line(
                 paste_state,
                 workspace=self._workspace or resolve_workspace(),
+                show_commands=self.show_commands,
+                auto_model_switch=self.auto_model_switch,
             )
             if result is None:
                 raise click.Abort()
@@ -902,9 +932,9 @@ class ConversationUI:
                 AgentAction.FAILED,
             ):
                 self.print_agent(step.message)
-            if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
+            if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
                 self.print_agent(step.command, subtitle="shell")
-            elif self._show_tool_io and step.action == AgentAction.RUN_PYTHON and step.code:
+            elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
                 preview = step.code.strip()
                 if "\n" in preview:
                     preview = preview.splitlines()[0] + " ..."
@@ -941,9 +971,9 @@ class ConversationUI:
         if self._show_thoughts and step.thought:
             self._record("thought", text=step.thought)
 
-        if self._show_tool_io and step.action == AgentAction.RUN_SHELL and step.command:
+        if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
-        elif self._show_tool_io and step.action == AgentAction.RUN_PYTHON and step.code:
+        elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
             preview = step.code.strip()
             if "\n" in preview:
                 preview = preview.splitlines()[0] + " ..."
@@ -970,12 +1000,16 @@ class ConversationUI:
         return self.show_thoughts or self.verbose
 
     @property
-    def _show_tool_io(self) -> bool:
+    def _show_tool_commands(self) -> bool:
         return self.show_commands or self.debug
 
+    @property
+    def _show_tool_output(self) -> bool:
+        return self.debug
+
     def print_tool_result(self, result: ToolResult) -> None:
-        """Brief tool output summary after execution (-c / -d)."""
-        if not self._show_tool_io:
+        """Brief tool output summary after execution (-d)."""
+        if not self._show_tool_output:
             return
         self._record(
             "tool_result",
