@@ -514,12 +514,6 @@ class AgentLoop:
                         call_reasoning_effort=call_reasoning,
                     )
                 )
-                if self._ui is not None:
-                    self._ui.print_agent_step(
-                        step,
-                        model=call_model,
-                        reasoning=call_reasoning,
-                    )
                 stopped = stop_after_current_step()
                 if stopped is not None:
                     return stopped

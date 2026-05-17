@@ -80,6 +80,45 @@ def test_loop_task_complete(tmp_path: Path):
     assert len(result.context.turns) == 1
 
 
+def test_loop_update_plan_printed_once(tmp_path: Path, capsys):
+    ui = ConversationUI()
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        ui=ui,
+        llm_call=_llm_responses(
+            [
+                AgentStep(
+                    action=AgentAction.UPDATE_PLAN,
+                    plan_items=[
+                        PlanItem(
+                            id="1",
+                            text="recon",
+                            status=PlanItemStatus.DONE,
+                        ),
+                        PlanItem(
+                            id="2",
+                            text="edit file",
+                            status=PlanItemStatus.IN_PROGRESS,
+                        ),
+                    ],
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="done",
+                ),
+            ]
+        ),
+    )
+    result = loop.run("plan then finish")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    out = capsys.readouterr().out
+    assert out.count("(plan)") == 1
+    assert "[x] (1) recon" in out
+    assert "[>] (2) edit file" in out
+
+
 def test_loop_runs_shell_then_completes(tmp_path: Path):
     loop = AgentLoop(
         workspace=tmp_path,
