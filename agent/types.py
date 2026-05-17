@@ -33,6 +33,7 @@ class AgentStep(BaseModel):
     """Single turn from the LLM; must be valid JSON matching this schema."""
 
     action: AgentAction
+    status: str | None = None
     thought: str | None = None
     command: str | None = None
     code: str | None = None
@@ -48,6 +49,7 @@ class AgentStep(BaseModel):
     reasoning_effort: str | None = None
 
     @field_validator(
+        "status",
         "command",
         "code",
         "path",

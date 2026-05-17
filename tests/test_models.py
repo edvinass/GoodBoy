@@ -141,7 +141,8 @@ def test_build_system_prompt_autoswitch_includes_model_catalogs():
 
 def test_build_system_prompt_visibility_without_debug():
     prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"], debug=False)
-    assert "activity status" in prompt
+    assert "loading indicator" in prompt
+    assert "**status**" in prompt
     assert "unified diffs" in prompt
     assert "do **not** see run_shell commands" in prompt
     assert "do **not** see" in prompt and "thought" in prompt

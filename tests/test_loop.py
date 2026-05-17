@@ -1000,3 +1000,45 @@ def test_response_chain_resets_on_switch_model(tmp_path: Path, monkeypatch):
     second = calls[1]
     assert "previous_response_id" not in second
     assert "## User task" in second["input"]
+
+
+def test_llm_stream_updates_thinking_label(tmp_path: Path, monkeypatch):
+    from agent.ui import ThinkingUpdater
+
+    status_updates: list[str] = []
+    original_update = ThinkingUpdater.update
+
+    def track_update(self, label: str) -> None:
+        status_updates.append(label)
+        original_update(self, label)
+
+    monkeypatch.setattr(ThinkingUpdater, "update", track_update)
+
+    payload = json.dumps(
+        AgentStep(
+            action=AgentAction.TASK_COMPLETE,
+            message="done",
+        ).model_dump(mode="json")
+    )
+
+    def fake_with_id(**kwargs):
+        on_delta = kwargs.get("on_text_delta")
+        assert kwargs.get("stream") is True
+        if on_delta:
+            on_delta('{"status": "Inspecting project structure", ')
+            on_delta('"action": "task_complete", "message": "done"}')
+        return payload, "resp_0", None
+
+    monkeypatch.setattr(
+        "agent.loop.complete_structured_with_id", fake_with_id
+    )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=3,
+        allowed_models=_ALLOWED,
+        ui=ConversationUI(),
+    )
+    result = loop.run("explore")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert "Inspecting project structure" in status_updates

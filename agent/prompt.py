@@ -59,6 +59,7 @@ _HARNESS_RULES = """## Harness rules (strict)
 ## Routing fields (each turn)
 
 - **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | switch_model | switch_tools | need_user_input | task_complete | failed.
+- **status** (required on every turn except task_complete/failed): short user-facing progress line (5–72 chars), present participle, no trailing ellipsis. Emit **first** in JSON so the UI can show it while the rest streams. Examples: "Inspecting project structure", "Searching for relevant files", "Implementing authentication flow", "Running tests".
 - **model**: optional on any action except switch_tools (next LLM call); required for switch_model.
 - **tools**: required for switch_tools (hosted tool IDs for next call).
 - **reasoning_effort**: optional on any action except switch_tools (next call only).
@@ -78,6 +79,7 @@ _HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
 ## Routing fields (each turn)
 
 - **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | switch_tools | need_user_input | task_complete | failed.
+- **status** (required on every turn except task_complete/failed): short user-facing progress line (5–72 chars), present participle, no trailing ellipsis. Emit **first** in JSON so the UI can show it while the rest streams. Examples: "Inspecting project structure", "Searching for relevant files", "Implementing authentication flow", "Running tests".
 - **tools**: required for switch_tools (hosted tool IDs for next call).
 - **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
 
@@ -154,7 +156,7 @@ When the user asks to show/print/display/list/report info, put the actual conten
 Thought visibility (`goodboy -f`) is **on**. The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed. They do **not** see run_shell commands, run_python code, or tool stdout/stderr — that appears in your prior-turn context only.
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message`. Never claim output was printed unless the message contains what they asked for."""
     return """## User visibility (this session — default)
-Debug mode is **off** (default). The user sees short activity status lines (e.g. reading a file, running a terminal command, writing a file) and unified diffs for file edits (`str_replace`, `apply_patch`). They do **not** see run_shell commands, run_python code, general tool stdout/stderr, or your `thought` field — only your `message` on need_user_input, task_complete, or failed. Full commands and tool output appear in your prior-turn context only; use `goodboy -c` or `goodboy -d` if the user wants those in the terminal.
+Debug mode is **off** (default). While waiting on the model, the user sees your **`status`** line on the loading indicator, then short activity lines after each harness step (e.g. reading a file, running a terminal command, writing a file) and unified diffs for file edits (`str_replace`, `apply_patch`). They do **not** see run_shell commands, run_python code, general tool stdout/stderr, or your `thought` field — only your `message` on need_user_input, task_complete, or failed. Full commands and tool output appear in your prior-turn context only; use `goodboy -c` or `goodboy -d` if the user wants those in the terminal.
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless the message contains what they asked for."""
 
 

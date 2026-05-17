@@ -12,12 +12,14 @@ def test_parse_run_shell():
     raw = json.dumps(
         {
             "action": "run_shell",
+            "status": "Listing project files",
             "thought": "list files",
             "command": "ls",
         }
     )
     step = parse_agent_step(raw)
     assert step.action == AgentAction.RUN_SHELL
+    assert step.status == "Listing project files"
     assert step.command == "ls"
 
 

@@ -335,6 +335,24 @@ def test_print_harness_activity_skipped_when_verbose(capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_progress_label_prefers_status():
+    step = AgentStep(
+        action=AgentAction.RUN_SHELL,
+        status="Implementing authentication flow",
+        command="pytest -q",
+    )
+    from agent.ui import progress_label_for_step
+
+    assert progress_label_for_step(step) == "Implementing authentication flow"
+
+
+def test_progress_label_falls_back_to_activity():
+    step = AgentStep(action=AgentAction.READ_FILE, path="src/auth.py")
+    from agent.ui import progress_label_for_step
+
+    assert progress_label_for_step(step) == "reading auth.py"
+
+
 def test_thinking_default_label_non_tty(capsys, monkeypatch):
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
     ui = ConversationUI()

@@ -13,6 +13,7 @@ import time
 import tty
 from contextlib import contextmanager
 from pathlib import Path
+from dataclasses import dataclass
 from typing import Any, Iterator, Literal
 
 import click
@@ -82,6 +83,37 @@ _USER_INPUT_PLACEHOLDER = "Ask anything…"
 _MAX_ACTIVITY_DIFF_LINES = 40
 
 _resize_poller_installed = False
+
+
+@dataclass
+class ThinkingUpdater:
+    """Update the GoodBoy loading line while the model streams a step."""
+
+    _label: str
+    _console: Console
+    _status: Any = None
+    _non_tty_printed: bool = False
+
+    def update(self, label: str) -> None:
+        cleaned = label.strip().rstrip(".…")
+        if not cleaned or cleaned == self._label:
+            return
+        self._label = cleaned
+        if self._status is not None:
+            self._status.update(self._render())
+        elif not self._non_tty_printed:
+            self._non_tty_printed = True
+            self._console.print(self._render())
+
+    def _render(self) -> str:
+        return f"[agent]🐶 GoodBoy[/] [muted]{self._label}…[/]"
+
+
+def progress_label_for_step(step: AgentStep) -> str:
+    """Spinner label while a harness tool runs; prefers model ``status``."""
+    if step.status:
+        return step.status.strip().rstrip(".…")
+    return activity_label(step, phase="progress")
 
 
 def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> str:
@@ -1324,21 +1356,32 @@ class ConversationUI:
                 self.print_file_diff(step.path or "file", diff)
 
     @contextmanager
-    def thinking(self, label: str = "working on your task") -> Iterator[None]:
-        """Show a spinner while the agent waits on the LLM."""
+    def thinking(self, label: str = "working on your task") -> Iterator[ThinkingUpdater]:
+        """Show a spinner while the agent waits on the LLM.
+
+        Yields a :class:`ThinkingUpdater` so callers can refresh the label when
+        ``status`` arrives from a streamed model response.
+        """
+        updater = ThinkingUpdater(
+            _label=label.strip().rstrip(".…") or "working on your task",
+            _console=self._console,
+        )
         if not sys.stdout.isatty():
-            self._console.print(f"[agent]◆ GoodBoy[/] [muted]{label}…[/]")
-            yield
+            self._console.print(
+                f"[agent]◆ GoodBoy[/] [muted]{updater._label}…[/]"
+            )
+            yield updater
             return
 
         self._transient_ui = True
         try:
             with self._escape_stop_listener():
                 with self._console.status(
-                    f"[agent]🐶 GoodBoy[/] [muted]{label}…[/]",
+                    updater._render(),
                     spinner="dots",
-                ):
-                    yield
+                ) as status:
+                    updater._status = status
+                    yield updater
         finally:
             self._transient_ui = False
             self._sync_redraw()

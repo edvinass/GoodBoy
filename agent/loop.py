@@ -34,7 +34,14 @@ from agent.routing import should_skip_routing_turn
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.tools import run_python, run_shell
 from llm import TokenUsage
-from agent.ui import ConversationUI, activity_label, tool_activity
+from agent.stream_status import extract_streaming_status
+from agent.ui import (
+    ConversationUI,
+    ThinkingUpdater,
+    activity_label,
+    progress_label_for_step,
+    tool_activity,
+)
 from agent.types import (
     AgentAction,
     AgentStep,
@@ -560,7 +567,7 @@ class AgentLoop:
                     )
                     continue
 
-                progress_label = activity_label(step, phase="progress")
+                progress_label = progress_label_for_step(step)
                 if self._ui is not None:
                     with tool_activity(self._ui, progress_label):
                         tool_result = self._run_harness_tool(step)
@@ -720,22 +727,35 @@ class AgentLoop:
                 instructions=llm_kwargs["instructions"],
                 input_text=llm_kwargs["input"],
             )
-            streamed = self._ui.stream_output
-            if streamed:
+            show_stream = self._ui.stream_output
+            buffer: list[str] = []
+            thinking_holder: list[ThinkingUpdater] = []
+
+            def _on_text_delta(delta: str) -> None:
+                if not delta:
+                    return
+                buffer.append(delta)
+                if show_stream:
+                    self._ui.write_model_stream_delta(delta)
+                status = extract_streaming_status("".join(buffer))
+                if status and thinking_holder:
+                    thinking_holder[0].update(status)
+
+            if show_stream:
                 self._ui.begin_model_stream(turn=turn)
-                try:
+            try:
+                with self._ui.thinking() as thinking_updater:
+                    thinking_holder.append(thinking_updater)
                     raw_text, rid, usage = self._do_llm_call(
                         llm_kwargs,
                         stream=True,
-                        on_text_delta=self._ui.write_model_stream_delta,
+                        on_text_delta=_on_text_delta,
                     )
-                finally:
+            finally:
+                if show_stream:
                     self._ui.end_model_stream()
-            else:
-                with self._ui.thinking():
-                    raw_text, rid, usage = self._do_llm_call(llm_kwargs, stream=False)
             self._ui.print_llm_response(
-                turn=turn, raw=raw_text, streamed=streamed
+                turn=turn, raw=raw_text, streamed=show_stream
             )
             return raw_text, rid, usage
 
