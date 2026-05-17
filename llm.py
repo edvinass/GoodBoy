@@ -276,7 +276,7 @@ def complete(
         kwargs["top_p"] = top_p
     if max_output_tokens is not None:
         kwargs["max_output_tokens"] = max_output_tokens
-    if reasoning_effort is not None:
+    if reasoning_effort is not None and reasoning_effort != "none":
         kwargs["reasoning"] = {"effort": reasoning_effort}
 
     try:
@@ -315,7 +315,7 @@ def complete_structured(
         "instructions": instructions,
         "text": text_config,
     }
-    if reasoning_effort is not None:
+    if reasoning_effort is not None and reasoning_effort != "none":
         kwargs["reasoning"] = {"effort": reasoning_effort}
     if tools:
         kwargs["tools"] = [{"type": tool} for tool in tools]
