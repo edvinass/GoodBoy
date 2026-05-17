@@ -1522,6 +1522,10 @@ class ConversationUI:
         if not self.verbose:
             if self._show_thoughts and step.thought:
                 self._record("thought", text=step.thought)
+            if step.action == AgentAction.UPDATE_PLAN:
+                count = len(step.plan_items or [])
+                summary = f"Planning ({count} items)" if count else "Planning"
+                self.print_notice(summary)
             if step.message and step.action in (
                 AgentAction.NEED_USER_INPUT,
                 AgentAction.TASK_COMPLETE,
@@ -1574,6 +1578,14 @@ class ConversationUI:
 
         if self._show_thoughts and step.thought:
             self._record("thought", text=step.thought)
+
+        if step.action == AgentAction.UPDATE_PLAN:
+            count = len(step.plan_items or [])
+            self.print_agent(
+                f"Planning ({count} items)" if count else "Planning",
+                subtitle="plan",
+            )
+            return
 
         if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
