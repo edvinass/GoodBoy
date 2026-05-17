@@ -424,6 +424,44 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
     )
 
 
+_ESC_CONTINUATION_TIMEOUT = 0.05
+_ESC_CSI_TERMINATORS = frozenset(range(0x40, 0x7F))
+
+
+def _drain_escape_sequence(fd: int, stop_event: threading.Event) -> bool:
+    """Drain bytes that follow an ESC byte to detect multi-byte key sequences.
+
+    Returns True when the ESC was part of a sequence (CSI ``ESC [``, SS3
+    ``ESC O``, Option/Meta ``ESC <char>``, or any other follow-up that arrives
+    within ``_ESC_CONTINUATION_TIMEOUT``). Returns False when no continuation
+    arrives — i.e. the user pressed a bare Escape.
+    """
+    readable, _, _ = select.select([fd], [], [], _ESC_CONTINUATION_TIMEOUT)
+    if not readable:
+        return False
+    try:
+        nxt = os.read(fd, 1)
+    except OSError:
+        return False
+    if not nxt:
+        return False
+    if nxt in (b"[", b"O"):
+        # CSI / SS3 introducer — drain until a final byte (0x40..0x7E).
+        while not stop_event.is_set():
+            r2, _, _ = select.select([fd], [], [], _ESC_CONTINUATION_TIMEOUT)
+            if not r2:
+                return True
+            try:
+                b = os.read(fd, 1)
+            except OSError:
+                return True
+            if not b:
+                return True
+            if b[0] in _ESC_CSI_TERMINATORS:
+                return True
+    return True
+
+
 class ConversationUI:
     """Format user and agent messages distinctly in the terminal."""
 
@@ -503,10 +541,17 @@ class ConversationUI:
                     if not readable:
                         continue
                     ch = os.read(fd, 1)
-                    if ch == b"\x1b":
-                        self.request_stop_after_current_step()
-                        stop_event.set()
-                        return
+                    if ch != b"\x1b":
+                        continue
+                    # An ESC byte may start a CSI/SS3 sequence (arrow keys, F-keys,
+                    # Option-shortcuts, bracketed paste, mouse reports). Only treat
+                    # a *bare* Escape as a stop request — drain any continuation
+                    # bytes that arrive within a short window and ignore them.
+                    if _drain_escape_sequence(fd, stop_event):
+                        continue
+                    self.request_stop_after_current_step()
+                    stop_event.set()
+                    return
             except OSError:
                 return
 
@@ -885,6 +930,9 @@ class ConversationUI:
     def prompt_user(self) -> str:
         """Read user input; Enter sends; multiline paste shows a collapsed label."""
         self._sync_redraw()
+        # Drop any stop flag left over from a prior step's escape listener so
+        # it can't abort the next task before it runs.
+        self._stop_requested = False
         self._at_prompt = True
         try:
             self._print_header("user")
