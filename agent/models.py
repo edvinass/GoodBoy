@@ -291,6 +291,14 @@ def get_model_spec(model_id: str) -> ModelSpec | None:
     return MODEL_CATALOG.get(model_id)
 
 
+def format_model_select_label(model_id: str, description: str) -> str:
+    """Label for interactive model picker (includes output token price)."""
+    spec = get_model_spec(model_id)
+    if spec is None:
+        return description
+    return f"{description} · ${spec.price_output_per_1m:.2f}/1M output"
+
+
 def is_reasoning_model(model_id: str) -> bool:
     spec = get_model_spec(model_id)
     return spec.reasoning if spec is not None else False

@@ -9,6 +9,7 @@ from agent.models import (
     cheapest_model_with_tools,
     format_cost_policy_section,
     format_hosted_tools_reference,
+    format_model_select_label,
     format_models_section,
     get_model_spec,
     model_supports_openai_tool,
@@ -36,6 +37,15 @@ def test_models_sorted_cheapest_first():
     specs = models_for_prompt(allowed)
     indices = [s.cost_index for s in specs if s.id in MODEL_CATALOG]
     assert indices == sorted(indices)
+
+
+def test_format_model_select_label_includes_output_price():
+    label = format_model_select_label("gpt-4.1-nano", "GPT-4.1 nano")
+    assert label == "GPT-4.1 nano · $0.40/1M output"
+
+
+def test_format_model_select_label_unknown_model():
+    assert format_model_select_label("unknown", "unknown") == "unknown"
 
 
 def test_format_models_section_includes_cost_policy_fields():

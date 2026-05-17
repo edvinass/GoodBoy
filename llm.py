@@ -110,7 +110,10 @@ def get_available_models(*, api_key: str | None = None) -> list[str]:
 
 
 def _model_choice(model_id: str) -> questionary.Choice:
-    label = MODEL_LABELS.get(model_id, model_id)
+    from agent.models import format_model_select_label
+
+    description = MODEL_LABELS.get(model_id, model_id)
+    label = format_model_select_label(model_id, description)
     return questionary.Choice(title=label, value=model_id)
 
 
