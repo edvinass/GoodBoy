@@ -561,6 +561,45 @@ def test_loop_switch_tools_rejects_model_on_same_turn(tmp_path: Path):
     assert any("switch_tools" in e and "model" in e for e in result.context.parse_errors)
 
 
+def test_loop_switch_tools_rejects_web_search_on_gpt41_nano(tmp_path: Path):
+    llm_calls: list[dict] = []
+
+    def llm(**kwargs):
+        llm_calls.append(dict(kwargs))
+        if len(llm_calls) == 1:
+            return json.dumps(
+                {
+                    "action": "switch_tools",
+                    "tools": ["web_search"],
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        model="gpt-4.1-nano",
+        llm_call=llm,
+    )
+    result = loop.run("weather in London")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert any(
+        "does not support hosted tool 'web_search'" in e
+        and "gpt-4.1-nano" in e
+        for e in result.context.parse_errors
+    )
+    assert len(llm_calls) == 2
+    assert "tools" not in llm_calls[0]
+    assert "tools" not in llm_calls[1]
+    assert result.context.active_hosted_tools == []
+
+
 def test_loop_reasoning_effort_rejected_for_non_reasoning_model(tmp_path: Path):
     calls = {"n": 0}
 

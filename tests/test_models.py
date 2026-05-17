@@ -80,12 +80,19 @@ def test_nano_lacks_computer_use_and_tool_search():
     assert not model_supports_openai_tool("gpt-5.4-nano", OpenAITool.TOOL_SEARCH)
 
 
+def test_gpt41_nano_has_no_hosted_tools():
+    assert not model_supports_openai_tool("gpt-4.1-nano", OpenAITool.WEB_SEARCH)
+    spec = get_model_spec("gpt-4.1-nano")
+    assert spec is not None
+    assert spec.openai_tools == frozenset()
+
+
 def test_cheapest_model_with_tools():
     model = cheapest_model_with_tools(
         ["gpt-5.5", "gpt-5.4-nano", "gpt-4.1-nano"],
         [OpenAITool.WEB_SEARCH],
     )
-    assert model == "gpt-4.1-nano"
+    assert model == "gpt-5.4-nano"
 
 
 def test_format_hosted_tools_reference():

@@ -46,7 +46,9 @@ _NANO_OPENAI_TOOLS: FrozenSet[OpenAITool] = _FULL_OPENAI_TOOLS - {
     OpenAITool.COMPUTER_USE,
     OpenAITool.TOOL_SEARCH,
 }
-# gpt-4.1-class partial hosted tools
+# gpt-4.1-nano: text/JSON only (no hosted Responses tools on the API)
+_NO_HOSTED_OPENAI_TOOLS: FrozenSet[OpenAITool] = frozenset()
+# gpt-4.1-mini / gpt-4.1: partial hosted stack
 _GPT41_OPENAI_TOOLS: FrozenSet[OpenAITool] = frozenset(
     {
         OpenAITool.WEB_SEARCH,
@@ -105,7 +107,9 @@ def _spec(
         price_output_per_1m=price_out,
         reasoning=reasoning,
         reasoning_efforts=reasoning_efforts,
-        openai_tools=openai_tools or _GPT41_OPENAI_TOOLS,
+        openai_tools=(
+            _GPT41_OPENAI_TOOLS if openai_tools is None else openai_tools
+        ),
     )
 
 
@@ -114,11 +118,12 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         "gpt-4.1-nano",
         family=ModelFamily.GENERAL,
         best_for="Cheapest text: classify next step, format JSON, trivial edits.",
-        avoid_when="Hard debugging or very large context.",
+        avoid_when="Hosted tools (web_search, etc.) or hard debugging.",
         cost_tier=CostTier.MINIMAL,
         price_in=0.10,
         price_cached=0.025,
         price_out=0.40,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
     ),
     "gpt-5-nano": _spec(
         "gpt-5-nano",
