@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from agent.loop import AgentLoop, LoopOutcome
-from agent.session_log import SessionLog, open_session_log
+from agent.session_log import SessionLog, instructions_digest, open_session_log
 from agent.types import AgentAction, AgentStep
 
 _ALLOWED = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5"]
@@ -82,6 +82,63 @@ def test_loop_logs_llm_and_tool(tmp_path: Path):
     assert "agent_step" in events
     assert "tool_result" in events
     assert "task_end" in events
+
+
+def test_log_llm_request_dedupes_instructions(tmp_path: Path):
+    path = tmp_path / "dedup.jsonl"
+    log = SessionLog(path)
+    long_instructions = "system prompt " * 500
+    log.log_llm_request(
+        turn=1,
+        model="gpt-5.4-nano",
+        reasoning_effort=None,
+        instructions=long_instructions,
+        input_text="turn 1",
+    )
+    log.log_llm_request(
+        turn=2,
+        model="gpt-5.4-nano",
+        reasoning_effort=None,
+        instructions=long_instructions,
+        input_text="turn 2",
+    )
+    log.close()
+
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    requests = [r for r in records if r["event"] == "llm_request"]
+    assert len(requests) == 2
+    assert "instructions" in requests[0]
+    assert requests[0]["instructions_id"] == instructions_digest(long_instructions)
+    assert "instructions" not in requests[1]
+    assert requests[1]["instructions_id"] == requests[0]["instructions_id"]
+
+
+def test_log_llm_request_logs_instructions_when_prompt_changes(tmp_path: Path):
+    path = tmp_path / "change.jsonl"
+    log = SessionLog(path)
+    log.log_llm_request(
+        turn=1,
+        model="gpt-5.4-nano",
+        reasoning_effort=None,
+        instructions="v1",
+        input_text="a",
+    )
+    log.log_llm_request(
+        turn=2,
+        model="gpt-5.4-nano",
+        reasoning_effort=None,
+        instructions="v2",
+        input_text="b",
+    )
+    log.close()
+
+    requests = [
+        json.loads(line)
+        for line in path.read_text().splitlines()
+        if json.loads(line)["event"] == "llm_request"
+    ]
+    assert requests[0]["instructions"] == "v1"
+    assert requests[1]["instructions"] == "v2"
 
 
 def test_session_log_disabled(monkeypatch):

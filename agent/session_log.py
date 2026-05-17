@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -18,6 +19,11 @@ def default_log_dir() -> Path:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def instructions_digest(text: str) -> str:
+    """Stable short id for a system-prompt body (session-log dedup)."""
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -37,6 +43,7 @@ class SessionLog:
         self.path = path.resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._handle = self.path.open("a", encoding="utf-8")
+        self._logged_instructions_id: str | None = None
 
     def event(self, kind: str, **fields: Any) -> None:
         record = {"ts": _utc_now(), "event": kind}
@@ -54,14 +61,18 @@ class SessionLog:
         instructions: str,
         input_text: str,
     ) -> None:
-        self.event(
-            "llm_request",
-            turn=turn,
-            model=model,
-            reasoning_effort=reasoning_effort,
-            instructions=instructions,
-            input=input_text,
-        )
+        digest = instructions_digest(instructions)
+        fields: dict[str, Any] = {
+            "turn": turn,
+            "model": model,
+            "reasoning_effort": reasoning_effort,
+            "instructions_id": digest,
+            "input": input_text,
+        }
+        if digest != self._logged_instructions_id:
+            self._logged_instructions_id = digest
+            fields["instructions"] = instructions
+        self.event("llm_request", **fields)
 
     def log_llm_response(self, *, turn: int, raw: str) -> None:
         self.event("llm_response", turn=turn, raw=raw)
