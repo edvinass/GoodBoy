@@ -78,7 +78,7 @@ _SUBTITLE_ICONS = {
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
-_USER_INPUT_PLACEHOLDER = "Ask anything…"
+_USER_INPUT_PLACEHOLDER = "Ask anything — @ files, / commands"
 
 _MAX_ACTIVITY_DIFF_LINES = 40
 
@@ -122,9 +122,9 @@ def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> st
 
     if step.action == AgentAction.RUN_SHELL:
         return (
-            "running terminal command"
+            "running shell command"
             if phase == "progress"
-            else "ran terminal command"
+            else "ran shell command"
         )
     if step.action == AgentAction.RUN_PYTHON:
         return "running Python" if phase == "progress" else "ran Python"
@@ -208,7 +208,8 @@ def format_pasted_text_label(paste_id: int, line_count: int) -> str:
     """Summary shown when the user pastes multiline text (e.g. +52 lines = 53 total)."""
     if line_count < 2:
         raise ValueError("line_count must be at least 2 for a paste label")
-    return f"[Pasted text #{paste_id} +{line_count - 1} lines]"
+    extra_lines = line_count - 1
+    return f"[Pasted text #{paste_id} · +{extra_lines} lines]"
 
 
 class _PasteState:

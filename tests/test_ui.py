@@ -28,7 +28,7 @@ from agent.ui import (
 
 
 def test_format_pasted_text_label():
-    assert format_pasted_text_label(1, 53) == "[Pasted text #1 +52 lines]"
+    assert format_pasted_text_label(1, 53) == "[Pasted text #1 · +52 lines]"
 
 
 def test_accept_active_completion_applies_highlighted_choice():
@@ -67,9 +67,9 @@ def test_accept_active_completion_uses_first_when_none_highlighted():
 def test_paste_state_register_multiline():
     state = _PasteState()
     label = state.register_paste("a\nb\nc")
-    assert label == "[Pasted text #1 +2 lines]"
+    assert label == "[Pasted text #1 · +2 lines]"
     assert state.stored == "a\nb\nc"
-    assert state.resolve("[Pasted text #1 +2 lines]") == "a\nb\nc"
+    assert state.resolve("[Pasted text #1 · +2 lines]") == "a\nb\nc"
 
 
 def test_paste_state_single_line_returns_none():
@@ -115,7 +115,7 @@ def test_prompt_user_shows_paste_label(capsys, monkeypatch):
     )
     ui.prompt_user()
     out = capsys.readouterr().out
-    assert "[Pasted text #1 +1 lines]" in out
+    assert "[Pasted text #1 · +1 lines]" in out
 
 
 def test_prompt_user_abort_on_cancel(monkeypatch):
@@ -265,8 +265,8 @@ def test_print_tool_result_shown_with_debug(capsys):
 
 def test_activity_label_shell_hides_command():
     step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s secret.example")
-    assert activity_label(step, phase="progress") == "running terminal command"
-    assert activity_label(step, phase="done") == "ran terminal command"
+    assert activity_label(step, phase="progress") == "running shell command"
+    assert activity_label(step, phase="done") == "ran shell command"
     assert "curl" not in activity_label(step, phase="done")
 
 
@@ -292,7 +292,7 @@ def test_print_harness_activity_shell_failure_still_shown(capsys):
     result = ToolResult(executed="run_shell", exit_code=1, stderr="command failed")
     ui.print_harness_activity(step, result)
     out = capsys.readouterr().out
-    assert "ran terminal command" in out
+    assert "ran shell command" in out
     assert "command failed" in out
 
 
