@@ -225,6 +225,72 @@ def test_to_prompt_size_bounded_by_recent_window():
     assert big not in older_section
 
 
+def test_format_plan_step_progress_shows_in_progress_index():
+    from agent.context import format_plan_step_progress
+
+    line = format_plan_step_progress(
+        [
+            PlanItem(id="1", text="done step", status=PlanItemStatus.DONE),
+            PlanItem(id="2", text="active", status=PlanItemStatus.IN_PROGRESS),
+            PlanItem(id="3", text="skipped", status=PlanItemStatus.CANCELLED),
+            PlanItem(id="4", text="later", status=PlanItemStatus.PENDING),
+        ]
+    )
+    assert line == '2/3 step "active"'
+
+
+def test_format_plan_step_progress_falls_back_to_first_pending():
+    from agent.context import format_plan_step_progress
+
+    assert (
+        format_plan_step_progress(
+            [PlanItem(id="1", text="later", status=PlanItemStatus.PENDING)]
+        )
+        == '1/1 step "later"'
+    )
+
+
+def test_effective_plan_items_prefers_same_response_plan():
+    from agent.context import SessionContext, effective_plan_items
+
+    ctx = SessionContext(user_task="t")
+    ctx.plan_items = [
+        PlanItem(id="old", text="stale", status=PlanItemStatus.PENDING)
+    ]
+    raw = (
+        '{"action":"read_file","path":"main.py"}'
+        '{"action":"update_plan","plan_items":[{"id":"1","text":"fresh",'
+        '"status":"in_progress"}]}'
+    )
+    items = effective_plan_items(ctx, raw)
+    assert len(items) == 1
+    assert items[0].text == "fresh"
+
+
+def test_plan_items_from_response_reads_trailing_update_plan():
+    import json
+
+    from agent.context import plan_items_from_response
+    from agent.types import AgentAction, AgentStep
+
+    raw = json.dumps(
+        AgentStep(action=AgentAction.RUN_SHELL, command="pwd").model_dump(
+            mode="json"
+        )
+    ) + json.dumps(
+        AgentStep(
+            action=AgentAction.UPDATE_PLAN,
+            plan_items=[
+                PlanItem(id="1", text="recon", status=PlanItemStatus.IN_PROGRESS),
+            ],
+        ).model_dump(mode="json")
+    )
+    items = plan_items_from_response(raw)
+    assert items is not None
+    assert items[0].text == "recon"
+    assert items[0].status == PlanItemStatus.IN_PROGRESS
+
+
 def test_format_plan_items_marks_status():
     from agent.context import format_plan_items
 

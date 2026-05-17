@@ -453,6 +453,44 @@ def test_thinking_default_label_non_tty(capsys, monkeypatch):
     assert "working on your task" in capsys.readouterr().out
 
 
+def test_thinking_shows_plan_step_under_goodboy(capsys, monkeypatch):
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    ui = ConversationUI()
+    with ui.thinking(
+        label="writing ui.py",
+        plan_items=[
+            PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
+            PlanItem(
+                id="2",
+                text="refactor loop",
+                status=PlanItemStatus.IN_PROGRESS,
+            ),
+            PlanItem(id="3", text="verify", status=PlanItemStatus.PENDING),
+        ],
+    ):
+        pass
+    out = capsys.readouterr().out
+    assert "GoodBoy" in out
+    assert "writing ui.py" in out
+    assert '2/3 step "refactor loop"' in out
+
+
+def test_thinking_updater_render_includes_plan_step():
+    from rich.console import Group
+
+    from agent.ui import ThinkingUpdater
+
+    updater = ThinkingUpdater(
+        _label="reading files",
+        _console=Console(),
+        _plan_step='2/4 step "map modules"',
+    )
+    rendered = updater._render()
+    assert isinstance(rendered, Group)
+    assert "GoodBoy" in rendered.renderables[0].plain
+    assert '2/4 step "map modules"' in rendered.renderables[1].plain
+
+
 def test_default_hides_task_complete(capsys):
     ui = ConversationUI()
     ui.print_task_complete()

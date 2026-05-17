@@ -27,6 +27,52 @@ def format_plan_items(items: list[PlanItem]) -> str:
     return "\n".join(lines)
 
 
+def _plan_step_line(index: int, total: int, text: str) -> str:
+    cleaned = text.strip()
+    if len(cleaned) > 72:
+        cleaned = cleaned[:69] + "..."
+    return f'{index}/{total} step "{cleaned}"'
+
+
+def format_plan_step_progress(items: list[PlanItem]) -> str | None:
+    """One-line plan progress for the GoodBoy spinner (e.g. ``2/5 step "…"``)."""
+    active = [item for item in items if item.status != PlanItemStatus.CANCELLED]
+    if not active:
+        return None
+    total = len(active)
+    for index, item in enumerate(active, start=1):
+        if item.status == PlanItemStatus.IN_PROGRESS:
+            return _plan_step_line(index, total, item.text)
+    for index, item in enumerate(active, start=1):
+        if item.status == PlanItemStatus.PENDING:
+            return _plan_step_line(index, total, item.text)
+    return None
+
+
+def plan_items_from_response(raw: str | None) -> list[PlanItem] | None:
+    """Last ``update_plan`` in a model response, if any."""
+    if not raw:
+        return None
+    from agent.types import parse_all_agent_steps
+
+    latest: list[PlanItem] | None = None
+    for step in parse_all_agent_steps(raw):
+        if step.action == AgentAction.UPDATE_PLAN and step.plan_items:
+            latest = list(step.plan_items)
+    return latest
+
+
+def effective_plan_items(
+    ctx: SessionContext, raw: str | None = None
+) -> list[PlanItem]:
+    """Plan rows for UI spinners: session context plus same-response updates."""
+    items = list(ctx.plan_items)
+    from_response = plan_items_from_response(raw)
+    if from_response is not None:
+        return from_response
+    return items
+
+
 DEFAULT_RECENT_FULL_TURNS = 8
 _SUMMARY_LINE_PREVIEW_CHARS = 200
 

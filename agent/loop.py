@@ -20,7 +20,7 @@ from agent.clarifications import (
 )
 from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
-from agent.context import ContextWatermark, SessionContext
+from agent.context import ContextWatermark, SessionContext, effective_plan_items
 from agent.models import (
     cheapest_capable_model,
     cheapest_model_with_tools,
@@ -57,6 +57,7 @@ from agent.types import (
     TurnRecord,
     _SWITCH_TOOLS_ACTIONS,
     parse_agent_step,
+    parse_all_agent_steps,
 )
 from openai import APIConnectionError
 
@@ -334,6 +335,14 @@ class AgentLoop:
 
             try:
                 step = parse_agent_step(raw)
+                for extra in parse_all_agent_steps(raw):
+                    if (
+                        extra.action == AgentAction.UPDATE_PLAN
+                        and extra.plan_items
+                    ):
+                        ctx = ctx.model_copy(
+                            update={"plan_items": list(extra.plan_items)}
+                        )
                 consecutive_parse_failures = 0
             except Exception as exc:
                 err = f"Turn {turn}: invalid JSON — {exc}"
@@ -688,8 +697,11 @@ class AgentLoop:
                     continue
 
                 progress_label = progress_label_for_step(step)
+                spinner_plan = effective_plan_items(ctx, raw)
                 if self._ui is not None:
-                    with tool_activity(self._ui, progress_label):
+                    with tool_activity(
+                        self._ui, progress_label, plan_items=spinner_plan
+                    ):
                         tool_result = self._run_harness_tool(step)
                 else:
                     tool_result = self._run_harness_tool(step)
@@ -876,7 +888,9 @@ class AgentLoop:
             if show_stream:
                 self._ui.begin_model_stream(turn=turn)
             try:
-                with self._ui.thinking() as thinking_updater:
+                with self._ui.thinking(
+                    plan_items=effective_plan_items(ctx)
+                ) as thinking_updater:
                     thinking_holder.append(thinking_updater)
                     raw_text, rid, usage = self._do_llm_call(
                         llm_kwargs,

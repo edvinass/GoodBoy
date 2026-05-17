@@ -190,3 +190,15 @@ def test_parse_concatenated_json_objects_uses_first_only():
     step = parse_agent_step(raw)
     assert step.action == AgentAction.RUN_SHELL
     assert step.command == "pwd"
+
+
+def test_parse_all_agent_steps_returns_every_object():
+    from agent.types import parse_all_agent_steps
+
+    raw = json.dumps({"action": "run_shell", "command": "pwd"}) + json.dumps(
+        {"action": "task_complete", "message": "done"}
+    )
+    steps = parse_all_agent_steps(raw)
+    assert len(steps) == 2
+    assert steps[0].action == AgentAction.RUN_SHELL
+    assert steps[1].action == AgentAction.TASK_COMPLETE

@@ -54,7 +54,7 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
-from agent.context import format_plan_items
+from agent.context import format_plan_items, format_plan_step_progress
 from agent.mentions import (
     active_mention_query,
     expand_file_mentions,
@@ -68,7 +68,7 @@ from agent.repl_commands import (
 )
 from agent.workspace import resolve_workspace
 from settings import get_settings
-from agent.types import AgentAction, AgentStep, ToolResult
+from agent.types import AgentAction, AgentStep, PlanItem, ToolResult
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(139,69,19)"
@@ -111,6 +111,7 @@ class ThinkingUpdater:
 
     _label: str
     _console: Console
+    _plan_step: str | None = None
     _status: Any = None
     _non_tty_printed: bool = False
 
@@ -119,14 +120,26 @@ class ThinkingUpdater:
         if not cleaned or cleaned == self._label:
             return
         self._label = cleaned
+        self._refresh()
+
+    def _refresh(self) -> None:
+        rendered = self._render()
         if self._status is not None:
-            self._status.update(self._render())
+            self._status.update(rendered)
         elif not self._non_tty_printed:
             self._non_tty_printed = True
-            self._console.print(self._render())
+            self._console.print(rendered)
 
-    def _render(self) -> str:
-        return f"[agent]🐶 GoodBoy[/] [muted]{self._label}…[/]"
+    def _render(self) -> RenderableType:
+        header = Text.from_markup(
+            f"[agent]🐶 GoodBoy[/] [muted]{self._label}…[/]"
+        )
+        if not self._plan_step:
+            return header
+        return Group(
+            header,
+            Text.from_markup(f"  [muted]{self._plan_step}[/]"),
+        )
 
 
 def progress_label_for_step(step: AgentStep) -> str:
@@ -1683,20 +1696,36 @@ class ConversationUI:
                 self.print_file_diff(step.path or "file", diff)
 
     @contextmanager
-    def thinking(self, label: str = "working on your task") -> Iterator[ThinkingUpdater]:
+    def thinking(
+        self,
+        label: str = "working on your task",
+        *,
+        plan_items: list[PlanItem] | None = None,
+    ) -> Iterator[ThinkingUpdater]:
         """Show a spinner while the agent waits on the LLM.
 
         Yields a :class:`ThinkingUpdater` so callers can refresh the label when
         ``status`` arrives from a streamed model response.
         """
+        plan_step = (
+            format_plan_step_progress(plan_items) if plan_items else None
+        )
         updater = ThinkingUpdater(
             _label=label.strip().rstrip(".…") or "working on your task",
             _console=self._console,
+            _plan_step=plan_step,
         )
         if not sys.stdout.isatty():
-            self._console.print(
-                f"[agent]◆ GoodBoy[/] [muted]{updater._label}…[/]"
-            )
+            rendered = updater._render()
+            if isinstance(rendered, Group):
+                for line in rendered.renderables:
+                    text = line
+                    markup = text.markup if isinstance(text, Text) else str(text)
+                    self._console.print(markup.replace("🐶", "◆", 1))
+            else:
+                self._console.print(
+                    rendered.markup.replace("🐶", "◆", 1)  # type: ignore[union-attr]
+                )
             yield updater
             return
 
@@ -1715,7 +1744,12 @@ class ConversationUI:
 
 
 @contextmanager
-def tool_activity(ui: ConversationUI, label: str) -> Iterator[None]:
+def tool_activity(
+    ui: ConversationUI,
+    label: str,
+    *,
+    plan_items: list[PlanItem] | None = None,
+) -> Iterator[None]:
     """Spinner while a harness tool runs (interactive TTY only).
 
     ``label`` is human-facing text from :func:`activity_label` (e.g.
@@ -1724,5 +1758,5 @@ def tool_activity(ui: ConversationUI, label: str) -> Iterator[None]:
     if not ui._is_interactive_tty():
         yield
         return
-    with ui.thinking(label=label):
+    with ui.thinking(label=label, plan_items=plan_items):
         yield

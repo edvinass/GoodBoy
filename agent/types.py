@@ -228,8 +228,30 @@ def _load_first_json_object(text: str) -> Any:
     return data
 
 
+def parse_all_agent_steps(raw: str) -> list[AgentStep]:
+    """Parse every JSON action object in a (possibly concatenated) response."""
+    import json
+
+    text = _strip_markdown_json_fence(raw.strip())
+    if not text:
+        return []
+    decoder = json.JSONDecoder()
+    steps: list[AgentStep] = []
+    pos = 0
+    while pos < len(text):
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
+            break
+        data, end = decoder.raw_decode(text, pos)
+        steps.append(AgentStep.model_validate(data))
+        pos = end
+    return steps
+
+
 def parse_agent_step(raw: str) -> AgentStep:
     """Parse and validate JSON text into an AgentStep."""
-    text = _strip_markdown_json_fence(raw.strip())
-    data = _load_first_json_object(text)
-    return AgentStep.model_validate(data)
+    steps = parse_all_agent_steps(raw)
+    if not steps:
+        raise ValueError("empty model response")
+    return steps[0]
