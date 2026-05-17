@@ -8,9 +8,9 @@ def test_get_version_matches_pyproject():
 
 
 def test_format_startup_includes_version_model_and_description():
-    text = format_startup(model="gpt-4o-mini")
+    text = format_startup(model="gpt-5.4-nano")
     assert "GoodBoy" in text
     assert get_version() in text
-    assert "gpt-4o-mini" in text
+    assert "gpt-5.4-nano" in text
     assert "Model" in text
     assert DESCRIPTION.split(".")[0] in text

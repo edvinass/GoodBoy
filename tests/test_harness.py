@@ -65,7 +65,7 @@ class FakeUI:
 def _harness(outcome: LoopOutcome, prompts: list[str]) -> AgentHarness:
     loop = Mock()
     loop.refresh_system_prompt = Mock()
-    loop.session_model = "gpt-4o-mini"
+    loop.session_model = "gpt-5.4-nano"
     loop.run.return_value = LoopResult(
         outcome=outcome,
         message="done",
@@ -220,8 +220,8 @@ def test_harness_clear_resets_conversation_history():
 def test_harness_model_command_changes_loop_and_persists(monkeypatch, tmp_path):
     loop = Mock()
     loop.workspace = "/tmp"
-    loop.session_model = "gpt-4o-mini"
-    loop._allowed_models = ["gpt-4o-mini", "gpt-5.4-mini"]
+    loop.session_model = "gpt-5.4-nano"
+    loop._allowed_models = ["gpt-5.4-nano", "gpt-5.4-mini"]
     loop.run.return_value = LoopResult(
         outcome=LoopOutcome.TASK_COMPLETE,
         message="done",
@@ -281,7 +281,7 @@ def test_harness_slash_autoswitch_toggles_and_persists(monkeypatch):
         context=SessionContext(user_task="task"),
     )
     loop.refresh_system_prompt = Mock()
-    loop.session_model = "gpt-4o-mini"
+    loop.session_model = "gpt-5.4-nano"
     ui = FakeUI(prompts=iter(["/autoswitch", "exit"]))
     harness = AgentHarness(loop=loop, ui=ui)
     saved: dict[str, str] = {}

@@ -7,7 +7,7 @@ from agent.context import SessionContext
 from agent.loop import AgentLoop, LoopOutcome
 from agent.types import AgentAction, AgentStep
 
-_ALLOWED = ["gpt-4o-mini", "gpt-5.4-mini", "gpt-5.5", "o4-mini"]
+_ALLOWED = ["gpt-4.1-nano", "gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5"]
 
 
 def _llm_responses(responses: list[AgentStep]):
@@ -231,13 +231,13 @@ def test_loop_model_field_on_run_shell_applied_on_next_call(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
-        model="gpt-4o-mini",
+        model="gpt-5.4-nano",
         llm_call=tracking_llm,
     )
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-4o-mini"
+    assert calls[0]["model"] == "gpt-5.4-nano"
     assert calls[1]["model"] == "gpt-5.4-mini"
     assert loop.session_model == "gpt-5.4-mini"
 
@@ -265,13 +265,13 @@ def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
-        model="gpt-4o-mini",
+        model="gpt-5.4-nano",
         llm_call=tracking_llm,
     )
     result = loop.run("task")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-4o-mini"
+    assert calls[0]["model"] == "gpt-5.4-nano"
     assert calls[1]["model"] == "gpt-5.4-mini"
     assert loop.session_model == "gpt-5.4-mini"
 
@@ -350,7 +350,7 @@ def test_loop_switch_tools_enables_hosted_tools(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
-        model="gpt-4o-mini",
+        model="gpt-5.4-nano",
         llm_call=tracking_llm,
     )
     result = loop.run("what is the weather in London")
@@ -424,7 +424,7 @@ def test_loop_switch_tools_rejects_model_on_same_turn(tmp_path: Path):
     assert any("switch_tools" in e and "model" in e for e in result.context.parse_errors)
 
 
-def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):
+def test_loop_reasoning_effort_rejected_for_non_reasoning_model(tmp_path: Path):
     calls = {"n": 0}
 
     def llm(**_kwargs):
@@ -448,7 +448,7 @@ def test_loop_reasoning_effort_rejected_for_gpt4o_mini(tmp_path: Path):
         workspace=tmp_path,
         max_turns=5,
         allowed_models=_ALLOWED,
-        model="gpt-4o-mini",
+        model="gpt-4.1-nano",
         llm_call=llm,
     )
     result = loop.run("task")

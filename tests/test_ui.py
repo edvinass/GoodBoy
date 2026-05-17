@@ -91,10 +91,10 @@ def test_print_agent_step_shows_model_with_flag(capsys):
         action=AgentAction.RUN_SHELL,
         command="ls",
     )
-    ui.print_agent_step(step, model="gpt-4o-mini", reasoning="low")
+    ui.print_agent_step(step, model="gpt-5.4-nano", reasoning="low")
     out = capsys.readouterr().out
     assert "model" in out
-    assert "gpt-4o-mini" in out
+    assert "gpt-5.4-nano" in out
     assert "reasoning" in out
     assert "low" in out
 
@@ -105,7 +105,7 @@ def test_routing_table_width_matches_console(capsys):
         console=Console(width=72, height=25, theme=_THEME),
     )
     step = AgentStep(action=AgentAction.RUN_SHELL, command="ls")
-    ui.print_agent_step(step, model="gpt-4o-mini", reasoning="low")
+    ui.print_agent_step(step, model="gpt-5.4-nano", reasoning="low")
     out = capsys.readouterr().out
     table_borders = [line for line in out.splitlines() if line.startswith("╭") or line.startswith("╰")]
     assert table_borders
@@ -134,9 +134,9 @@ def test_auto_width_console_ignores_stale_columns_env(monkeypatch):
 def test_print_agent_step_hides_model_without_flag(capsys):
     ui = ConversationUI(show_model=False)
     step = AgentStep(action=AgentAction.RUN_SHELL, command="ls")
-    ui.print_agent_step(step, model="gpt-4o-mini")
+    ui.print_agent_step(step, model="gpt-5.4-nano")
     out = capsys.readouterr().out
-    assert "gpt-4o-mini" not in out
+    assert "gpt-5.4-nano" not in out
 
 
 def test_print_agent_step_hides_shell_without_debug(capsys):
@@ -285,7 +285,7 @@ def test_print_llm_request_with_debug_input(capsys):
     ui = ConversationUI(debug_input=True)
     ui.print_llm_request(
         turn=1,
-        model="gpt-4o-mini",
+        model="gpt-5.4-nano",
         reasoning_effort=None,
         instructions="You are GoodBoy.",
         input_text="## User task\nfix bug",
@@ -296,14 +296,14 @@ def test_print_llm_request_with_debug_input(capsys):
     assert "instructions" in out
     assert "You are GoodBoy." in out
     assert "fix bug" in out
-    assert "gpt-4o-mini" in out
+    assert "gpt-5.4-nano" in out
 
 
 def test_print_llm_request_hidden_without_flag(capsys):
     ui = ConversationUI(debug_input=False)
     ui.print_llm_request(
         turn=1,
-        model="gpt-4o-mini",
+        model="gpt-5.4-nano",
         reasoning_effort=None,
         instructions="secret",
         input_text="task",

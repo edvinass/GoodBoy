@@ -49,11 +49,11 @@ def test_switch_model_with_reasoning_effort():
     step = AgentStep.model_validate(
         {
             "action": "switch_model",
-            "model": "gpt-4o-mini",
+            "model": "gpt-5.4-nano",
             "reasoning_effort": "low",
         }
     )
-    assert step.model == "gpt-4o-mini"
+    assert step.model == "gpt-5.4-nano"
     assert step.reasoning_effort == "low"
 
 
@@ -62,10 +62,10 @@ def test_model_on_run_shell():
         {
             "action": "run_shell",
             "command": "pwd",
-            "model": "gpt-4o-mini",
+            "model": "gpt-5.4-nano",
         }
     )
-    assert step.model == "gpt-4o-mini"
+    assert step.model == "gpt-5.4-nano"
 
 
 def test_model_not_on_switch_tools():

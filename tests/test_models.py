@@ -39,8 +39,8 @@ def test_models_sorted_cheapest_first():
 
 
 def test_format_models_section_includes_cost_policy_fields():
-    text = format_models_section(["gpt-4o-mini", "gpt-5.5"])
-    assert "gpt-4o-mini" in text
+    text = format_models_section(["gpt-5.4-nano", "gpt-5.5"])
+    assert "gpt-5.4-nano" in text
     assert "minimal" in text
     assert "gpt-5.5" in text
     assert "premium" in text
@@ -51,19 +51,19 @@ def test_format_cost_policy_section():
     text = format_cost_policy_section()
     assert "Cost policy" in text
     assert "Escalation ladder" in text
-    assert "gpt-4o-mini" in text
+    assert "gpt-5.4-nano" in text
 
 
 def test_resolve_reasoning_effort_non_reasoning_model():
-    assert resolve_reasoning_effort("gpt-4o-mini", "low") is None
+    assert resolve_reasoning_effort("gpt-4.1-nano", "low") is None
 
 
 def test_resolve_reasoning_effort_reasoning_model():
     assert resolve_reasoning_effort("gpt-5.4-mini", "medium") == "medium"
 
 
-def test_validate_reasoning_effort_rejects_on_gpt4o_mini():
-    err = validate_reasoning_effort_for_model("gpt-4o-mini", "low")
+def test_validate_reasoning_effort_rejects_on_gpt41_nano():
+    err = validate_reasoning_effort_for_model("gpt-4.1-nano", "low")
     assert err is not None
     assert "does not support" in err
 
@@ -77,7 +77,7 @@ def test_nano_lacks_computer_use_and_tool_search():
 
 def test_cheapest_model_with_tools():
     model = cheapest_model_with_tools(
-        ["gpt-5.5", "gpt-4o-mini", "gpt-4.1-nano"],
+        ["gpt-5.5", "gpt-5.4-nano", "gpt-4.1-nano"],
         [OpenAITool.WEB_SEARCH],
     )
     assert model == "gpt-4.1-nano"
@@ -90,7 +90,7 @@ def test_format_hosted_tools_reference():
 
 
 def test_build_system_prompt_coding_agent_identity():
-    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"])
+    prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"])
     assert "powerful autonomous coding agent" in prompt
     assert "Core objective" in prompt
     assert "Inspect the codebase before making changes" in prompt
@@ -99,7 +99,7 @@ def test_build_system_prompt_coding_agent_identity():
 
 
 def test_build_system_prompt_includes_cost_policy():
-    prompt = build_system_prompt(allowed_models=["gpt-4o-mini", "gpt-5.5"])
+    prompt = build_system_prompt(allowed_models=["gpt-5.4-nano", "gpt-5.5"])
     assert "Cost policy" in prompt
     assert "Escalate one tier at a time only after a failed" in prompt
     assert "Configuration guide" in prompt
@@ -109,11 +109,11 @@ def test_build_system_prompt_includes_cost_policy():
     assert "separate turn" in prompt.lower() or "separate turns" in prompt.lower()
     assert "web_search" in prompt
     assert "run_shell" in prompt
-    assert "gpt-4o-mini" in prompt
+    assert "gpt-5.4-nano" in prompt
 
 
 def test_build_system_prompt_visibility_without_debug():
-    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=False)
+    prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"], debug=False)
     assert "Debug mode is **off**" in prompt
     assert "does **not** see run_shell commands" in prompt
     assert "does **not** see" in prompt and "thought" in prompt
@@ -123,7 +123,7 @@ def test_build_system_prompt_visibility_without_debug():
 
 def test_build_system_prompt_visibility_with_thoughts():
     prompt = build_system_prompt(
-        allowed_models=["gpt-4o-mini"],
+        allowed_models=["gpt-5.4-nano"],
         debug=False,
         show_thoughts=True,
     )
@@ -133,7 +133,7 @@ def test_build_system_prompt_visibility_with_thoughts():
 
 def test_build_system_prompt_visibility_with_show_commands():
     prompt = build_system_prompt(
-        allowed_models=["gpt-4o-mini"],
+        allowed_models=["gpt-5.4-nano"],
         show_commands=True,
     )
     assert "goodboy -c" in prompt
@@ -143,7 +143,7 @@ def test_build_system_prompt_visibility_with_show_commands():
 
 def test_build_system_prompt_auto_model_switch_policy():
     prompt = build_system_prompt(
-        allowed_models=["gpt-4o-mini"],
+        allowed_models=["gpt-5.4-nano"],
         auto_model_switch=True,
     )
     assert "automatic switching enabled" in prompt
@@ -152,7 +152,7 @@ def test_build_system_prompt_auto_model_switch_policy():
 
 
 def test_build_system_prompt_visibility_with_debug():
-    prompt = build_system_prompt(allowed_models=["gpt-4o-mini"], debug=True)
+    prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"], debug=True)
     assert "goodboy -d" in prompt
     assert "run_shell commands" in prompt
     assert "stdout/stderr" in prompt

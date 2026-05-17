@@ -9,7 +9,7 @@ from agent.loop import AgentLoop, LoopOutcome
 from agent.session_log import SessionLog, open_session_log
 from agent.types import AgentAction, AgentStep
 
-_ALLOWED = ["gpt-4o-mini", "gpt-5.4-mini", "gpt-5.5", "o4-mini"]
+_ALLOWED = ["gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5"]
 
 
 def _llm_responses(responses: list[AgentStep]):

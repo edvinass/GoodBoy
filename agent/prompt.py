@@ -212,8 +212,8 @@ Set **reasoning_effort** on any action except switch_tools (often together with 
 {"action": "run_shell", "command": "pytest -q", "reasoning_effort": "medium"}
 ```
 
-- Valid only for reasoning models (gpt-5.x, o3, o4-mini, etc.) — see catalog efforts per model.
-- Omit on gpt-4o-mini / gpt-4.1-* general models (harness will error if you set it).
+- Valid only for reasoning models (gpt-5.x, etc.) — see catalog efforts per model.
+- Omit on gpt-4.1-* general models (harness will error if you set it).
 - Escalate one level at a time; prefer none/low unless stuck.
 
 ### 4. Do multiple config changes — separate turns
@@ -222,7 +222,7 @@ Set **reasoning_effort** on any action except switch_tools (often together with 
 |------|--------|-------------------|------|
 | Live docs / API reference | switch_tools + web_search | run_shell with model if current model lacks tool | continue task |
 | Harder debugging | run_shell with model gpt-5.4-mini + reasoning medium | — | continue task |
-| Cheaper after done | task_complete or run_shell with model gpt-4o-mini | — | continue |
+| Cheaper after done | task_complete or run_shell with model gpt-5.4-nano | — | continue |
 
 Never combine switch_tools with model or reasoning_effort on the **same** JSON object.
 
