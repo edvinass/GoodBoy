@@ -1057,8 +1057,6 @@ class ConversationUI:
             return
         with self._display_lock:
             self._redraw_all()
-            if self._at_prompt:
-                self._print_header("user")
 
     def _sync_redraw(self) -> None:
         if not self._pending_redraw or not self._history or not self._is_interactive_tty():
@@ -1216,10 +1214,6 @@ class ConversationUI:
     def newline(self) -> None:
         self._console.print()
 
-    def _print_header(self, role: str, *, subtitle: str | None = None) -> None:
-        self._console.print()
-        self._console.print(self._header_title(role, subtitle=subtitle))
-
     def prompt_user(self) -> str:
         """Read user input; Enter sends; multiline paste shows a collapsed label."""
         self._sync_redraw()
@@ -1228,7 +1222,6 @@ class ConversationUI:
         self._stop_requested = False
         self._at_prompt = True
         try:
-            self._print_header("user")
             paste_state = _PasteState()
             result = _prompt_user_line(
                 paste_state,
