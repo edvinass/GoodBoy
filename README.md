@@ -13,6 +13,7 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 - **Structured agent protocol**: model responses are parsed into typed steps.
 - **Local tool execution**: shell commands and Python code (configurable timeout).
 - **Model allowlist + interactive model picker**.
+- **Default reasoning-effort picker** for reasoning models.
 - **Session logging** (optional) to a local log directory.
 - **TLS/proxy-friendly OpenAI client options** (custom CA bundle, disable verify).
 
@@ -45,6 +46,7 @@ goodboy setup
 This prompts for:
 - your **OpenAI API key**
 - the **default model**
+- the optional **default reasoning effort**
 
 To check current saved settings:
 
@@ -81,6 +83,7 @@ Common options:
 - `-c` / `--show-commands`: print shell/Python commands the agent runs (not their output)
 - `/commands`: toggle command visibility during a session (same as `-c`)
 - `/autoswitch`: toggle automatic model switching (agent may escalate models between turns)
+- `/reasoning`: set the default reasoning effort for reasoning models
 - `-s` / `--stream-output` or `/stream`: stream each model response to the console as it is generated
 - `-d` / `--debug`: show commands and stdout/stderr from shell and Python tool runs
 - `-i` / `--debug-input`: print the full prompt sent to the model each turn
@@ -95,6 +98,7 @@ Key variables:
 - `OPENAI_MODEL` – default model id (used when selecting the model for a new run)
 - `GOODBOY_SHOW_COMMANDS` – when `true`, show shell/Python commands (no output); updated by `/commands`
 - `GOODBOY_AUTO_MODEL_SWITCH` – when `true`, allow proactive model escalation; updated by `/autoswitch`
+- `GOODBOY_REASONING_EFFORT` – default reasoning effort for reasoning models; updated by `/reasoning`
 
 Agent behavior:
 - `GOODBOY_MAX_TURNS` – maximum agent turns per task (default: `40`)
@@ -111,7 +115,7 @@ TLS / HTTPS proxy configuration:
 
 ## Harness commands
 
-During an interactive session, GoodBoy supports built-in REPL commands (e.g. exit/clear/model).
+During an interactive session, GoodBoy supports built-in REPL commands (e.g. exit/clear/model/reasoning).
 
 For a full list, see:
 - `agent/repl_commands.py`
