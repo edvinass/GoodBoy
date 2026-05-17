@@ -225,6 +225,23 @@ def test_to_prompt_size_bounded_by_recent_window():
     assert big not in older_section
 
 
+def test_format_plan_items_marks_status():
+    from agent.context import format_plan_items
+
+    text = format_plan_items(
+        [
+            PlanItem(id="1", text="done step", status=PlanItemStatus.DONE),
+            PlanItem(id="2", text="active", status=PlanItemStatus.IN_PROGRESS),
+            PlanItem(id="3", text="skipped", status=PlanItemStatus.CANCELLED),
+            PlanItem(id="4", text="later", status=PlanItemStatus.PENDING),
+        ]
+    )
+    assert "[x] (1) done step" in text
+    assert "[>] (2) active" in text
+    assert "[-] (3) skipped" in text
+    assert "[ ] (4) later" in text
+
+
 def test_pinned_plan_and_memory_in_prompt_and_delta():
     ctx = SessionContext(user_task="t")
     ctx.plan_items = [

@@ -11,6 +11,22 @@ from pydantic import BaseModel, Field
 from agent.memory import load_project_memory
 from agent.types import AgentAction, PlanItem, PlanItemStatus, TurnRecord
 
+
+def format_plan_items(items: list[PlanItem]) -> str:
+    """Render plan rows for model context and terminal output."""
+    lines: list[str] = []
+    for item in items:
+        mark = " "
+        if item.status == PlanItemStatus.DONE:
+            mark = "x"
+        elif item.status == PlanItemStatus.CANCELLED:
+            mark = "-"
+        elif item.status == PlanItemStatus.IN_PROGRESS:
+            mark = ">"
+        lines.append(f"- [{mark}] ({item.id}) {item.text}")
+    return "\n".join(lines)
+
+
 DEFAULT_RECENT_FULL_TURNS = 8
 _SUMMARY_LINE_PREVIEW_CHARS = 200
 
@@ -92,17 +108,7 @@ class SessionContext(BaseModel):
         """Durable plan and memory — always included in model input."""
         sections: list[str] = []
         if self.plan_items:
-            lines = ["## Active plan"]
-            for item in self.plan_items:
-                mark = " "
-                if item.status == PlanItemStatus.DONE:
-                    mark = "x"
-                elif item.status == PlanItemStatus.CANCELLED:
-                    mark = "-"
-                elif item.status == PlanItemStatus.IN_PROGRESS:
-                    mark = ">"
-                lines.append(f"- [{mark}] ({item.id}) {item.text}")
-            sections.append("\n".join(lines))
+            sections.append("## Active plan\n" + format_plan_items(self.plan_items))
         if self.working_memory:
             mem_lines = ["## Working memory"]
             mem_lines.extend(f"- {line}" for line in self.working_memory)

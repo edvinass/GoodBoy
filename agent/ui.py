@@ -54,6 +54,7 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
+from agent.context import format_plan_items
 from agent.mentions import (
     active_mention_query,
     expand_file_mentions,
@@ -1523,9 +1524,9 @@ class ConversationUI:
             if self._show_thoughts and step.thought:
                 self._record("thought", text=step.thought)
             if step.action == AgentAction.UPDATE_PLAN:
-                count = len(step.plan_items or [])
-                summary = f"Planning ({count} items)" if count else "Planning"
-                self.print_notice(summary)
+                items = step.plan_items or []
+                body = format_plan_items(items) if items else "Planning"
+                self.print_agent(body, subtitle="plan")
             if step.message and step.action in (
                 AgentAction.NEED_USER_INPUT,
                 AgentAction.TASK_COMPLETE,
@@ -1580,11 +1581,9 @@ class ConversationUI:
             self._record("thought", text=step.thought)
 
         if step.action == AgentAction.UPDATE_PLAN:
-            count = len(step.plan_items or [])
-            self.print_agent(
-                f"Planning ({count} items)" if count else "Planning",
-                subtitle="plan",
-            )
+            items = step.plan_items or []
+            body = format_plan_items(items) if items else "Planning"
+            self.print_agent(body, subtitle="plan")
             return
 
         if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
