@@ -28,7 +28,15 @@ from prompt_toolkit.formatted_text import AnyFormattedText
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.key_binding.defaults import load_key_bindings
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-from prompt_toolkit.layout import Dimension, Float, FloatContainer, HSplit, Layout, Window
+from prompt_toolkit.layout import (
+    ConditionalContainer,
+    Dimension,
+    Float,
+    FloatContainer,
+    HSplit,
+    Layout,
+    Window,
+)
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.processors import AfterInput, ConditionalProcessor
@@ -88,6 +96,7 @@ _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything"
 _USER_INPUT_FOOTER = "@ files, / commands"
+_USER_INPUT_MENU_RESERVE = 8
 
 _MAX_ACTIVITY_DIFF_LINES = 40
 
@@ -436,15 +445,27 @@ def _run_framed_user_prompt(
     bottom_window = _frame_row(_input_border_fragments)
     footer_window = _frame_row(_input_footer_fragments)
 
+    # Reserve space below the input so the completion menu opens downward
+    # (prompt_toolkit flips upward when there is more room above the cursor).
+    menu_spacer = ConditionalContainer(
+        Window(height=Dimension(min=_USER_INPUT_MENU_RESERVE)),
+        filter=Condition(lambda: buffer.complete_state is not None),
+    )
+
+    input_frame = HSplit(
+        [top_window, input_window, menu_spacer, bottom_window, footer_window]
+    )
+
     root_container = FloatContainer(
-        HSplit([top_window, input_window, bottom_window, footer_window]),
+        input_frame,
         floats=[
             Float(
                 xcursor=True,
                 ycursor=True,
                 transparent=True,
                 content=CompletionsMenu(
-                    max_height=8,
+                    max_height=16,
+                    scroll_offset=1,
                     extra_filter=has_focus(input_control),
                 ),
             ),
