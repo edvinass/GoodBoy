@@ -291,6 +291,39 @@ def test_plan_items_from_response_reads_trailing_update_plan():
     assert items[0].status == PlanItemStatus.IN_PROGRESS
 
 
+def test_should_print_plan_progress():
+    from agent.context import should_print_plan_progress
+    from agent.types import PlanItem, PlanItemStatus
+
+    pending = [
+        PlanItem(id="1", text="a", status=PlanItemStatus.IN_PROGRESS),
+        PlanItem(id="2", text="b", status=PlanItemStatus.PENDING),
+    ]
+    assert should_print_plan_progress([], pending) is True
+    assert (
+        should_print_plan_progress(
+            [],
+            [
+                PlanItem(id="1", text="a", status=PlanItemStatus.DONE),
+            ],
+        )
+        is False
+    )
+
+    done_one = [
+        PlanItem(id="1", text="a", status=PlanItemStatus.DONE),
+        PlanItem(id="2", text="b", status=PlanItemStatus.IN_PROGRESS),
+    ]
+    assert should_print_plan_progress(pending, done_one) is True
+    assert should_print_plan_progress(done_one, done_one) is False
+
+    only_progress = [
+        PlanItem(id="1", text="a", status=PlanItemStatus.IN_PROGRESS),
+        PlanItem(id="2", text="b", status=PlanItemStatus.PENDING),
+    ]
+    assert should_print_plan_progress(pending, only_progress) is False
+
+
 def test_format_plan_items_marks_status():
     from agent.context import format_plan_items
 

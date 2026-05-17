@@ -34,6 +34,22 @@ def _plan_step_line(index: int, total: int, text: str) -> str:
     return f'{index}/{total} step "{cleaned}"'
 
 
+def count_plan_done(items: list[PlanItem]) -> int:
+    """Number of plan rows marked done (excludes cancelled)."""
+    return sum(1 for item in items if item.status == PlanItemStatus.DONE)
+
+
+def should_print_plan_progress(
+    before: list[PlanItem], after: list[PlanItem]
+) -> bool:
+    """Whether the terminal should show an updated plan panel."""
+    if not after:
+        return False
+    if not before:
+        return count_plan_done(after) == 0
+    return count_plan_done(after) > count_plan_done(before)
+
+
 def format_plan_step_progress(items: list[PlanItem]) -> str | None:
     """One-line plan progress for the GoodBoy spinner (e.g. ``2/5 step "…"``)."""
     active = [item for item in items if item.status != PlanItemStatus.CANCELLED]

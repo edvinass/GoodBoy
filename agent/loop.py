@@ -20,7 +20,12 @@ from agent.clarifications import (
 )
 from agent.session_log import SessionLog
 from agent.workspace import resolve_workspace
-from agent.context import ContextWatermark, SessionContext, effective_plan_items
+from agent.context import (
+    ContextWatermark,
+    SessionContext,
+    effective_plan_items,
+    should_print_plan_progress,
+)
 from agent.models import (
     cheapest_capable_model,
     cheapest_model_with_tools,
@@ -53,6 +58,7 @@ from agent.ui import (
 from agent.types import (
     AgentAction,
     AgentStep,
+    PlanItem,
     ToolResult,
     TurnRecord,
     _SWITCH_TOOLS_ACTIONS,
@@ -333,6 +339,7 @@ class AgentLoop:
             if session_log is not None:
                 session_log.log_llm_response(turn=turn, raw=raw)
 
+            plan_print_baseline = list(ctx.plan_items)
             try:
                 step = parse_agent_step(raw)
                 for extra in parse_all_agent_steps(raw):
@@ -343,6 +350,9 @@ class AgentLoop:
                         ctx = ctx.model_copy(
                             update={"plan_items": list(extra.plan_items)}
                         )
+                plan_print_baseline = self._maybe_print_plan_progress(
+                    ctx, plan_print_baseline
+                )
                 consecutive_parse_failures = 0
             except Exception as exc:
                 err = f"Turn {turn}: invalid JSON — {exc}"
@@ -506,6 +516,9 @@ class AgentLoop:
                         )
                     continue
                 ctx = ctx.model_copy(update={"plan_items": list(step.plan_items or [])})
+                plan_print_baseline = self._maybe_print_plan_progress(
+                    ctx, plan_print_baseline
+                )
                 ctx.add_turn(
                     TurnRecord(
                         turn=turn,
@@ -786,6 +799,19 @@ class AgentLoop:
                 self._last_response_id,
             )
         return ctx.to_prompt(), None
+
+    def _maybe_print_plan_progress(
+        self,
+        ctx: SessionContext,
+        baseline: list[PlanItem],
+    ) -> list[PlanItem]:
+        """Show plan when created (0 done) or when a step is marked done."""
+        if (
+            self._ui is not None
+            and should_print_plan_progress(baseline, ctx.plan_items)
+        ):
+            self._ui.print_plan(ctx.plan_items)
+        return list(ctx.plan_items)
 
     def _record_chain_progress(
         self, ctx: SessionContext, response_id: str | None

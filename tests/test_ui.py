@@ -589,29 +589,26 @@ def test_print_agent_step_need_user_input(capsys):
     assert "Which file?" in out
 
 
-def test_print_agent_step_shows_plan_items(capsys):
+def test_print_plan_shows_plan_items(capsys):
     ui = ConversationUI()
-    ui.print_agent_step(
-        AgentStep(
-            action=AgentAction.UPDATE_PLAN,
-            plan_items=[
-                PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
-                PlanItem(
-                    id="2",
-                    text="edit file",
-                    status=PlanItemStatus.IN_PROGRESS,
-                ),
-            ],
-        ),
+    ui.print_plan(
+        [
+            PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
+            PlanItem(
+                id="2",
+                text="edit file",
+                status=PlanItemStatus.IN_PROGRESS,
+            ),
+        ],
     )
     out = capsys.readouterr().out
     assert "[x] (1) recon" in out
     assert "[>] (2) edit file" in out
-    assert "Planning (2 items)" not in out
+    assert "(plan)" in out
 
 
-def test_verbose_print_agent_step_shows_plan_items(capsys):
-    ui = ConversationUI(verbose=True)
+def test_print_agent_step_does_not_show_plan_items(capsys):
+    ui = ConversationUI()
     ui.print_agent_step(
         AgentStep(
             action=AgentAction.UPDATE_PLAN,
@@ -621,7 +618,7 @@ def test_verbose_print_agent_step_shows_plan_items(capsys):
         ),
     )
     out = capsys.readouterr().out
-    assert "[ ] (a) write tests" in out
+    assert "(plan)" not in out
 
 
 def test_print_tool_result_hidden_without_debug(capsys):

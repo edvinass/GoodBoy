@@ -1472,6 +1472,11 @@ class ConversationUI:
     ) -> None:
         self._record("agent_message", text=text, subtitle=subtitle)
 
+    def print_plan(self, items: list[PlanItem]) -> None:
+        """Show the durable task plan in the GoodBoy panel."""
+        body = format_plan_items(items) if items else "Planning"
+        self.print_agent(body, subtitle="plan")
+
     def print_llm_request(
         self,
         *,
@@ -1536,10 +1541,6 @@ class ConversationUI:
         if not self.verbose:
             if self._show_thoughts and step.thought:
                 self._record("thought", text=step.thought)
-            if step.action == AgentAction.UPDATE_PLAN:
-                items = step.plan_items or []
-                body = format_plan_items(items) if items else "Planning"
-                self.print_agent(body, subtitle="plan")
             if step.message and step.action in (
                 AgentAction.NEED_USER_INPUT,
                 AgentAction.TASK_COMPLETE,
@@ -1592,12 +1593,6 @@ class ConversationUI:
 
         if self._show_thoughts and step.thought:
             self._record("thought", text=step.thought)
-
-        if step.action == AgentAction.UPDATE_PLAN:
-            items = step.plan_items or []
-            body = format_plan_items(items) if items else "Planning"
-            self.print_agent(body, subtitle="plan")
-            return
 
         if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
