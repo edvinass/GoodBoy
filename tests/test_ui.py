@@ -197,7 +197,7 @@ def test_default_hides_failed_banner_shows_message(capsys):
     assert "GoodBoy" in out
 
 
-def test_default_print_agent_step_only_final_message(capsys):
+def test_default_print_agent_step_surfaces_switch_tools_notice(capsys):
     ui = ConversationUI()
     ui.print_agent_step(
         AgentStep(
@@ -207,7 +207,10 @@ def test_default_print_agent_step_only_final_message(capsys):
         ),
         hosted_tools=["web_search"],
     )
-    assert capsys.readouterr().out == ""
+    captured = capsys.readouterr()
+    assert "web_search" in captured.err
+    assert "Hosted tools enabled" in captured.err
+    assert "Need search" not in captured.out + captured.err
 
     ui.print_agent_step(
         AgentStep(
@@ -217,11 +220,23 @@ def test_default_print_agent_step_only_final_message(capsys):
         ),
         hosted_tools=["web_search"],
     )
-    out = capsys.readouterr().out
-    assert "London: cloudy" in out
-    assert "thought" not in out
-    assert "web_search" not in out
-    assert "Enable hosted" not in out
+    captured = capsys.readouterr()
+    assert "London: cloudy" in captured.out
+    assert "thought" not in captured.out
+    assert "Enable hosted" not in captured.out
+
+
+def test_default_print_agent_step_surfaces_switch_model_notice(capsys):
+    ui = ConversationUI()
+    ui.print_agent_step(
+        AgentStep(
+            action=AgentAction.SWITCH_MODEL,
+            model="gpt-5.5",
+        ),
+    )
+    captured = capsys.readouterr()
+    assert "gpt-5.5" in captured.err
+    assert "Model set to" in captured.err
 
 
 def test_follow_print_agent_step_shows_thought(capsys):

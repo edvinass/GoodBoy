@@ -947,7 +947,18 @@ class ConversationUI:
                 AgentAction.FAILED,
             ):
                 self.print_agent(step.message)
-            if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
+            if step.action == AgentAction.SWITCH_MODEL and step.model:
+                self.print_notice(
+                    f"Model set to {step.model} for the next turn."
+                )
+            elif step.action in (
+                AgentAction.SWITCH_TOOLS,
+                AgentAction.SWITCH_API,
+            ) and step.tools:
+                self.print_notice(
+                    f"Hosted tools enabled: {', '.join(step.tools)}."
+                )
+            elif self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
                 self.print_agent(step.command, subtitle="shell")
             elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
                 preview = step.code.strip()
