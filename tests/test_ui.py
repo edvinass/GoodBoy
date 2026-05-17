@@ -24,6 +24,7 @@ from agent.ui import (
     _USER_INPUT_PLACEHOLDER,
     _accept_active_completion,
     _configure_prompt_toolkit,
+    _is_shift_enter_data,
     _input_window_line_count,
     _user_input_placeholder,
     _wrap_long_lines,
@@ -71,6 +72,14 @@ def test_accept_active_completion_applies_highlighted_choice():
     assert _accept_active_completion(buffer) is True
     assert buffer.text == "/clear"
     assert buffer.complete_state is None
+
+
+def test_is_shift_enter_data_detects_xterm_shift_enter():
+    assert _is_shift_enter_data("\x1b[27;2;13~") is True
+    assert _is_shift_enter_data("\x1b[13;2u") is True
+    assert _is_shift_enter_data("\x1b[13u") is False
+    assert _is_shift_enter_data("\r") is False
+    assert _is_shift_enter_data("\x0d") is False
 
 
 def test_accept_active_completion_uses_first_when_none_highlighted():

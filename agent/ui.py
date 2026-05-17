@@ -23,7 +23,7 @@ from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document, PasteMode
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
-from prompt_toolkit.filters import Condition, has_completions, has_focus, in_paste_mode
+from prompt_toolkit.filters import Condition, has_focus, in_paste_mode
 from prompt_toolkit.formatted_text import AnyFormattedText
 from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
 from prompt_toolkit.key_binding.defaults import load_key_bindings
@@ -343,24 +343,92 @@ def _accept_active_completion(buffer: Buffer) -> bool:
     return True
 
 
-def _user_prompt_key_bindings() -> KeyBindings:
-    """Enter submits, or accepts a visible completion when the menu is open."""
+_KITTY_CSI_U_ENTER_RE = re.compile(r"^\x1b\[13(?:;(\d+))?(?::\d+)?u$")
+_ENHANCED_KEYBOARD_SEQUENCES_REGISTERED = False
+
+
+def _is_shift_enter_data(data: str) -> bool:
+    """True for terminal encodings of Shift+Enter (not plain Enter)."""
+    # Line-feed, or VS Code sendSequence ESC+LF workaround.
+    if data in ("\n", "\x1b\n"):
+        return True
+    # xterm modifyOtherKeys: CSI 27 ; 2 ; 13 ~
+    if data.startswith("\x1b[27;2;"):
+        return True
+    # Kitty keyboard protocol: CSI 13 ; modifiers u
+    match = _KITTY_CSI_U_ENTER_RE.match(data)
+    if match is not None:
+        modifier = match.group(1)
+        if modifier is None:
+            return False
+        # Encoded value is 1 + bitmask; shift is bit 0.
+        return (int(modifier) - 1) & 1 != 0
+    return False
+
+
+def _is_shift_enter(event: KeyPressEvent) -> bool:
+    """True when Enter was pressed with Shift (terminal-specific encoding)."""
+    return _is_shift_enter_data(event.data)
+
+
+def _register_enhanced_keyboard_sequences() -> None:
+    """Teach prompt_toolkit Kitty CSI u Enter sequences (not in defaults)."""
+    global _ENHANCED_KEYBOARD_SEQUENCES_REGISTERED
+    if _ENHANCED_KEYBOARD_SEQUENCES_REGISTERED:
+        return
+    from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
+    from prompt_toolkit.keys import Keys
+
+    for sequence in (
+        "\x1b[13u",
+        "\x1b[13;2u",
+        "\x1b[13;2:1u",
+        "\x1b[13;2:3u",
+    ):
+        ANSI_SEQUENCES.setdefault(sequence, Keys.ControlM)
+    _ENHANCED_KEYBOARD_SEQUENCES_REGISTERED = True
+
+
+@contextmanager
+def _enhanced_keyboard_reporting() -> Iterator[None]:
+    """Ask the terminal to report Shift+Enter distinctly from Enter."""
+    if not sys.stdout.isatty():
+        yield
+        return
+    _register_enhanced_keyboard_sequences()
+    try:
+        # Kitty keyboard protocol (flag 1 = disambiguate legacy keys).
+        sys.stdout.write("\x1b[>1u")
+        # xterm modifyOtherKeys mode 2.
+        sys.stdout.write("\x1b[>4;2m")
+        sys.stdout.flush()
+        yield
+    finally:
+        try:
+            sys.stdout.write("\x1b[<1u\x1b[>4;0m")
+            sys.stdout.flush()
+        except OSError:
+            pass
+
+
+def _insert_input_newline(buffer: Buffer) -> None:
+    buffer.newline(copy_margin=not in_paste_mode())
+
+
+def _prompt_enter_key_bindings() -> KeyBindings:
+    """Enter submits; Shift+Enter inserts a newline; Enter accepts completions."""
     kb = KeyBindings()
 
-    @kb.add("enter", filter=has_completions, eager=True)
-    def _accept_completion_on_enter(event: KeyPressEvent) -> None:
-        _accept_active_completion(event.current_buffer)
-
-    return kb
-
-
-def _prompt_submit_key_bindings() -> KeyBindings:
-    """Enter submits the prompt (PromptSession adds this; framed layout must too)."""
-    kb = KeyBindings()
-
-    @kb.add("enter", filter=~has_completions)
-    def _submit_on_enter(event: KeyPressEvent) -> None:
-        event.current_buffer.validate_and_handle()
+    @kb.add("enter", eager=True)
+    def _handle_enter(event: KeyPressEvent) -> None:
+        buffer = event.current_buffer
+        if _is_shift_enter(event):
+            _insert_input_newline(buffer)
+            return
+        if buffer.complete_state is not None and buffer.complete_state.completions:
+            _accept_active_completion(buffer)
+            return
+        buffer.validate_and_handle()
 
     return kb
 
@@ -371,7 +439,7 @@ def _prompt_newline_key_bindings() -> KeyBindings:
 
     @kb.add("c-j", eager=True)
     def _insert_newline(event: KeyPressEvent) -> None:
-        event.current_buffer.newline(copy_margin=not in_paste_mode())
+        _insert_input_newline(event.current_buffer)
 
     return kb
 
@@ -507,8 +575,7 @@ def _run_framed_user_prompt(
             [
                 _prompt_newline_key_bindings(),
                 load_key_bindings(),
-                _user_prompt_key_bindings(),
-                _prompt_submit_key_bindings(),
+                _prompt_enter_key_bindings(),
             ]
         ),
         style=style,
@@ -516,7 +583,8 @@ def _run_framed_user_prompt(
         erase_when_done=False,
     )
     try:
-        return app.run()
+        with _enhanced_keyboard_reporting():
+            return app.run()
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -565,7 +633,12 @@ def _prompt_user_line(
             style=style,
             multiline=False,
             placeholder=_user_input_placeholder(),
-            key_bindings=_user_prompt_key_bindings(),
+            key_bindings=merge_key_bindings(
+                [
+                    _prompt_newline_key_bindings(),
+                    _prompt_enter_key_bindings(),
+                ]
+            ),
             completer=completer,
             complete_while_typing=True,
         )
