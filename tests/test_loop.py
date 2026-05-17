@@ -589,7 +589,7 @@ def test_loop_reasoning_effort_rejected_for_non_reasoning_model(tmp_path: Path):
     assert any("does not support" in e for e in result.context.parse_errors)
 
 
-def test_loop_stop_requested_before_tool_pauses_without_running_next_step(tmp_path: Path):
+def test_loop_stop_requested_before_tool_still_runs_planned_command(tmp_path: Path):
     calls = {"n": 0}
 
     def llm(**_kwargs):
@@ -597,7 +597,8 @@ def test_loop_stop_requested_before_tool_pauses_without_running_next_step(tmp_pa
         return json.dumps(
             AgentStep(
                 action=AgentAction.RUN_SHELL,
-                command="echo should-not-run",
+                command="echo paused-step",
+                thought="Echoed a line for the user.",
             ).model_dump(mode="json")
         )
 
@@ -611,12 +612,16 @@ def test_loop_stop_requested_before_tool_pauses_without_running_next_step(tmp_pa
 
     assert result.outcome == LoopOutcome.STOPPED
     assert calls["n"] == 1
-    assert result.context.turns == []
+    assert len(result.context.turns) == 1
+    assert result.context.turns[0].tool_result is not None
+    assert "paused-step" in result.context.turns[0].tool_result.stdout
+    assert "Echoed a line for the user." in result.message
+    assert "Paused — say continue when you're ready." in result.message
 
 
 def test_loop_stop_requested_during_tool_pauses_after_tool_step(tmp_path: Path):
     calls = {"n": 0}
-    stop_checks = iter([False, True])
+    stop_checks = iter([True])
 
     def llm(**_kwargs):
         calls["n"] += 1
@@ -647,11 +652,12 @@ def test_loop_stop_requested_during_tool_pauses_after_tool_step(tmp_path: Path):
     assert len(result.context.turns) == 1
     assert result.context.turns[0].tool_result is not None
     assert "current-step" in result.context.turns[0].tool_result.stdout
+    assert "Paused — say continue when you're ready." in result.message
 
 
 def test_loop_resume_after_stop_continues_from_existing_context(tmp_path: Path):
     calls = {"n": 0}
-    stop_checks = iter([False, True, False])
+    stop_checks = iter([True, False])
 
     def llm(**_kwargs):
         calls["n"] += 1

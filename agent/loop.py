@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from agent.clarifications import (
+    build_stopped_message,
     count_matching_shell_commands,
     count_need_user_input_turns,
     is_repeat_question,
@@ -187,10 +188,7 @@ class AgentLoop:
             return finish(
                 LoopResult(
                     outcome=LoopOutcome.STOPPED,
-                    message=(
-                        "Stopped after the current step. "
-                        "Ask GoodBoy to continue when you are ready."
-                    ),
+                    message=build_stopped_message(turns=ctx.turns),
                     context=ctx,
                 )
             )
@@ -491,10 +489,6 @@ class AgentLoop:
 
             tool_result = None
             if is_harness_tool(step.action):
-                stopped = stop_after_current_step()
-                if stopped is not None:
-                    return stopped
-
                 spec = get_tool(step.action)
                 if spec is None:
                     ctx.add_parse_error(

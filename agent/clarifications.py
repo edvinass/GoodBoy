@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from agent.types import AgentAction
+from agent.types import AgentAction, _SWITCH_TOOLS_ACTIONS
 
 _AFFIRMATIVE = re.compile(
     r"\b("
@@ -144,3 +144,40 @@ def repeat_question_directive() -> str:
         "Do not use need_user_input again for the same topic. "
         "Act with run_shell/run_python now."
     )
+
+
+_PAUSE_HINT = "Paused — say continue when you're ready."
+
+
+def build_stopped_message(*, turns: list) -> str:
+    """User-facing pause message after Escape; prefer a step summary over a generic stop."""
+    if not turns:
+        return _PAUSE_HINT
+
+    last = turns[-1]
+    step = last.step
+    summary: str | None = None
+
+    if step.thought and step.thought.strip():
+        summary = step.thought.strip()
+    elif step.message and step.message.strip():
+        summary = step.message.strip()
+    elif step.action == AgentAction.SWITCH_MODEL and step.model:
+        summary = f"Model set to {step.model} for the next turn."
+    elif step.action in _SWITCH_TOOLS_ACTIONS and step.tools:
+        summary = f"Hosted tools enabled: {', '.join(step.tools)}."
+
+    tool_result = getattr(last, "tool_result", None)
+    if tool_result is not None:
+        code = tool_result.exit_code
+        if code not in (0, None):
+            err = (tool_result.stderr or tool_result.stdout or "").strip()
+            tail = err.splitlines()[-1] if err else f"exit {code}"
+            failure = f"Last command failed ({tail})."
+            summary = f"{summary} {failure}".strip() if summary else failure
+        elif summary is None:
+            summary = "Last command completed."
+
+    if summary:
+        return f"{summary}\n\n{_PAUSE_HINT}"
+    return _PAUSE_HINT

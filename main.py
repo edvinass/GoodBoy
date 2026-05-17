@@ -9,6 +9,9 @@ from llm import select_model_interactive
 from settings import OPENAI_API_KEY_VAR, OPENAI_MODEL_VAR, get_settings, save_env
 
 
+# mode: mode-switching notes for GoodBoy CLI
+# mode: This module participates in model switching policies (test visibility only).
+
 def load_env() -> None:
     settings.load_env()
 
