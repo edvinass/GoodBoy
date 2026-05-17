@@ -296,6 +296,25 @@ def test_print_harness_activity_shell_failure_still_shown(capsys):
     assert "command failed" in out
 
 
+def test_consecutive_activity_lines_no_extra_blank(capsys):
+    ui = ConversationUI()
+    step = AgentStep(action=AgentAction.READ_FILE, path="a.py")
+    ui.print_harness_activity(step, ToolResult(executed="read_file a.py", exit_code=0))
+    step = AgentStep(
+        action=AgentAction.STR_REPLACE,
+        path="b.py",
+        old_string="x",
+        new_string="y",
+    )
+    ui.print_harness_activity(
+        step,
+        ToolResult(executed="str_replace b.py", stdout="Updated b.py\n", exit_code=0),
+    )
+    out = capsys.readouterr().out
+    assert "◦ read a.py\n◦ wrote b.py" in out
+    assert "◦ read a.py\n\n◦" not in out
+
+
 def test_print_harness_activity_shows_file_diff(capsys):
     ui = ConversationUI()
     step = AgentStep(

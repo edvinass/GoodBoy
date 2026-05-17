@@ -791,7 +791,6 @@ class ConversationUI:
             yield data["markup"]
             return
         if kind == "activity":
-            yield ""
             style = "error" if data.get("failed") else "muted"
             yield f"[{style}]◦ {data['text']}[/]"
             return
