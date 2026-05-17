@@ -14,6 +14,7 @@ from agent.repl_commands import (
     EXIT_COMMAND_NAMES,
     MODEL_COMMAND_NAMES,
     REASONING_COMMAND_NAMES,
+    is_repl_slash_command,
 )
 from agent.ui import ConversationUI
 from llm import MODEL_LABELS, select_model_interactive, select_reasoning_interactive
@@ -91,7 +92,7 @@ class AgentHarness:
                         session_log.event("session_interrupted")
                     return exit_code
 
-                if session_log is not None:
+                if session_log is not None and not is_repl_slash_command(task):
                     session_log.event("user_input", text=task)
 
                 if self._should_exit(task):

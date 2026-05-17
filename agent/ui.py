@@ -41,6 +41,7 @@ from agent.mentions import (
 )
 from agent.repl_commands import (
     active_slash_command_query,
+    is_repl_slash_command,
     search_slash_commands,
     slash_command_display_meta,
 )
@@ -878,11 +879,12 @@ class ConversationUI:
             text = paste_state.resolve(result).strip()
             workspace = self._workspace or resolve_workspace()
             text = expand_file_mentions(text, workspace)
-            self._record(
-                "user_message",
-                text=text,
-                paste_label=paste_state.label,
-            )
+            if not is_repl_slash_command(text):
+                self._record(
+                    "user_message",
+                    text=text,
+                    paste_label=paste_state.label,
+                )
             return text
         finally:
             self._at_prompt = False

@@ -90,6 +90,20 @@ _TOGGLE_COMMAND_STATE: dict[str, str] = {
     "autoswitch": "auto_model_switch",
 }
 
+_ALL_COMMAND_NAMES: frozenset[str] = frozenset(
+    name
+    for command in REPL_COMMANDS
+    for name in (command.name, *command.aliases)
+)
+
+
+def is_repl_slash_command(text: str) -> bool:
+    """Return True when ``text`` is a recognized ``/command`` invocation."""
+    normalized = text.strip().lower()
+    if not normalized.startswith("/"):
+        return False
+    return normalized[1:] in _ALL_COMMAND_NAMES
+
 
 def slash_command_display_meta(
     command: ReplCommand,
