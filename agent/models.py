@@ -39,9 +39,9 @@ class CostTier(str, Enum):
     PREMIUM = "premium"
 
 
-# gpt-5.5 / gpt-5.4-mini full hosted stack
+# gpt-5.5 / gpt-5.4 / gpt-5.4-mini / pro variants: full hosted stack
 _FULL_OPENAI_TOOLS: FrozenSet[OpenAITool] = frozenset(OpenAITool)
-# gpt-5.4-nano: no computer_use, tool_search
+# gpt-5.4-nano / gpt-5-nano: no computer_use, tool_search
 _NANO_OPENAI_TOOLS: FrozenSet[OpenAITool] = _FULL_OPENAI_TOOLS - {
     OpenAITool.COMPUTER_USE,
     OpenAITool.TOOL_SEARCH,
@@ -130,10 +130,23 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         price_cached=0.075,
         price_out=0.60,
     ),
+    "gpt-5-nano": _spec(
+        "gpt-5-nano",
+        family=ModelFamily.FRONTIER,
+        best_for="Fastest, most cost-efficient GPT-5 for simple high-volume tasks.",
+        avoid_when="Computer use, tool_search, or deep debugging.",
+        cost_tier=CostTier.MINIMAL,
+        price_in=0.05,
+        price_cached=0.005,
+        price_out=0.40,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_NANO_OPENAI_TOOLS,
+    ),
     "gpt-5.4-nano": _spec(
         "gpt-5.4-nano",
         family=ModelFamily.FRONTIER,
-        best_for="Cheap reasoning-capable step with reasoning.effort=none or low.",
+        best_for="Cheapest GPT-5.4-class model for simple high-volume tasks.",
         avoid_when="Computer use, tool_search, or deep debugging.",
         cost_tier=CostTier.LOW,
         price_in=0.20,
@@ -142,6 +155,19 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         reasoning=True,
         reasoning_efforts=_GPT5_REASONING,
         openai_tools=_NANO_OPENAI_TOOLS,
+    ),
+    "gpt-5-mini": _spec(
+        "gpt-5-mini",
+        family=ModelFamily.FRONTIER,
+        best_for="Near-frontier intelligence for cost-sensitive, low-latency, high-volume work.",
+        avoid_when="Hardest debugging or tasks needing gpt-5.4+ precision.",
+        cost_tier=CostTier.LOW,
+        price_in=0.25,
+        price_cached=0.025,
+        price_out=2.00,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_FULL_OPENAI_TOOLS,
     ),
     "gpt-4.1-mini": _spec(
         "gpt-4.1-mini",
@@ -156,12 +182,38 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
     "gpt-5.4-mini": _spec(
         "gpt-5.4-mini",
         family=ModelFamily.FRONTIER,
-        best_for="Balanced agent turns after a cheap step fails once.",
+        best_for="Strongest mini model for coding, computer use, and subagents.",
         avoid_when="grep, ls, echo, and other trivial commands.",
         cost_tier=CostTier.MEDIUM,
         price_in=0.75,
         price_cached=0.075,
         price_out=4.50,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_FULL_OPENAI_TOOLS,
+    ),
+    "gpt-5": _spec(
+        "gpt-5",
+        family=ModelFamily.FRONTIER,
+        best_for="Previous-generation reasoning model for coding and agentic tasks.",
+        avoid_when="When gpt-5.4-mini or gpt-5.4 is available at similar cost.",
+        cost_tier=CostTier.MEDIUM,
+        price_in=1.25,
+        price_cached=0.125,
+        price_out=10.00,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_FULL_OPENAI_TOOLS,
+    ),
+    "gpt-5.4": _spec(
+        "gpt-5.4",
+        family=ModelFamily.FRONTIER,
+        best_for="More affordable frontier model for coding and professional work.",
+        avoid_when="Trivial one-liners or when gpt-5.4-mini suffices.",
+        cost_tier=CostTier.HIGH,
+        price_in=2.50,
+        price_cached=0.25,
+        price_out=15.00,
         reasoning=True,
         reasoning_efforts=_GPT5_REASONING,
         openai_tools=_FULL_OPENAI_TOOLS,
@@ -193,7 +245,7 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
     "gpt-4.1": _spec(
         "gpt-4.1",
         family=ModelFamily.GENERAL,
-        best_for="Very long context (huge stdout/history).",
+        best_for="Smartest non-reasoning model; very long context (huge stdout/history).",
         avoid_when="Simple tasks that fit a minimal-tier model.",
         cost_tier=CostTier.HIGH,
         price_in=2.00,
@@ -213,12 +265,38 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
     "gpt-5.5": _spec(
         "gpt-5.5",
         family=ModelFamily.FRONTIER,
-        best_for="Last resort: stuck 2+ turns, architecture/debug.",
-        avoid_when="Any simple or first-attempt step.",
+        best_for="Most advanced model for coding and professional work; use when quality matters most.",
+        avoid_when="Trivial commands, first attempt, or cost-sensitive high-volume steps.",
         cost_tier=CostTier.PREMIUM,
         price_in=5.00,
         price_cached=0.50,
         price_out=30.00,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_FULL_OPENAI_TOOLS,
+    ),
+    "gpt-5.4-pro": _spec(
+        "gpt-5.4-pro",
+        family=ModelFamily.FRONTIER,
+        best_for="Smarter, more precise GPT-5.4 for complex professional tasks.",
+        avoid_when="Routine work solvable by gpt-5.4 or gpt-5.4-mini.",
+        cost_tier=CostTier.PREMIUM,
+        price_in=30.00,
+        price_cached=30.00,
+        price_out=180.00,
+        reasoning=True,
+        reasoning_efforts=_GPT5_REASONING,
+        openai_tools=_FULL_OPENAI_TOOLS,
+    ),
+    "gpt-5.5-pro": _spec(
+        "gpt-5.5-pro",
+        family=ModelFamily.FRONTIER,
+        best_for="Smarter, more precise GPT-5.5 with extended reasoning for hardest problems.",
+        avoid_when="Anything solvable by gpt-5.5 or cheaper tiers.",
+        cost_tier=CostTier.PREMIUM,
+        price_in=30.00,
+        price_cached=30.00,
+        price_out=180.00,
         reasoning=True,
         reasoning_efforts=_GPT5_REASONING,
         openai_tools=_FULL_OPENAI_TOOLS,
@@ -436,18 +514,19 @@ Valid values: {tool_ids}
 _STRICT_COST_POLICY = """## Cost policy (required)
 - Minimize spend: always pick the cheapest model + lowest reasoning effort that can succeed.
 - Simple task examples (use minimal tier): ls, cat, echo, single-file edit, running tests, formatting.
-- Do NOT use gpt-5.5, o3, or high/xhigh reasoning for simple tasks.
+- Do NOT use gpt-5.5, gpt-5.5-pro, gpt-5.4-pro, o3, or high/xhigh reasoning for simple tasks.
 - Escalate one tier at a time only after a failed or ambiguous turn.
-- Prefer gpt-4o-mini or gpt-4.1-nano for the first planning turn unless the task is obviously hard.
+- Prefer gpt-4o-mini, gpt-5-nano, or gpt-4.1-nano for the first planning turn unless the task is obviously hard.
 - When setting reasoning_effort on gpt-5.x: default none or low; medium only if needed; high/xhigh only if stuck.
 
 ## Escalation ladder
-1. Turn 1 / simple: gpt-4o-mini or gpt-4.1-nano, no reasoning effort.
-2. Mild complexity: gpt-4.1-mini or gpt-5.4-nano + reasoning.effort=low.
+1. Turn 1 / simple: gpt-4o-mini, gpt-5-nano, or gpt-4.1-nano — no reasoning effort.
+2. Mild complexity: gpt-5-mini, gpt-4.1-mini, or gpt-5.4-nano + reasoning.effort=low.
 3. Multi-step or one failure: gpt-5.4-mini + medium max.
-4. Messy tool output: o4-mini + medium (not o3 yet).
-5. Still stuck (2+ failed turns): o3 or gpt-4.1 (long context only if stdout/history is huge).
-6. Last resort: gpt-5.5 + high only — never for step 1."""
+4. Professional coding / still stuck: gpt-5.4 before gpt-5.5.
+5. Messy tool output: o4-mini + medium (not o3 yet).
+6. Still stuck (2+ failed turns): o3 or gpt-4.1 (long context only if stdout/history is huge).
+7. Last resort: gpt-5.5 + high; gpt-5.5-pro or gpt-5.4-pro only when gpt-5.5 is insufficient — never for step 1."""
 
 _AUTO_MODEL_SWITCH_POLICY = """## Model routing (automatic switching enabled)
 The user enabled automatic model switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`).
@@ -456,7 +535,7 @@ You may change **model** and **reasoning_effort** between turns — including **
 - Still pick the cheapest model that can succeed; escalate proactively when the task is hard, ambiguous, or stuck.
 - Prefer setting **model** on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
 - After the hard part is done, step down to a cheaper model for remaining simple work.
-- Do NOT use gpt-5.5, o3, or high/xhigh reasoning for trivial steps (ls, cat, single obvious edit).
+- Do NOT use gpt-5.5, gpt-5.5-pro, gpt-5.4-pro, o3, or high/xhigh reasoning for trivial steps (ls, cat, single obvious edit).
 - When setting reasoning_effort on gpt-5.x: default none or low; medium when needed; high/xhigh only when stuck."""
 
 

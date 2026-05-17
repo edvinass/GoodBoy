@@ -17,8 +17,14 @@ from settings import get_settings
 # https://platform.openai.com/docs/models
 class OpenAIModel(str, Enum):
     GPT_5_5 = "gpt-5.5"
+    GPT_5_5_PRO = "gpt-5.5-pro"
+    GPT_5_4 = "gpt-5.4"
+    GPT_5_4_PRO = "gpt-5.4-pro"
     GPT_5_4_MINI = "gpt-5.4-mini"
     GPT_5_4_NANO = "gpt-5.4-nano"
+    GPT_5_MINI = "gpt-5-mini"
+    GPT_5_NANO = "gpt-5-nano"
+    GPT_5 = "gpt-5"
     GPT_4_1 = "gpt-4.1"
     GPT_4_1_MINI = "gpt-4.1-mini"
     GPT_4_1_NANO = "gpt-4.1-nano"
@@ -34,10 +40,16 @@ REASONING_EFFORT = ("none", "minimal", "low", "medium", "high", "xhigh")
 MODEL_CHOICES = [m.value for m in OpenAIModel]
 
 MODEL_LABELS: dict[str, str] = {
-    OpenAIModel.GPT_5_5.value: "GPT-5.5",
-    OpenAIModel.GPT_5_4_MINI.value: "GPT-5.4 mini",
-    OpenAIModel.GPT_5_4_NANO.value: "GPT-5.4 nano",
-    OpenAIModel.GPT_4_1.value: "GPT-4.1",
+    OpenAIModel.GPT_5_5.value: "GPT-5.5 — advanced coding and professional work",
+    OpenAIModel.GPT_5_5_PRO.value: "GPT-5.5 pro — smarter, more precise GPT-5.5",
+    OpenAIModel.GPT_5_4.value: "GPT-5.4 — affordable coding and professional work",
+    OpenAIModel.GPT_5_4_PRO.value: "GPT-5.4 pro — smarter, more precise GPT-5.4",
+    OpenAIModel.GPT_5_4_MINI.value: "GPT-5.4 mini — coding, computer use, subagents",
+    OpenAIModel.GPT_5_4_NANO.value: "GPT-5.4 nano — cheapest GPT-5.4-class",
+    OpenAIModel.GPT_5_MINI.value: "GPT-5 mini — near-frontier, cost-sensitive volume",
+    OpenAIModel.GPT_5_NANO.value: "GPT-5 nano — fastest, most cost-efficient GPT-5",
+    OpenAIModel.GPT_5.value: "GPT-5 — previous reasoning model (configurable effort)",
+    OpenAIModel.GPT_4_1.value: "GPT-4.1 — smartest non-reasoning model",
     OpenAIModel.GPT_4_1_MINI.value: "GPT-4.1 mini",
     OpenAIModel.GPT_4_1_NANO.value: "GPT-4.1 nano",
     OpenAIModel.GPT_4O.value: "GPT-4o",
