@@ -34,7 +34,7 @@ from agent.routing import should_skip_routing_turn
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.tools import run_python, run_shell
 from llm import TokenUsage
-from agent.ui import ConversationUI, tool_activity
+from agent.ui import ConversationUI, activity_label, tool_activity
 from agent.types import (
     AgentAction,
     AgentStep,
@@ -560,14 +560,15 @@ class AgentLoop:
                     )
                     continue
 
-                activity_label = self._tool_activity_label(step)
+                progress_label = activity_label(step, phase="progress")
                 if self._ui is not None:
-                    with tool_activity(self._ui, activity_label):
+                    with tool_activity(self._ui, progress_label):
                         tool_result = self._run_harness_tool(step)
                 else:
                     tool_result = self._run_harness_tool(step)
 
             if self._ui is not None and tool_result is not None:
+                self._ui.print_harness_activity(step, tool_result)
                 self._ui.print_tool_result(tool_result)
 
             if session_log is not None and tool_result is not None:
@@ -650,18 +651,6 @@ class AgentLoop:
         # Snapshot what the model has now seen on the server side so the next
         # turn's delta only includes items appended after this point.
         self._chain_watermark = ctx.watermark()
-
-    def _tool_activity_label(self, step: AgentStep) -> str:
-        if step.action == AgentAction.RUN_SHELL and step.command:
-            preview = step.command.strip().replace("\n", " ")
-            if len(preview) > 72:
-                preview = preview[:69] + "..."
-            return preview
-        if step.action == AgentAction.RUN_PYTHON:
-            return "python"
-        if step.path:
-            return f"{step.action.value}: {step.path}"
-        return step.action.value.replace("_", " ")
 
     def _run_harness_tool(self, step: AgentStep) -> ToolResult:
         ws = self.workspace

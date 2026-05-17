@@ -49,3 +49,5 @@ def test_apply_patch_unified_diff(tmp_path: Path):
             return
     assert result.exit_code == 0
     assert "gamma" in target.read_text(encoding="utf-8")
+    assert "--- a/c.txt" in result.stdout
+    assert "+gamma" in result.stdout

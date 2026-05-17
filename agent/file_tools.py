@@ -11,6 +11,24 @@ from agent.tools import _truncate_stream
 from agent.types import ToolResult
 
 
+def _patch_success_stdout(
+    path: str, before: str, after: str, *, prefix: str = "Patched"
+) -> str:
+    """Build stdout for a successful patch including a unified diff when possible."""
+    stdout = f"{prefix} {path}\n"
+    diff = "".join(
+        difflib.unified_diff(
+            before.splitlines(keepends=True),
+            after.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+        )
+    )
+    if diff.strip():
+        stdout += _truncate_stream(diff)
+    return stdout
+
+
 def _resolve_path(workspace: Path, path: str) -> Path:
     raw = Path(path)
     if raw.is_absolute():
@@ -151,6 +169,11 @@ def apply_patch(
         )
 
     patch_text = patch if patch.endswith("\n") else patch + "\n"
+    try:
+        before_text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
+
     workdir = workspace.resolve()
     patch_path: str | None = None
     try:
@@ -166,7 +189,9 @@ def apply_patch(
         import shutil
 
         if shutil.which("patch") is None:
-            return _apply_patch_python(target, patch_text, executed=executed)
+            return _apply_patch_python(
+                target, patch_text, executed=executed, path=path, before_text=before_text
+            )
 
         completed = subprocess.run(
             ["patch", "-p0", "--forward", "-i", patch_path],
@@ -184,7 +209,9 @@ def apply_patch(
     stdout = _truncate_stream(completed.stdout or "")
     stderr = _truncate_stream(completed.stderr or "")
     if completed.returncode != 0:
-        fallback = _apply_patch_python(target, patch_text, executed=executed)
+        fallback = _apply_patch_python(
+            target, patch_text, executed=executed, path=path, before_text=before_text
+        )
         if fallback.exit_code == 0:
             return fallback
         return ToolResult(
@@ -193,19 +220,29 @@ def apply_patch(
             stderr=stderr or "patch failed",
             exit_code=completed.returncode,
         )
+
+    try:
+        after_text = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        after_text = before_text
     return ToolResult(
         executed=executed,
-        stdout=stdout or f"Patched {path}",
+        stdout=_patch_success_stdout(path, before_text, after_text),
         stderr=stderr,
         exit_code=0,
     )
 
 
 def _apply_patch_python(
-    target: Path, patch_text: str, *, executed: str
+    target: Path,
+    patch_text: str,
+    *,
+    executed: str,
+    path: str,
+    before_text: str,
 ) -> ToolResult:
     """Best-effort single-hunk unified diff apply without patch(1)."""
-    lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines = before_text.splitlines(keepends=True)
     hunk_lines = [
         line
         for line in patch_text.splitlines(keepends=True)
@@ -229,6 +266,11 @@ def _apply_patch_python(
     target.write_text(updated, encoding="utf-8")
     return ToolResult(
         executed=executed,
-        stdout=f"Patched {target.name} (python fallback)",
+        stdout=_patch_success_stdout(
+            path,
+            before_text,
+            updated,
+            prefix="Patched (python fallback)",
+        ),
         exit_code=0,
     )

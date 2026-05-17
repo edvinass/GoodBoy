@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 import click
 import pytest
@@ -21,6 +22,7 @@ from agent.ui import (
     _accept_active_completion,
     _configure_prompt_toolkit,
     _wrap_long_lines,
+    activity_label,
     format_pasted_text_label,
 )
 
@@ -259,6 +261,86 @@ def test_print_tool_result_shown_with_debug(capsys):
     out = capsys.readouterr().out
     assert "hi" in out
     assert "stdout" in out
+
+
+def test_activity_label_shell_hides_command():
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s secret.example")
+    assert activity_label(step, phase="progress") == "running terminal command"
+    assert activity_label(step, phase="done") == "ran terminal command"
+    assert "curl" not in activity_label(step, phase="done")
+
+
+def test_activity_label_read_file_uses_basename():
+    step = AgentStep(action=AgentAction.READ_FILE, path="src/foo.py")
+    assert activity_label(step, phase="progress") == "reading foo.py"
+    assert activity_label(step, phase="done") == "read foo.py"
+
+
+def test_print_harness_activity_shell_status_only(capsys):
+    ui = ConversationUI()
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="curl -s example.com")
+    result = ToolResult(executed="run_shell", exit_code=0)
+    ui.print_harness_activity(step, result)
+    out = capsys.readouterr().out
+    assert "ran terminal command" in out
+    assert "curl" not in out
+
+
+def test_print_harness_activity_shows_file_diff(capsys):
+    ui = ConversationUI()
+    step = AgentStep(
+        action=AgentAction.STR_REPLACE,
+        path="foo.py",
+        old_string="a",
+        new_string="b",
+    )
+    diff = "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-a\n+b\n"
+    result = ToolResult(
+        executed="str_replace foo.py",
+        stdout=f"Updated foo.py\n{diff}",
+        exit_code=0,
+    )
+    ui.print_harness_activity(step, result)
+    out = capsys.readouterr().out
+    assert "wrote foo.py" in out
+    assert "-a" in out
+    assert "+b" in out
+
+
+def test_print_harness_activity_skips_file_diff_in_debug(capsys):
+    ui = ConversationUI(debug=True)
+    step = AgentStep(
+        action=AgentAction.STR_REPLACE,
+        path="foo.py",
+        old_string="a",
+        new_string="b",
+    )
+    diff = "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-a\n+b\n"
+    result = ToolResult(
+        executed="str_replace foo.py",
+        stdout=f"Updated foo.py\n{diff}",
+        exit_code=0,
+    )
+    ui.print_harness_activity(step, result)
+    out = capsys.readouterr().out
+    assert "wrote foo.py" in out
+    assert "diff ·" not in out
+
+
+def test_print_harness_activity_skipped_when_verbose(capsys):
+    ui = ConversationUI(verbose=True)
+    step = AgentStep(action=AgentAction.RUN_SHELL, command="ls")
+    result = ToolResult(executed="run_shell", exit_code=0)
+    ui.print_harness_activity(step, result)
+    assert capsys.readouterr().out == ""
+
+
+def test_thinking_default_label_non_tty(capsys, monkeypatch):
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    ui = ConversationUI()
+    with ui.thinking():
+        pass
+    assert "working on your task" in capsys.readouterr().out
 
 
 def test_default_hides_task_complete(capsys):

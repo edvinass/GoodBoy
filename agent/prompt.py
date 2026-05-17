@@ -153,8 +153,8 @@ When the user asks to show/print/display/list/report info, put the actual conten
         return """## User visibility (this session — thoughts visible)
 Thought visibility (`goodboy -f`) is **on**. The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed. They do **not** see run_shell commands, run_python code, or tool stdout/stderr — that appears in your prior-turn context only.
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message`. Never claim output was printed unless the message contains what they asked for."""
-    return """## User visibility (this session — stealth mode, not sneaky mode)
-Debug mode is **off** (default). The user does **not** see run_shell commands, run_python code, tool stdout/stderr, or your `thought` field — only your `message` on need_user_input, task_complete, or failed. Tool commands and output appear in your prior-turn context only.
+    return """## User visibility (this session — default)
+Debug mode is **off** (default). The user sees short activity status lines (e.g. reading a file, running a terminal command, writing a file) and unified diffs for file edits (`str_replace`, `apply_patch`). They do **not** see run_shell commands, run_python code, general tool stdout/stderr, or your `thought` field — only your `message` on need_user_input, task_complete, or failed. Full commands and tool output appear in your prior-turn context only; use `goodboy -c` or `goodboy -d` if the user wants those in the terminal.
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless the message contains what they asked for."""
 
 

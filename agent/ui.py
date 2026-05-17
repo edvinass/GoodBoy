@@ -13,7 +13,7 @@ import time
 import tty
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 import click
 from prompt_toolkit.buffer import Buffer
@@ -79,7 +79,53 @@ _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything…"
 
+_MAX_ACTIVITY_DIFF_LINES = 40
+
 _resize_poller_installed = False
+
+
+def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> str:
+    """Human-facing status text for harness tool progress or completion."""
+    name = Path(step.path).name if step.path else None
+
+    if step.action == AgentAction.RUN_SHELL:
+        return (
+            "running terminal command"
+            if phase == "progress"
+            else "ran terminal command"
+        )
+    if step.action == AgentAction.RUN_PYTHON:
+        return "running Python" if phase == "progress" else "ran Python"
+    if step.action == AgentAction.READ_FILE:
+        if name:
+            return f"reading {name}" if phase == "progress" else f"read {name}"
+        return "reading file" if phase == "progress" else "read file"
+    if step.action in (AgentAction.STR_REPLACE, AgentAction.APPLY_PATCH):
+        if name:
+            return f"writing {name}" if phase == "progress" else f"wrote {name}"
+        return "writing file" if phase == "progress" else "wrote file"
+
+    action = step.action.value.replace("_", " ")
+    return action if phase == "progress" else f"finished {action}"
+
+
+def _truncate_diff_lines(diff: str, *, max_lines: int = _MAX_ACTIVITY_DIFF_LINES) -> str:
+    lines = diff.splitlines()
+    if len(lines) <= max_lines:
+        return diff
+    kept = lines[:max_lines]
+    omitted = len(lines) - max_lines
+    return "\n".join(kept) + f"\n... [{omitted} more lines]"
+
+
+def _extract_unified_diff(stdout: str) -> str | None:
+    """Pull a unified diff from tool stdout (e.g. after str_replace)."""
+    marker = stdout.find("\n--- ")
+    if marker >= 0:
+        return stdout[marker + 1 :]
+    if stdout.startswith("--- "):
+        return stdout
+    return None
 
 
 def _install_resize_poller(ui: "ConversationUI") -> None:
@@ -534,12 +580,14 @@ class ConversationUI:
         debug_input: bool = False,
         debug_output: bool = False,
         stream_output: bool = False,
+        show_activity: bool = True,
         console: Console | None = None,
         workspace: Path | str | None = None,
         model: str | None = None,
     ) -> None:
         self.show_thoughts = show_thoughts
         self.verbose = verbose
+        self.show_activity = show_activity
         self.show_model = show_model
         self.show_commands = show_commands
         self.auto_model_switch = auto_model_switch
@@ -709,6 +757,22 @@ class ConversationUI:
         if kind == "status":
             yield ""
             yield data["markup"]
+            return
+        if kind == "activity":
+            yield ""
+            style = "error" if data.get("failed") else "muted"
+            yield f"[{style}]◦ {data['text']}[/]"
+            return
+        if kind == "file_diff":
+            yield ""
+            panel_width = self._panel_text_width()
+            path = data.get("path", "file")
+            yield self._panel(
+                _syntax(data["diff"], "diff", width=panel_width),
+                title=_role_panel_title("agent", subtitle=f"diff · {path}"),
+                border_style="dim",
+                padding=(0, 1),
+            )
             return
         if kind == "tool_result":
             yield ""
@@ -1214,8 +1278,53 @@ class ConversationUI:
             timed_out=result.timed_out,
         )
 
+    def _diff_for_edit_step(self, step: AgentStep, result: ToolResult) -> str | None:
+        if step.patch and step.patch.strip():
+            return step.patch
+        extracted = _extract_unified_diff(result.stdout or "")
+        if extracted and extracted.strip():
+            return extracted
+        return None
+
+    def print_file_diff(self, path: str, diff: str) -> None:
+        """Show a truncated unified diff for a file edit (default mode)."""
+        if not diff.strip():
+            return
+        display_path = Path(path).name if path else "file"
+        self._record(
+            "file_diff",
+            path=display_path,
+            diff=_truncate_diff_lines(diff),
+        )
+
+    def print_harness_activity(self, step: AgentStep, result: ToolResult) -> None:
+        """Record a one-line summary after a harness tool finishes (default mode)."""
+        if not self.show_activity or self.verbose:
+            return
+
+        failed = result.timed_out or result.exit_code not in (0, None)
+        label = activity_label(step, phase="done")
+        if failed:
+            err_hint = (result.stderr or "failed").strip().splitlines()[0]
+            if len(err_hint) > 80:
+                err_hint = err_hint[:77] + "..."
+            text = f"{label} — {err_hint}"
+        else:
+            text = label
+
+        self._record("activity", text=text, failed=failed)
+
+        if (
+            not self.debug
+            and not failed
+            and step.action in (AgentAction.STR_REPLACE, AgentAction.APPLY_PATCH)
+        ):
+            diff = self._diff_for_edit_step(step, result)
+            if diff:
+                self.print_file_diff(step.path or "file", diff)
+
     @contextmanager
-    def thinking(self, label: str = "is thinking") -> Iterator[None]:
+    def thinking(self, label: str = "working on your task") -> Iterator[None]:
         """Show a spinner while the agent waits on the LLM."""
         if not sys.stdout.isatty():
             self._console.print(f"[agent]◆ GoodBoy[/] [muted]{label}…[/]")
@@ -1237,13 +1346,13 @@ class ConversationUI:
 
 @contextmanager
 def tool_activity(ui: ConversationUI, label: str) -> Iterator[None]:
-    """Spinner while a harness tool runs (TTY only).
+    """Spinner while a harness tool runs (interactive TTY only).
 
-    ``label`` is shown after "is running" — often a shell command preview or
-    ``read_file: path/to/file``.
+    ``label`` is human-facing text from :func:`activity_label` (e.g.
+    ``reading foo.py``).
     """
-    if not sys.stderr.isatty():
+    if not ui._is_interactive_tty():
         yield
         return
-    with ui.thinking(label=f"is running {label}"):
+    with ui.thinking(label=label):
         yield

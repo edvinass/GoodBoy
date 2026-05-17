@@ -141,10 +141,12 @@ def test_build_system_prompt_autoswitch_includes_model_catalogs():
 
 def test_build_system_prompt_visibility_without_debug():
     prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"], debug=False)
-    assert "Debug mode is **off**" in prompt
-    assert "does **not** see run_shell commands" in prompt
-    assert "does **not** see" in prompt and "thought" in prompt
+    assert "activity status" in prompt
+    assert "unified diffs" in prompt
+    assert "do **not** see run_shell commands" in prompt
+    assert "do **not** see" in prompt and "thought" in prompt
     assert "run_python code" in prompt
+    assert "goodboy -c" in prompt
     assert "shell command or Python preview" not in prompt
 
 
