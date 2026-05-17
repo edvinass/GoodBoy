@@ -223,6 +223,28 @@ def test_print_agent_step_shows_shell_with_show_commands(capsys):
     assert "shell" in out
 
 
+def test_print_agent_step_shows_full_python_with_show_commands(capsys):
+    code = "import json\nimport urllib.request\nprint(json.load(urllib.request.urlopen('https://example.com')))"
+    ui = ConversationUI(show_commands=True)
+    step = AgentStep(action=AgentAction.RUN_PYTHON, code=code)
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "import json" in out
+    assert "urllib.request" in out
+    assert "print(json.load" in out
+    assert "..." not in out
+    assert "python" in out
+
+
+def test_print_agent_python_code_wraps(capsys):
+    long_line = "x = " + repr("a" * 120)
+    ui = ConversationUI(show_commands=True, console=Console(width=60))
+    ui.print_agent(long_line, subtitle="python")
+    out = capsys.readouterr().out
+    assert out.count("a") >= 120
+    assert "..." not in out
+
+
 def test_print_tool_result_hidden_with_show_commands_only(capsys):
     ui = ConversationUI(show_commands=True)
     tool = ToolResult(executed="echo hi", stdout="hi\n", exit_code=0)

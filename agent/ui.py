@@ -1136,10 +1136,7 @@ class ConversationUI:
             elif self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
                 self.print_agent(step.command, subtitle="shell")
             elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
-                preview = step.code.strip()
-                if "\n" in preview:
-                    preview = preview.splitlines()[0] + " ..."
-                self.print_agent(preview, subtitle="python")
+                self.print_agent(step.code.strip(), subtitle="python")
             elif self.show_model and (model or reasoning):
                 routing_rows: list[tuple[str, str]] = []
                 if model:
@@ -1175,10 +1172,7 @@ class ConversationUI:
         if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
             self.print_agent(step.command, subtitle="shell")
         elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
-            preview = step.code.strip()
-            if "\n" in preview:
-                preview = preview.splitlines()[0] + " ..."
-            self.print_agent(preview, subtitle="python")
+            self.print_agent(step.code.strip(), subtitle="python")
         elif step.action == AgentAction.SWITCH_MODEL and step.model:
             self.print_agent(step.model, subtitle="model")
         elif step.action in (
