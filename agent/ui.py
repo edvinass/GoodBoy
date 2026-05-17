@@ -21,10 +21,18 @@ from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.clipboard import ClipboardData
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document, PasteMode
-from prompt_toolkit.filters import has_completions
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app
+from prompt_toolkit.filters import Condition, has_completions, has_focus
+from prompt_toolkit.formatted_text import AnyFormattedText
+from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+from prompt_toolkit.key_binding.defaults import load_key_bindings
 from prompt_toolkit.key_binding.key_processor import KeyPressEvent
-from prompt_toolkit.shortcuts import CompleteStyle, PromptSession
+from prompt_toolkit.layout import Dimension, Float, FloatContainer, HSplit, Layout, Window
+from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.layout.menus import CompletionsMenu
+from prompt_toolkit.layout.processors import AfterInput, ConditionalProcessor
+from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style, merge_styles
 from questionary.constants import DEFAULT_STYLE
 from rich.box import ROUNDED
@@ -78,7 +86,8 @@ _SUBTITLE_ICONS = {
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
-_USER_INPUT_PLACEHOLDER = "Ask anything — @ files, / commands"
+_USER_INPUT_PLACEHOLDER = "Ask anything"
+_USER_INPUT_FOOTER = "@ files, / commands"
 
 _MAX_ACTIVITY_DIFF_LINES = 40
 
@@ -355,6 +364,100 @@ def _configure_prompt_toolkit() -> None:
         os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
 
 
+def _terminal_columns() -> int:
+    try:
+        if sys.stdout.isatty():
+            return max(os.get_terminal_size(sys.stdout.fileno()).columns, 1)
+    except OSError:
+        pass
+    return 80
+
+
+def _input_horizontal_rule() -> str:
+    return "─" * _terminal_columns()
+
+
+def _user_input_placeholder() -> AnyFormattedText:
+    return [("class:placeholder", _USER_INPUT_PLACEHOLDER)]
+
+
+def _input_border_fragments() -> AnyFormattedText:
+    return [("class:input-border", _input_horizontal_rule())]
+
+
+def _input_footer_fragments() -> AnyFormattedText:
+    return [("class:input-footer", _USER_INPUT_FOOTER)]
+
+
+def _run_framed_user_prompt(
+    buffer: Buffer,
+    *,
+    style: Style,
+) -> str | None:
+    """Prompt with top/bottom rules and footer in the layout (works without CPR)."""
+    show_placeholder = Condition(lambda: buffer.text == "")
+
+    input_control = BufferControl(
+        buffer=buffer,
+        input_processors=[
+            ConditionalProcessor(
+                AfterInput(_user_input_placeholder),
+                show_placeholder,
+            ),
+        ],
+    )
+    input_window = Window(input_control, height=Dimension.exact(1))
+
+    def _accept(buff: Buffer) -> bool:
+        get_app().exit(result=buff.text)
+        return True
+
+    buffer.accept_handler = _accept
+
+    def _frame_row(text_fn: Any) -> Window:
+        return Window(
+            FormattedTextControl(text_fn),
+            height=Dimension.exact(1),
+            dont_extend_height=True,
+        )
+
+    top_window = _frame_row(_input_border_fragments)
+    bottom_window = _frame_row(_input_border_fragments)
+    footer_window = _frame_row(_input_footer_fragments)
+
+    root_container = FloatContainer(
+        HSplit([top_window, input_window, bottom_window, footer_window]),
+        floats=[
+            Float(
+                xcursor=True,
+                ycursor=True,
+                transparent=True,
+                content=CompletionsMenu(
+                    max_height=8,
+                    extra_filter=has_focus(input_control),
+                ),
+            ),
+        ],
+    )
+
+    app = Application(
+        layout=Layout(root_container, input_window),
+        key_bindings=merge_key_bindings(
+            [
+                load_key_bindings(),
+                _user_prompt_key_bindings(),
+            ]
+        ),
+        style=style,
+        full_screen=False,
+        erase_when_done=False,
+    )
+    try:
+        return app.run()
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+
 def _prompt_user_line(
     paste_state: _PasteState,
     *,
@@ -373,8 +476,10 @@ def _prompt_user_line(
             DEFAULT_STYLE,
             Style.from_dict(
                 {
+                    "": "#ffffff",
                     "placeholder": "dim",
-                    "question": "",
+                    "input-border": "dim",
+                    "input-footer": "dim",
                     "mention.choice": "ansibrightblue",
                     "completion-menu": "bg:#1e1e1e",
                     "completion-menu.completion": "",
@@ -383,32 +488,33 @@ def _prompt_user_line(
             ),
         ]
     )
-
-    def get_prompt_tokens() -> list[tuple[str, str]]:
-        return [("class:question", " │ ")]
-
-    session = PromptSession(
-        get_prompt_tokens,
-        style=style,
-        multiline=False,
-        placeholder=_USER_INPUT_PLACEHOLDER,
-        key_bindings=_user_prompt_key_bindings(),
-        completer=_UserInputCompleter(
-            root,
-            show_commands=show_commands,
-            auto_model_switch=auto_model_switch,
-            stream_output=stream_output,
-            session_model=session_model,
-            default_reasoning_effort=default_reasoning_effort,
-        ),
-        complete_while_typing=True,
-        complete_style=CompleteStyle.COLUMN,
+    completer = _UserInputCompleter(
+        root,
+        show_commands=show_commands,
+        auto_model_switch=auto_model_switch,
+        stream_output=stream_output,
+        session_model=session_model,
+        default_reasoning_effort=default_reasoning_effort,
     )
-    _attach_paste_handler(session.default_buffer, paste_state)
-    try:
-        return session.prompt()
-    except (KeyboardInterrupt, EOFError):
-        return None
+
+    if not sys.stdout.isatty():
+        session = PromptSession(
+            style=style,
+            multiline=False,
+            placeholder=_user_input_placeholder(),
+            key_bindings=_user_prompt_key_bindings(),
+            completer=completer,
+            complete_while_typing=True,
+        )
+        _attach_paste_handler(session.default_buffer, paste_state)
+        try:
+            return session.prompt()
+        except (KeyboardInterrupt, EOFError):
+            return None
+
+    buffer = Buffer(completer=completer, complete_while_typing=True)
+    _attach_paste_handler(buffer, paste_state)
+    return _run_framed_user_prompt(buffer, style=style)
 
 
 def _wrap_long_lines(text: str, *, width: int) -> str:

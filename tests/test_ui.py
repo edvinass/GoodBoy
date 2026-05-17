@@ -19,12 +19,28 @@ from agent.ui import (
     _AutoWidthConsole,
     _PasteState,
     _THEME,
+    _USER_INPUT_FOOTER,
+    _USER_INPUT_PLACEHOLDER,
     _accept_active_completion,
     _configure_prompt_toolkit,
+    _user_input_placeholder,
     _wrap_long_lines,
     activity_label,
     format_pasted_text_label,
 )
+
+
+def test_user_input_placeholder_and_footer_are_separate():
+    assert _USER_INPUT_PLACEHOLDER == "Ask anything"
+    assert _USER_INPUT_FOOTER == "@ files, / commands"
+    assert _user_input_placeholder() == [("class:placeholder", "Ask anything")]
+
+
+def test_input_frame_fragments_use_dim_style_classes():
+    from agent.ui import _input_border_fragments, _input_footer_fragments
+
+    assert _input_border_fragments()[0][0] == "class:input-border"
+    assert _input_footer_fragments() == [("class:input-footer", "@ files, / commands")]
 
 
 def test_format_pasted_text_label():
