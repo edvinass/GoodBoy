@@ -32,7 +32,7 @@ DEFAULT_MODEL = "gpt-5.4-nano"
 DEFAULT_MAX_TURNS = 500
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
 DEFAULT_MAX_CLARIFICATIONS = 3
-DEFAULT_CONTEXT_RECENT_FULL_TURNS = 3
+DEFAULT_CONTEXT_RECENT_FULL_TURNS = 8
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -143,7 +143,7 @@ class Settings:
     auto_model_switch: bool = False
     default_reasoning_effort: str | None = None
     context_recent_full_turns: int = DEFAULT_CONTEXT_RECENT_FULL_TURNS
-    response_chain_enabled: bool = False
+    response_chain_enabled: bool = True
     strict_json_schema: bool = True
 
     @classmethod
@@ -185,7 +185,7 @@ class Settings:
                     DEFAULT_CONTEXT_RECENT_FULL_TURNS,
                 ),
             ),
-            response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, False),
+            response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, True),
             strict_json_schema=_env_bool(GOODBOY_STRICT_JSON_VAR, True),
         )
 

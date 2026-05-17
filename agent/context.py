@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from agent.memory import load_project_memory
 from agent.types import TurnRecord
 
-DEFAULT_RECENT_FULL_TURNS = 3
+DEFAULT_RECENT_FULL_TURNS = 8
 _SUMMARY_LINE_PREVIEW_CHARS = 200
 
 TurnRenderMode = Literal["full", "summary"]

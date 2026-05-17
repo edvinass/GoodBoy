@@ -155,10 +155,10 @@ def test_summary_includes_first_stderr_on_failure():
     assert "Traceback ..." not in older_section
 
 
-def test_default_recent_full_turns_is_three():
+def test_default_recent_full_turns_is_eight():
     """Sanity-check the documented default, since the env var defaults here too."""
     ctx = SessionContext(user_task="t")
-    assert ctx.recent_full_turns == DEFAULT_RECENT_FULL_TURNS == 3
+    assert ctx.recent_full_turns == DEFAULT_RECENT_FULL_TURNS == 8
 
 
 def test_watermark_snapshot_matches_current_lengths():

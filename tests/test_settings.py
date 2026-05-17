@@ -5,10 +5,21 @@ from settings import (
     GOODBOY_AUTO_MODEL_SWITCH_VAR,
     GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR,
     GOODBOY_REASONING_EFFORT_VAR,
+    GOODBOY_RESPONSE_CHAIN_VAR,
     GOODBOY_SHOW_COMMANDS_VAR,
     Settings,
     get_settings,
 )
+
+
+def test_settings_response_chain_default_enabled(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    monkeypatch.delenv(GOODBOY_RESPONSE_CHAIN_VAR, raising=False)
+    get_settings.cache_clear()
+    assert Settings.from_env().response_chain_enabled is True
+    get_settings.cache_clear()
 
 
 def test_settings_show_commands_from_env(monkeypatch, tmp_path):
