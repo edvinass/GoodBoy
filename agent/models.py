@@ -469,6 +469,8 @@ User enabled automatic switching (`/autoswitch` or `GOODBOY_AUTO_MODEL_SWITCH`).
 
 After turn 1, change **model** and **reasoning_effort** between turns (including via **switch_model**) when complexity, failures, hosted-tool needs, or long context justify it — don't wait for repeated failures. Step down to a cheaper model once the hard part is done.
 
+**Complex tasks** (refactor, migrate, multi-file): on the routing turn pick gpt-5.4-mini (or similar) with reasoning_effort **medium** for turn 2+; step down after implementation and verification are done.
+
 - Prefer setting `model` on run_shell/run_python when you also run a command; use switch_model only when changing model without a tool run.
 - Don't use gpt-5.5 or high/xhigh reasoning for trivial steps.
 - reasoning_effort on gpt-5.x: default none/low; medium when needed; high/xhigh only when stuck."""

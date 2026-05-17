@@ -28,7 +28,12 @@ GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
 GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR = "GOODBOY_CONTEXT_RECENT_FULL_TURNS"
 GOODBOY_RESPONSE_CHAIN_VAR = "GOODBOY_RESPONSE_CHAIN"
 GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
+GOODBOY_PLAN_MODE_VAR = "GOODBOY_PLAN_MODE"
+GOODBOY_WORKING_MEMORY_MAX_VAR = "GOODBOY_WORKING_MEMORY_MAX"
+GOODBOY_VERIFY_BEFORE_COMPLETE_VAR = "GOODBOY_VERIFY_BEFORE_COMPLETE"
 DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_PLAN_MODE = "auto"
+DEFAULT_WORKING_MEMORY_MAX = 30
 DEFAULT_MAX_TURNS = 500
 DEFAULT_TOOL_TIMEOUT_SEC = 120.0
 DEFAULT_MAX_CLARIFICATIONS = 3
@@ -145,6 +150,9 @@ class Settings:
     context_recent_full_turns: int = DEFAULT_CONTEXT_RECENT_FULL_TURNS
     response_chain_enabled: bool = True
     strict_json_schema: bool = True
+    plan_mode: str = DEFAULT_PLAN_MODE
+    working_memory_max: int = DEFAULT_WORKING_MEMORY_MAX
+    verify_before_complete: bool = True
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -187,6 +195,19 @@ class Settings:
             ),
             response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, True),
             strict_json_schema=_env_bool(GOODBOY_STRICT_JSON_VAR, True),
+            plan_mode=(
+                os.getenv(GOODBOY_PLAN_MODE_VAR) or DEFAULT_PLAN_MODE
+            ).strip().lower(),
+            working_memory_max=max(
+                1,
+                _env_int(
+                    GOODBOY_WORKING_MEMORY_MAX_VAR,
+                    DEFAULT_WORKING_MEMORY_MAX,
+                ),
+            ),
+            verify_before_complete=_env_bool(
+                GOODBOY_VERIFY_BEFORE_COMPLETE_VAR, True
+            ),
         )
 
     @property

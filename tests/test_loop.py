@@ -5,7 +5,13 @@ from pathlib import Path
 
 from agent.context import SessionContext
 from agent.loop import AgentLoop, LoopOutcome
-from agent.types import AgentAction, AgentStep, TurnRecord
+from agent.types import (
+    AgentAction,
+    AgentStep,
+    PlanItem,
+    PlanItemStatus,
+    TurnRecord,
+)
 from agent.ui import ConversationUI
 
 _ALLOWED = ["gpt-4.1-nano", "gpt-5.4-nano", "gpt-5.4-mini", "gpt-5.5"]
@@ -1042,3 +1048,193 @@ def test_llm_stream_updates_thinking_label(tmp_path: Path, monkeypatch):
     result = loop.run("explore")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert "Inspecting project structure" in status_updates
+
+
+def test_complex_task_blocks_edit_until_plan(tmp_path: Path):
+    target = tmp_path / "x.txt"
+    target.write_text("old\n", encoding="utf-8")
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=8,
+        allowed_models=_ALLOWED,
+        llm_call=_llm_responses(
+            [
+                AgentStep(
+                    action=AgentAction.STR_REPLACE,
+                    path="x.txt",
+                    old_string="old",
+                    new_string="new",
+                ),
+                AgentStep(
+                    action=AgentAction.UPDATE_PLAN,
+                    plan_items=[
+                        PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
+                        PlanItem(
+                            id="2",
+                            text="edit file",
+                            status=PlanItemStatus.IN_PROGRESS,
+                        ),
+                    ],
+                ),
+                AgentStep(
+                    action=AgentAction.STR_REPLACE,
+                    path="x.txt",
+                    old_string="old",
+                    new_string="new",
+                ),
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="pytest --version",
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="done",
+                ),
+            ]
+        ),
+    )
+    result = loop.run("refactor x.txt naming")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert target.read_text(encoding="utf-8") == "new\n"
+    assert "update_plan" in result.context.parse_errors[0].lower()
+
+
+def test_verify_gate_blocks_task_complete_until_pytest(tmp_path: Path):
+    target = tmp_path / "y.txt"
+    target.write_text("a\n", encoding="utf-8")
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=10,
+        allowed_models=_ALLOWED,
+        llm_call=_llm_responses(
+            [
+                AgentStep(
+                    action=AgentAction.STR_REPLACE,
+                    path="y.txt",
+                    old_string="a",
+                    new_string="b",
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="done without test",
+                ),
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="true",
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="still no pytest",
+                ),
+                AgentStep(
+                    action=AgentAction.RUN_SHELL,
+                    command="pytest --version",
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="verified",
+                ),
+            ]
+        ),
+    )
+    result = loop.run("fix y.txt")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert result.message == "verified"
+    assert any(
+        "verification" in e.lower() or "test" in e.lower()
+        for e in result.context.parse_errors
+    )
+
+
+def test_verify_gate_disabled_via_env(tmp_path: Path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("GOODBOY_VERIFY_BEFORE_COMPLETE=false\n", encoding="utf-8")
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    from settings import get_settings
+
+    get_settings.cache_clear()
+
+    target = tmp_path / "z.txt"
+    target.write_text("1\n", encoding="utf-8")
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=_llm_responses(
+            [
+                AgentStep(
+                    action=AgentAction.STR_REPLACE,
+                    path="z.txt",
+                    old_string="1",
+                    new_string="2",
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="ok",
+                ),
+            ]
+        ),
+    )
+    result = loop.run("update z")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    get_settings.cache_clear()
+
+
+def test_complex_task_router_uses_capable_model(tmp_path: Path):
+    captured: list[str] = []
+
+    payloads = [
+        json.dumps(
+            AgentStep(
+                action=AgentAction.SWITCH_MODEL,
+                model="gpt-5.4-mini",
+            ).model_dump(mode="json")
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="routed",
+            ).model_dump(mode="json")
+        ),
+    ]
+    index = {"i": 0}
+
+    def fake_llm2(**kwargs):
+        captured.append(kwargs["model"])
+        i = index["i"]
+        index["i"] += 1
+        return payloads[i]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        ui=ConversationUI(auto_model_switch=True),
+        llm_call=fake_llm2,
+    )
+    loop.run("refactor the entire codebase architecture")
+    assert captured[0] == "gpt-5.4-mini"
+
+
+def test_remember_appends_working_memory(tmp_path: Path):
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=_llm_responses(
+            [
+                AgentStep(
+                    action=AgentAction.REMEMBER,
+                    memory=["Tests: pytest tests/ -q"],
+                ),
+                AgentStep(
+                    action=AgentAction.TASK_COMPLETE,
+                    message="ok",
+                ),
+            ]
+        ),
+    )
+    result = loop.run("note tests")
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert "pytest" in result.context.working_memory[0]
+    assert "Working memory" in result.context.to_prompt()

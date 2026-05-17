@@ -10,6 +10,21 @@ from llm import REASONING_EFFORT
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+class PlanItemStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+
+class PlanItem(BaseModel):
+    """One row in the durable task plan."""
+
+    id: str
+    text: str
+    status: PlanItemStatus = PlanItemStatus.PENDING
+
+
 class AgentAction(str, Enum):
     RUN_SHELL = "run_shell"
     RUN_PYTHON = "run_python"
@@ -19,6 +34,8 @@ class AgentAction(str, Enum):
     SWITCH_MODEL = "switch_model"
     SWITCH_TOOLS = "switch_tools"
     SWITCH_API = "switch_api"  # deprecated alias for switch_tools
+    UPDATE_PLAN = "update_plan"
+    REMEMBER = "remember"
     NEED_USER_INPUT = "need_user_input"
     TASK_COMPLETE = "task_complete"
     FAILED = "failed"
@@ -45,6 +62,8 @@ class AgentStep(BaseModel):
     end_line: int | None = None
     message: str | None = None
     tools: list[str] | None = None
+    plan_items: list[PlanItem] | None = None
+    memory: list[str] | None = None
     model: str | None = None
     reasoning_effort: str | None = None
 
@@ -128,6 +147,19 @@ class AgentStep(BaseModel):
         elif self.action in _SWITCH_TOOLS_ACTIONS:
             if not self.tools:
                 raise ValueError("switch_tools requires non-empty 'tools' list")
+        elif self.action == AgentAction.UPDATE_PLAN:
+            if not self.plan_items:
+                raise ValueError("update_plan requires non-empty 'plan_items' list")
+        elif self.action == AgentAction.REMEMBER:
+            if not self.memory:
+                raise ValueError("remember requires non-empty 'memory' list")
+            if len(self.memory) > 5:
+                raise ValueError("remember allows at most 5 memory strings per turn")
+            for item in self.memory:
+                if len(item) > 500:
+                    raise ValueError(
+                        "each memory string must be at most 500 characters"
+                    )
         elif self.action in (
             AgentAction.NEED_USER_INPUT,
             AgentAction.TASK_COMPLETE,
@@ -145,6 +177,10 @@ class AgentStep(BaseModel):
                 "tools is only allowed with switch_tools — use "
                 '{"action": "switch_tools", "tools": ["web_search"]}'
             )
+        if self.plan_items is not None and self.action != AgentAction.UPDATE_PLAN:
+            raise ValueError("plan_items is only allowed with update_plan")
+        if self.memory is not None and self.action != AgentAction.REMEMBER:
+            raise ValueError("memory is only allowed with remember")
         return self
 
 

@@ -32,6 +32,14 @@ from agent.file_tools import apply_patch, read_file, str_replace
 from agent.prompt import build_session_prompt_suffix, build_stable_system_prompt
 from agent.routing import should_skip_routing_turn
 from agent.registry import get_tool, is_harness_tool, is_valid_action
+from agent.task_policy import (
+    is_complex_task,
+    is_edit_action,
+    is_verification_command,
+    plan_blocks_edit,
+    validate_plan_submission,
+    verification_blocks_complete,
+)
 from agent.tools import run_python, run_shell
 from llm import TokenUsage
 from agent.stream_status import extract_streaming_status
@@ -131,6 +139,9 @@ class AgentLoop:
         ) and llm_call is None
         self._last_response_id: str | None = None
         self._chain_watermark: ContextWatermark | None = None
+        self._plan_mode = cfg.plan_mode
+        self._working_memory_max = cfg.working_memory_max
+        self._verify_before_complete = cfg.verify_before_complete
         self._ui = ui
         self._stable_instructions = self._build_stable_instructions()
         self._session_suffix = self._build_session_suffix()
@@ -265,7 +276,7 @@ class AgentLoop:
                 and not should_skip_routing_turn(ctx.user_task)
             )
             if routing_turn:
-                call_model = self._router_model()
+                call_model = self._router_model(ctx.user_task)
             else:
                 call_model = self._pending_model or self._default_model
             effort = self._pending_reasoning
@@ -358,8 +369,17 @@ class AgentLoop:
 
             consecutive_parse_failures = 0
             self._apply_pending_routing(step)
+            if (
+                routing_turn
+                and is_complex_task(ctx.user_task)
+                and step.reasoning_effort is None
+                and self._pending_reasoning is None
+            ):
+                self._pending_reasoning = "medium"
 
-            routing_err = self._routing_turn_model_required(routing_turn, step)
+            routing_err = self._routing_turn_model_required(
+                routing_turn, step, ctx.user_task
+            )
             if routing_err:
                 ctx.add_parse_error(routing_err)
                 if session_log is not None:
@@ -458,6 +478,68 @@ class AgentLoop:
                     return stopped
                 continue
 
+            if step.action == AgentAction.UPDATE_PLAN:
+                plan_err = validate_plan_submission(ctx, step.plan_items)
+                if plan_err:
+                    ctx.add_parse_error(plan_err)
+                    if session_log is not None:
+                        session_log.event(
+                            "parse_error", turn=turn, error=plan_err
+                        )
+                    consecutive_parse_failures += 1
+                    if consecutive_parse_failures >= 2:
+                        return finish(
+                            LoopResult(
+                                outcome=LoopOutcome.FAILED,
+                                message=plan_err,
+                                context=ctx,
+                            )
+                        )
+                    continue
+                ctx = ctx.model_copy(update={"plan_items": list(step.plan_items or [])})
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                if self._ui is not None:
+                    self._ui.print_agent_step(
+                        step,
+                        model=call_model,
+                        reasoning=call_reasoning,
+                    )
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
+                continue
+
+            if step.action == AgentAction.REMEMBER:
+                ctx.append_working_memory(
+                    step.memory or [],
+                    max_items=self._working_memory_max,
+                )
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                if self._ui is not None:
+                    self._ui.print_agent_step(
+                        step,
+                        model=call_model,
+                        reasoning=call_reasoning,
+                    )
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
+                continue
+
             if step.action == AgentAction.NEED_USER_INPUT:
                 question = step.message or ""
 
@@ -525,6 +607,25 @@ class AgentLoop:
                 continue
 
             if step.action == AgentAction.TASK_COMPLETE:
+                verify_err = verification_blocks_complete(
+                    ctx,
+                    verify_before_complete=self._verify_before_complete,
+                )
+                if verify_err:
+                    ctx.add_parse_error(verify_err)
+                    if session_log is not None:
+                        session_log.event(
+                            "parse_error", turn=turn, error=verify_err
+                        )
+                    ctx.add_turn(
+                        TurnRecord(
+                            turn=turn,
+                            step=step,
+                            call_model=call_model,
+                            call_reasoning_effort=call_reasoning,
+                        )
+                    )
+                    continue
                 ctx.add_turn(
                     TurnRecord(
                         turn=turn,
@@ -567,6 +668,25 @@ class AgentLoop:
                     )
                     continue
 
+                edit_gate = plan_blocks_edit(
+                    ctx, step.action, plan_mode=self._plan_mode
+                )
+                if edit_gate:
+                    ctx.add_parse_error(edit_gate)
+                    if session_log is not None:
+                        session_log.event(
+                            "parse_error", turn=turn, error=edit_gate
+                        )
+                    ctx.add_turn(
+                        TurnRecord(
+                            turn=turn,
+                            step=step,
+                            call_model=call_model,
+                            call_reasoning_effort=call_reasoning,
+                        )
+                    )
+                    continue
+
                 progress_label = progress_label_for_step(step)
                 if self._ui is not None:
                     with tool_activity(self._ui, progress_label):
@@ -580,6 +700,18 @@ class AgentLoop:
 
             if session_log is not None and tool_result is not None:
                 session_log.log_tool_result(turn=turn, result=tool_result)
+
+            if tool_result is not None:
+                succeeded = tool_result.exit_code == 0 and not tool_result.timed_out
+                if succeeded and is_edit_action(step.action):
+                    ctx = ctx.model_copy(update={"last_edit_turn": turn})
+                if (
+                    succeeded
+                    and step.action == AgentAction.RUN_SHELL
+                    and step.command
+                    and is_verification_command(step.command)
+                ):
+                    ctx = ctx.model_copy(update={"last_verify_turn": turn})
 
             if (
                 step.action == AgentAction.RUN_SHELL
@@ -783,13 +915,21 @@ class AgentLoop:
     def _auto_model_switch_enabled(self) -> bool:
         return self._ui.auto_model_switch if self._ui is not None else False
 
-    def _router_model(self) -> str:
+    def _router_model(self, task: str) -> str:
+        from agent.task_policy import complex_task_router_model
+
+        if is_complex_task(task):
+            picked = complex_task_router_model(
+                self._allowed_models, self._hosted_tools
+            )
+            if picked:
+                return picked
         return (
             cheapest_capable_model(self._allowed_models) or self._default_model
         )
 
     def _routing_turn_model_required(
-        self, routing_turn: bool, step: AgentStep
+        self, routing_turn: bool, step: AgentStep, task: str
     ) -> str | None:
         if not routing_turn:
             return None
@@ -799,11 +939,17 @@ class AgentLoop:
             return None
         if self._pending_model is not None:
             return None
-        return (
+        base = (
             "Routing turn (automatic model switching): set **model** on this "
             "action (or use switch_model) so the next LLM call uses an "
             "appropriate model from the allowlist."
         )
+        if is_complex_task(task):
+            return (
+                f"{base} For complex tasks prefer gpt-5.4-mini (or similar) with "
+                "reasoning_effort medium on turn 2+."
+            )
+        return base
 
     def _validate_routing(self, step: AgentStep, call_model: str) -> str | None:
         if not is_valid_action(step.action):

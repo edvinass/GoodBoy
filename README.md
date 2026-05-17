@@ -104,6 +104,11 @@ Agent behavior:
 - `GOODBOY_MAX_TURNS` – maximum agent turns per task (default: `40`)
 - `GOODBOY_TOOL_TIMEOUT_SEC` – timeout for tool execution (default: `120.0`)
 - `GOODBOY_MAX_CLARIFICATIONS` – max clarification turns (default: `3`)
+- `GOODBOY_PLAN_MODE` – `auto` (plan required for complex tasks), `always`, or `off` (default: `auto`)
+- `GOODBOY_VERIFY_BEFORE_COMPLETE` – block `task_complete` until tests pass after edits (default: `true`)
+- `GOODBOY_WORKING_MEMORY_MAX` – cap on durable memory lines (default: `30`)
+
+Project memory: add `AGENTS.md`, `.goodboy/memory.md`, or `GOODBOY.md` in the repo root with test commands and conventions (see [`examples/AGENTS.md`](examples/AGENTS.md)). GoodBoy injects the first file found into every task.
 
 Session logging:
 - `GOODBOY_SESSION_LOG` – enable/disable session logs (default: enabled)

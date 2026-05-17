@@ -23,6 +23,12 @@ ROUTING_ACTIONS = frozenset(
         AgentAction.SWITCH_API,
     }
 )
+META_ACTIONS = frozenset(
+    {
+        AgentAction.UPDATE_PLAN,
+        AgentAction.REMEMBER,
+    }
+)
 TERMINAL_ACTIONS = frozenset(
     {
         AgentAction.NEED_USER_INPUT,
@@ -110,6 +116,7 @@ def is_valid_action(action: AgentAction) -> bool:
     return (
         action in HARNESS_ACTIONS
         or action in ROUTING_ACTIONS
+        or action in META_ACTIONS
         or action in TERMINAL_ACTIONS
     )
 
@@ -119,7 +126,8 @@ def format_tools_section(tools: tuple[ToolSpec, ...] | None = None) -> str:
     specs = tools if tools is not None else DEFAULT_TOOLS
     lines = [
         "## Harness tools (local codebase work)",
-        "Set `action` to a tool below, or a terminal action (need_user_input, task_complete, failed).",
+        "Set `action` to a tool below, meta action (update_plan, remember), or terminal action "
+        "(need_user_input, task_complete, failed).",
         "",
     ]
     for spec in specs:

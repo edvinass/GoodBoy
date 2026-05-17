@@ -4,14 +4,7 @@ from __future__ import annotations
 
 import re
 
-_COMPLEX_KEYWORDS = re.compile(
-    r"\b("
-    r"refactor|architecture|migrate|security|audit|debug|investigate|"
-    r"performance|optimi[sz]e|redesign|multi[- ]file|entire|whole|"
-    r"codebase|review|analy[sz]e|root cause|stuck|broken build"
-    r")\b",
-    re.IGNORECASE,
-)
+from agent.task_policy import is_complex_task
 
 _SIMPLE_PATTERNS = re.compile(
     r"^(run|execute|fix|add|update|remove|delete|rename|format|lint|test|"
@@ -29,7 +22,7 @@ def should_skip_routing_turn(task: str) -> bool:
     text = task.strip()
     if not text:
         return False
-    if _COMPLEX_KEYWORDS.search(text):
+    if is_complex_task(text):
         return False
     if len(text) <= 120 and _SIMPLE_PATTERNS.match(text):
         return True

@@ -155,6 +155,17 @@ def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> st
         if name:
             return f"writing {name}" if phase == "progress" else f"wrote {name}"
         return "writing file" if phase == "progress" else "wrote file"
+    if step.action == AgentAction.UPDATE_PLAN:
+        count = len(step.plan_items or [])
+        label = f"plan ({count} items)" if count else "plan"
+        return f"updating {label}" if phase == "progress" else f"updated {label}"
+    if step.action == AgentAction.REMEMBER:
+        count = len(step.memory or [])
+        return (
+            f"remembering ({count})"
+            if phase == "progress"
+            else f"remembered ({count})"
+        )
 
     action = step.action.value.replace("_", " ")
     return action if phase == "progress" else f"finished {action}"

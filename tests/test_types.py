@@ -149,6 +149,40 @@ def test_parse_duplicate_json_objects_uses_first():
     assert step.command == "ls"
 
 
+def test_update_plan_requires_plan_items():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate({"action": "update_plan"})
+
+
+def test_update_plan_with_items():
+    step = AgentStep.model_validate(
+        {
+            "action": "update_plan",
+            "plan_items": [
+                {"id": "1", "text": "recon", "status": "pending"},
+            ],
+        }
+    )
+    assert step.action == AgentAction.UPDATE_PLAN
+    assert len(step.plan_items or []) == 1
+
+
+def test_remember_requires_memory():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate({"action": "remember"})
+
+
+def test_plan_items_only_on_update_plan():
+    with pytest.raises(ValidationError, match="update_plan"):
+        AgentStep.model_validate(
+            {
+                "action": "run_shell",
+                "command": "pwd",
+                "plan_items": [{"id": "1", "text": "x", "status": "pending"}],
+            }
+        )
+
+
 def test_parse_concatenated_json_objects_uses_first_only():
     first = {"action": "run_shell", "command": "pwd"}
     second = {"action": "task_complete", "message": "done"}

@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from agent.memory import load_project_memory
-from agent.types import TurnRecord
+from agent.types import AgentAction, PlanItem, PlanItemStatus, TurnRecord
 
 DEFAULT_RECENT_FULL_TURNS = 8
 _SUMMARY_LINE_PREVIEW_CHARS = 200
@@ -69,6 +69,47 @@ class SessionContext(BaseModel):
     parse_errors: list[str] = Field(default_factory=list)
     active_hosted_tools: list[str] = Field(default_factory=list)
     recent_full_turns: int = DEFAULT_RECENT_FULL_TURNS
+    plan_items: list[PlanItem] = Field(default_factory=list)
+    working_memory: list[str] = Field(default_factory=list)
+    last_edit_turn: int | None = None
+    last_verify_turn: int | None = None
+
+    def append_working_memory(self, items: list[str], *, max_items: int) -> None:
+        """Append unique memory strings, newest last, capped at max_items."""
+        for raw in items:
+            text = raw.strip()
+            if not text:
+                continue
+            if len(text) > 500:
+                text = text[:500] + "..."
+            if text in self.working_memory:
+                continue
+            self.working_memory.append(text)
+        if len(self.working_memory) > max_items:
+            self.working_memory = self.working_memory[-max_items:]
+
+    def format_pinned_sections(self) -> str:
+        """Durable plan and memory — always included in model input."""
+        sections: list[str] = []
+        if self.plan_items:
+            lines = ["## Active plan"]
+            for item in self.plan_items:
+                mark = " "
+                if item.status == PlanItemStatus.DONE:
+                    mark = "x"
+                elif item.status == PlanItemStatus.CANCELLED:
+                    mark = "-"
+                elif item.status == PlanItemStatus.IN_PROGRESS:
+                    mark = ">"
+                lines.append(f"- [{mark}] ({item.id}) {item.text}")
+            sections.append("\n".join(lines))
+        if self.working_memory:
+            mem_lines = ["## Working memory"]
+            mem_lines.extend(f"- {line}" for line in self.working_memory)
+            sections.append("\n".join(mem_lines))
+        if not sections:
+            return ""
+        return "\n\n".join(sections) + "\n\n"
 
     def add_turn(self, record: TurnRecord) -> None:
         self.turns.append(record)
@@ -101,11 +142,13 @@ class SessionContext(BaseModel):
         new_errors = self.parse_errors[since.parse_errors:]
         new_replies = self.user_replies[since.user_replies:]
 
+        pinned = self.format_pinned_sections()
         if not (new_turns or new_errors or new_replies):
-            return (
+            body = (
                 "## Continue\nNo new turn output since your last response. "
                 "Return the next JSON action object."
             )
+            return pinned + body if pinned else body
 
         if new_turns:
             sections.append("## New turn output")
@@ -128,7 +171,8 @@ class SessionContext(BaseModel):
             "\n## Your turn\n"
             "Return the next JSON action object to continue or finish the task."
         )
-        return "\n".join(sections)
+        body = "\n".join(sections)
+        return pinned + body if pinned else body
 
     def to_prompt(self) -> str:
         """Serialize context for the model's user message.
@@ -139,6 +183,9 @@ class SessionContext(BaseModel):
         in full regardless of the cap.
         """
         sections: list[str] = []
+        pinned = self.format_pinned_sections()
+        if pinned:
+            sections.append(pinned.rstrip())
 
         if self.conversation_history:
             sections.extend(
@@ -270,6 +317,11 @@ class SessionContext(BaseModel):
             # Routing/terminal turns carry their entire signal in `message`;
             # keep it whole even when summarising.
             lines.append(f"Message: {step.message}")
+        if step.action == AgentAction.UPDATE_PLAN and step.plan_items:
+            lines.append(f"Plan items: {len(step.plan_items)}")
+        if step.action == AgentAction.REMEMBER and step.memory:
+            for mem in step.memory:
+                lines.append(f"Remember: {_preview_line(mem)}")
 
         if record.tool_result is not None:
             tr = record.tool_result

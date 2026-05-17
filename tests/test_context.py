@@ -5,7 +5,14 @@ from agent.context import (
     ContextWatermark,
     SessionContext,
 )
-from agent.types import AgentAction, AgentStep, ToolResult, TurnRecord
+from agent.types import (
+    AgentAction,
+    AgentStep,
+    PlanItem,
+    PlanItemStatus,
+    ToolResult,
+    TurnRecord,
+)
 
 
 def _shell_turn(turn: int, command: str, stdout: str, *, exit_code: int = 0) -> TurnRecord:
@@ -216,3 +223,19 @@ def test_to_prompt_size_bounded_by_recent_window():
     # And the older turns' big bodies are gone.
     older_section = text.split("Recent turns")[0]
     assert big not in older_section
+
+
+def test_pinned_plan_and_memory_in_prompt_and_delta():
+    ctx = SessionContext(user_task="t")
+    ctx.plan_items = [
+        PlanItem(id="1", text="run tests", status=PlanItemStatus.PENDING)
+    ]
+    ctx.working_memory = ["pytest tests/ -q"]
+    full = ctx.to_prompt()
+    assert "## Active plan" in full
+    assert "run tests" in full
+    assert "## Working memory" in full
+    snap = ctx.watermark()
+    delta = ctx.to_prompt_delta(snap)
+    assert "## Active plan" in delta
+    assert "pytest tests/" in delta
