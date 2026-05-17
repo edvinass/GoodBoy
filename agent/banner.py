@@ -21,12 +21,7 @@ DOG_ASCII = r"""
 def _brown_dog_art() -> str:
     return "\n".join(f"[{_BRAND_STYLE}]{line}[/]" for line in DOG_ASCII.rstrip().splitlines())
 
-DESCRIPTION = (
-    "Autonomous coding agent for your machine. Describe what you want to do, "
-    "and GoodBoy will explore the repo, edit files, run tests and builds, "
-    "and report back when it is done. Use @ to reference a file or folder in "
-    "your message, and type ? to see help for available commands and session settings."
-)
+DESCRIPTION = "Autonomous coding agent"
 
 
 def get_version() -> str:
@@ -45,11 +40,6 @@ def format_startup(
     reasoning_effort: str | None = None,
 ) -> str:
     ver = get_version()
-    routing = (
-        "[dim]Routing[/] [green]agent[/] (/autoswitch on)"
-        if auto_model_switch
-        else "[dim]Routing[/] [yellow]session[/] (/model, /reasoning; /autoswitch off)"
-    )
     reasoning_line = ""
     if reasoning_effort:
         reasoning_line = (
@@ -59,6 +49,5 @@ def format_startup(
         f"{_brown_dog_art()}\n"
         f"[bold {_BRAND_STYLE}]GoodBoy[/] [dim]v{ver}[/]\n"
         f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
-        f"{routing}\n"
         f"{DESCRIPTION}"
     )

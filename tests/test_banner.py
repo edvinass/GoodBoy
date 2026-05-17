@@ -13,15 +13,20 @@ def test_format_startup_includes_version_model_and_description():
     assert get_version() in text
     assert "gpt-5.4-nano" in text
     assert "Model" in text
-    assert "session" in text.lower()
-    assert DESCRIPTION.split(".")[0] in text
+    assert "Routing" not in text
+    assert "session" not in text.lower()
+    assert DESCRIPTION == "Autonomous coding agent"
+    assert DESCRIPTION in text
 
 
-def test_format_startup_shows_agent_routing_when_autoswitch_on():
+def test_format_startup_omits_routing_when_autoswitch_on():
     text = format_startup(
         model="gpt-5.4-nano",
         auto_model_switch=True,
         reasoning_effort="low",
     )
-    assert "agent" in text.lower()
+    assert "Routing" not in text
+    assert "/autoswitch" not in text
+    assert "/model" not in text
+    assert "/reasoning" not in text
     assert "low" in text
