@@ -31,7 +31,9 @@ GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
 GOODBOY_PLAN_MODE_VAR = "GOODBOY_PLAN_MODE"
 GOODBOY_WORKING_MEMORY_MAX_VAR = "GOODBOY_WORKING_MEMORY_MAX"
 GOODBOY_VERIFY_BEFORE_COMPLETE_VAR = "GOODBOY_VERIFY_BEFORE_COMPLETE"
+GOODBOY_MODELS_DIR_VAR = "GOODBOY_MODELS_DIR"
 DEFAULT_MODEL = "gpt-5.4-nano"
+DEFAULT_MODELS_DIR = Path.home() / ".goodboy" / "models"
 DEFAULT_PLAN_MODE = "auto"
 DEFAULT_WORKING_MEMORY_MAX = 30
 DEFAULT_MAX_TURNS = 500
@@ -153,6 +155,7 @@ class Settings:
     plan_mode: str = DEFAULT_PLAN_MODE
     working_memory_max: int = DEFAULT_WORKING_MEMORY_MAX
     verify_before_complete: bool = True
+    models_dir: Path = DEFAULT_MODELS_DIR
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -169,6 +172,12 @@ class Settings:
         default_reasoning: str | None = None
         if reasoning_raw is not None and reasoning_raw.strip():
             default_reasoning = reasoning_raw.strip()
+        models_dir_raw = os.getenv(GOODBOY_MODELS_DIR_VAR)
+        models_dir = (
+            Path(models_dir_raw).expanduser()
+            if models_dir_raw and models_dir_raw.strip()
+            else DEFAULT_MODELS_DIR
+        )
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
@@ -208,6 +217,7 @@ class Settings:
             verify_before_complete=_env_bool(
                 GOODBOY_VERIFY_BEFORE_COMPLETE_VAR, True
             ),
+            models_dir=models_dir,
         )
 
     @property
@@ -218,3 +228,16 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
     return Settings.from_env()
+
+
+def is_configured(cfg: Settings | None = None) -> bool:
+    """True when OpenAI API key is set or the default model is an installed local model."""
+    resolved = cfg or get_settings()
+    if resolved.openai_api_key:
+        return True
+    try:
+        from agent.local_llm import has_installed_local_model
+
+        return has_installed_local_model(resolved.default_model)
+    except ImportError:
+        return False

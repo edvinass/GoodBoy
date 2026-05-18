@@ -73,7 +73,8 @@ from llm import (
     complete_structured,
     complete_structured_with_id,
     format_api_connection_error,
-    get_curated_models,
+    get_selectable_models,
+    is_local_model,
 )
 from settings import get_settings
 
@@ -132,7 +133,9 @@ class AgentLoop:
         )
         self._default_model = model or cfg.default_model
         self._default_reasoning: str | None = cfg.default_reasoning_effort
-        self._allowed_models = allowed_models or get_curated_models()
+        self._allowed_models = allowed_models or get_selectable_models(
+            api_key=cfg.openai_api_key
+        )
         self._pending_model: str | None = None
         self._pending_reasoning: str | None = None
         self._hosted_tools: tuple[str, ...] = ()
@@ -143,7 +146,7 @@ class AgentLoop:
             response_chain_enabled
             if response_chain_enabled is not None
             else cfg.response_chain_enabled
-        ) and llm_call is None
+        ) and llm_call is None and not is_local_model(self._default_model)
         self._last_response_id: str | None = None
         self._chain_watermark: ContextWatermark | None = None
         self._plan_mode = cfg.plan_mode
@@ -204,11 +207,33 @@ class AgentLoop:
 
     def set_session_model(self, model: str) -> None:
         """Set the default model for subsequent tasks in this harness session."""
-        if model not in self._allowed_models:
-            raise ValueError(f"Model not in allowlist: {model}")
+        selectable = get_selectable_models(
+            api_key=get_settings().openai_api_key
+        )
+        if model not in selectable:
+            raise ValueError(f"Model not available: {model}")
+        if is_local_model(model) or is_local_model(self._default_model):
+            from agent.local_llm import clear_runner_cache
+
+            clear_runner_cache()
         self._default_model = model
+        self._allowed_models = self._models_for_session()
         self._pending_model = None
+        self._hosted_tools = ()
         self._reset_response_chain()
+        if is_local_model(model):
+            self._chain_enabled = False
+        elif self._llm_call is None:
+            self._chain_enabled = get_settings().response_chain_enabled
+
+    def _models_for_session(self) -> list[str]:
+        """Allowlist for routing validation; locals only when session is local."""
+        from agent.local_llm import list_installed_models
+
+        if is_local_model(self._default_model):
+            installed = list_installed_models()
+            return installed if installed else [self._default_model]
+        return get_selectable_models(api_key=get_settings().openai_api_key)
 
     def set_session_reasoning(self, effort: str | None) -> None:
         """Set the default reasoning effort for subsequent LLM calls in this session."""
@@ -280,6 +305,7 @@ class AgentLoop:
                 and self._auto_model_switch_enabled()
                 and turn == 1
                 and self._pending_model is None
+                and not is_local_model(self._default_model)
                 and not should_skip_routing_turn(ctx.user_task)
             )
             if routing_turn:
@@ -289,7 +315,11 @@ class AgentLoop:
             effort = self._pending_reasoning
             if effort is None:
                 effort = self._default_reasoning
-            call_reasoning = resolve_reasoning_effort(call_model, effort)
+            local_call = is_local_model(call_model)
+            if local_call:
+                call_reasoning = None
+            else:
+                call_reasoning = resolve_reasoning_effort(call_model, effort)
             self._pending_model = None
             self._pending_reasoning = None
 
@@ -301,9 +331,9 @@ class AgentLoop:
                 "model": call_model,
                 "reasoning_effort": call_reasoning,
             }
-            if self._hosted_tools:
+            if self._hosted_tools and not local_call:
                 llm_kwargs["tools"] = list(self._hosted_tools)
-            if prev_id is not None:
+            if prev_id is not None and not local_call:
                 llm_kwargs["previous_response_id"] = prev_id
 
             if session_log is not None:
@@ -947,6 +977,8 @@ class AgentLoop:
             return _call_through_ui()
 
     def _auto_model_switch_enabled(self) -> bool:
+        if is_local_model(self._default_model):
+            return False
         return self._ui.auto_model_switch if self._ui is not None else False
 
     def _router_model(self, task: str) -> str:
@@ -1007,6 +1039,11 @@ class AgentLoop:
                 )
 
         if step.action in _SWITCH_TOOLS_ACTIONS:
+            if is_local_model(call_model):
+                return (
+                    "switch_tools is not available with local models. "
+                    "Use run_shell with rg/grep for codebase search."
+                )
             if step.model is not None:
                 return (
                     "Do not set model on switch_tools. Set model on the next "

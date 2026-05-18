@@ -23,7 +23,15 @@ from agent.repl_commands import (
     next_plan_mode,
 )
 from agent.ui import ConversationUI
-from llm import MODEL_LABELS, select_model_interactive, select_reasoning_interactive
+from agent.local_llm import clear_runner_cache
+from llm import (
+    MODEL_LABELS,
+    get_selectable_models,
+    is_local_model,
+    local_model_label,
+    select_model_interactive,
+    select_reasoning_interactive,
+)
 from settings import (
     GOODBOY_AUTO_MODEL_SWITCH_VAR,
     GOODBOY_PLAN_MODE_VAR,
@@ -31,6 +39,7 @@ from settings import (
     GOODBOY_SHOW_COMMANDS_VAR,
     OPENAI_MODEL_VAR,
     get_settings,
+    is_configured,
     save_env,
 )
 
@@ -302,23 +311,35 @@ class AgentHarness:
         self._ui.refresh_startup_banner()
 
     def _change_model(self) -> None:
+        cfg = get_settings()
         try:
             chosen = select_model_interactive(
-                models=list(self._loop._allowed_models),
+                models=get_selectable_models(api_key=cfg.openai_api_key),
                 default=self._loop.session_model,
+                api_key=cfg.openai_api_key,
             )
         except click.ClickException as exc:
             self._ui.print_notice(str(exc))
             return
 
+        if is_local_model(chosen) or is_local_model(self._loop.session_model):
+            clear_runner_cache()
         self._loop.set_session_model(chosen)
         save_env({OPENAI_MODEL_VAR: chosen})
         self._ui.set_session_model(chosen)
-        self._loop.refresh_system_prompt()
-        label = MODEL_LABELS.get(chosen, chosen)
+        self._loop.refresh_system_prompt(rebuild_stable=True)
+        if is_local_model(chosen):
+            label = local_model_label(chosen)
+        else:
+            label = MODEL_LABELS.get(chosen, chosen)
         self._ui.print_notice(f"Model set to {label} ({chosen}).")
 
     def _change_reasoning(self) -> None:
+        if is_local_model(self._loop.session_model):
+            self._ui.print_notice(
+                "Reasoning effort does not apply to local models."
+            )
+            return
         try:
             chosen = select_reasoning_interactive(
                 default=self._loop.session_reasoning,
@@ -441,15 +462,18 @@ def run_harness(
 ) -> None:
     """Entry point for the GoodBoy harness."""
     cfg = get_settings()
-    if not cfg.openai_api_key:
+    if not is_configured(cfg):
         click.echo("Not configured yet. Run: goodboy setup", err=True)
         raise SystemExit(1)
+    use_autoswitch = (auto_model_switch or cfg.auto_model_switch) and not is_local_model(
+        cfg.default_model
+    )
     harness = AgentHarness(
         show_thoughts=show_thoughts,
         verbose=verbose,
         show_model=show_model,
         show_commands=show_commands or cfg.show_commands,
-        auto_model_switch=auto_model_switch or cfg.auto_model_switch,
+        auto_model_switch=use_autoswitch,
         debug=debug,
         debug_input=debug_input,
         debug_output=debug_output,

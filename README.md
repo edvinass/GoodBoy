@@ -16,10 +16,12 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 - **Default reasoning-effort picker** for reasoning models.
 - **Session logging** (optional) to a local log directory.
 - **TLS/proxy-friendly OpenAI client options** (custom CA bundle, disable verify).
+- **In-process local LLMs** (optional): download GGUF weights during setup and run them inside GoodBoy via llama-cpp-python — no Ollama or other daemon.
 
 ## Requirements
 
 - Python **3.10+**
+- For local models: **~8–16GB RAM** recommended for the default 7B Q4 catalog model; disk space for the download (~4–5GB)
 
 ## Install
 
@@ -29,13 +31,21 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 pip install -e .
 ```
 
+### Local model support (optional)
+
+```bash
+pip install -e ".[local]"
+```
+
+This adds `llama-cpp-python` and `huggingface-hub` for downloading and running GGUF models in-process.
+
 ### Install into a fresh venv (helper)
 
 ```bash
 python dev.py
 ```
 
-## Configure OpenAI credentials
+## Configure credentials and models
 
 GoodBoy stores configuration in a local `.env` file at the project root.
 
@@ -43,10 +53,13 @@ GoodBoy stores configuration in a local `.env` file at the project root.
 goodboy setup
 ```
 
-This prompts for:
-- your **OpenAI API key**
-- the **default model**
-- the optional **default reasoning effort**
+This walks you through:
+- **Cloud (OpenAI)**, **Local (on this machine)**, or **Both**
+- OpenAI API key when using cloud (optional if your default model is local)
+- Downloading a local GGUF model (when local or both is selected)
+- Choosing the default model from the combined picker (cloud + installed local models)
+
+Local model IDs use the `local:` prefix (for example `local:qwen2.5-coder-7b-q4`). Weights are stored under `~/.goodboy/models/` (override with `GOODBOY_MODELS_DIR`).
 
 To check current saved settings:
 
@@ -94,8 +107,9 @@ Common options:
 GoodBoy reads configuration from `.env` (and also supports related exported env vars such as `SSL_CERT_FILE`).
 
 Key variables:
-- `OPENAI_API_KEY` – your OpenAI API key
-- `OPENAI_MODEL` – default model id (used when selecting the model for a new run)
+- `OPENAI_API_KEY` – your OpenAI API key (optional when default model is `local:…`)
+- `OPENAI_MODEL` – default model id (OpenAI id or `local:…` for on-device inference)
+- `GOODBOY_MODELS_DIR` – directory for downloaded GGUF weights (default: `~/.goodboy/models`)
 - `GOODBOY_SHOW_COMMANDS` – when `true`, show shell/Python commands (no output); updated by `/commands`
 - `GOODBOY_AUTO_MODEL_SWITCH` – when `true`, allow proactive model escalation; updated by `/autoswitch`
 - `GOODBOY_REASONING_EFFORT` – default reasoning effort for reasoning models; updated by `/reasoning`

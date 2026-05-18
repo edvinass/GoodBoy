@@ -105,15 +105,57 @@ def get_curated_models(*, api_key: str | None = None) -> list[str]:
 
 
 def get_available_models(*, api_key: str | None = None) -> list[str]:
-    """Alias for get_curated_models (setup menu and agent allowlist)."""
-    return get_curated_models(api_key=api_key)
+    """Alias for get_selectable_models (setup menu and agent allowlist)."""
+    return get_selectable_models(api_key=api_key)
+
+
+def is_local_model(model_id: str | None) -> bool:
+    from agent.local_llm import is_local_model as _is_local
+
+    return _is_local(model_id)
+
+
+def get_selectable_models(*, api_key: str | None = None) -> list[str]:
+    """Return OpenAI cloud models (when configured) plus installed local models."""
+    from agent.local_llm import LOCAL_MODEL_LABELS, list_installed_models
+
+    local = list_installed_models()
+    cloud: list[str] = []
+    if api_key:
+        try:
+            cloud = get_curated_models(api_key=api_key)
+        except click.ClickException:
+            cloud = MODEL_CHOICES.copy()
+    elif get_settings().openai_api_key:
+        cloud = get_curated_models()
+    merged: list[str] = []
+    seen: set[str] = set()
+    for model_id in local + cloud:
+        if model_id not in seen:
+            seen.add(model_id)
+            merged.append(model_id)
+    if merged:
+        return merged
+    if api_key or get_settings().openai_api_key:
+        return get_curated_models(api_key=api_key)
+    return MODEL_CHOICES.copy()
+
+
+def local_model_label(model_id: str) -> str:
+    from agent.local_llm import LOCAL_MODEL_LABELS
+
+    return LOCAL_MODEL_LABELS.get(model_id, model_id)
 
 
 def _model_choice(model_id: str) -> questionary.Choice:
     from agent.models import format_model_select_label
 
-    description = MODEL_LABELS.get(model_id, model_id)
-    label = format_model_select_label(model_id, description)
+    if is_local_model(model_id):
+        description = local_model_label(model_id)
+        label = f"[Local] {description}"
+    else:
+        description = MODEL_LABELS.get(model_id, model_id)
+        label = format_model_select_label(model_id, description)
     return questionary.Choice(title=label, value=model_id)
 
 
@@ -124,7 +166,7 @@ def select_model_interactive(
     api_key: str | None = None,
 ) -> str:
     """Show an arrow-key menu and return the chosen model ID."""
-    options = models if models is not None else get_available_models(api_key=api_key)
+    options = models if models is not None else get_selectable_models(api_key=api_key)
     if not options:
         raise click.ClickException("No models available to select.")
 
@@ -411,11 +453,26 @@ def complete_structured_with_id(
     The id can be passed to a subsequent call as ``previous_response_id`` to
     chain a stateful conversation server-side, allowing the caller to send only
     the new turn's data instead of the full transcript each time.
+
+    Local models (``local:`` prefix) run in-process via llama-cpp-python and
+    always return ``(text, None, usage)``.
     """
     from agent.prompt import system_prompt_with_schema
 
-    client = get_client()
     resolved_model = model or get_settings().default_model
+    if is_local_model(resolved_model):
+        from agent.local_llm import complete_structured_local
+
+        return complete_structured_local(
+            model=resolved_model,
+            input=input,
+            instructions=instructions,
+            json_schema=json_schema,
+            stream=stream,
+            on_text_delta=on_text_delta,
+        )
+
+    client = get_client()
     cfg = get_settings()
     kwargs = _structured_request_kwargs(
         input=input,

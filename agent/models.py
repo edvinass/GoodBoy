@@ -293,6 +293,8 @@ def get_model_spec(model_id: str) -> ModelSpec | None:
 
 def format_model_select_label(model_id: str, description: str) -> str:
     """Label for interactive model picker (includes output token price)."""
+    if model_id.startswith("local:"):
+        return description
     spec = get_model_spec(model_id)
     if spec is None:
         return description
