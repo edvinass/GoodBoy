@@ -17,6 +17,7 @@ from settings import get_settings
 _DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
 LOCAL_MODEL_PREFIX = "local:"
+LOCAL_FILE_PREFIX = "local:file:"
 
 ProgressCallback = Callable[[int, int | None], None]
 StreamTextCallback = Callable[[str], None]
@@ -38,6 +39,17 @@ class LocalModelSpec:
         if self.id.startswith(LOCAL_MODEL_PREFIX):
             return self.id[len(LOCAL_MODEL_PREFIX) :]
         return self.id
+
+
+@dataclass(frozen=True)
+class LocalModelRef:
+    """Resolved local model (catalog entry or dropped GGUF file)."""
+
+    id: str
+    label: str
+    path: Path
+    n_ctx: int = 8192
+    n_gpu_layers: int = -1
 
 
 # Ordered small → large for setup menus (bartowski GGUF repos, Q4_K_M quants).
@@ -152,26 +164,101 @@ def model_gguf_path(spec: LocalModelSpec) -> Path:
     return models_dir() / spec.filename
 
 
-def resolve_model_path(model_id: str) -> Path | None:
-    spec = get_catalog_spec(model_id)
-    if spec is None:
+def _scan_gguf_files() -> dict[str, Path]:
+    """Map filename → path for every ``.gguf`` in the models directory (top level)."""
+    base = models_dir()
+    return {
+        path.name: path
+        for path in sorted(base.glob("*.gguf"))
+        if path.is_file()
+    }
+
+
+def _label_for_dropped_file(filename: str) -> str:
+    size_gb = ""
+    try:
+        path = models_dir() / filename
+        gib = path.stat().st_size / (1024**3)
+        size_gb = f", ~{gib:.1f}GB"
+    except OSError:
+        pass
+    return f"{filename}{size_gb} — dropped GGUF"
+
+
+def _model_id_for_file(filename: str) -> str:
+    return f"{LOCAL_FILE_PREFIX}{filename}"
+
+
+def is_dropped_file_model(model_id: str) -> bool:
+    return model_id.startswith(LOCAL_FILE_PREFIX)
+
+
+def resolve_local_model(model_id: str) -> LocalModelRef | None:
+    """Resolve a local model id to weights path and runtime settings."""
+    if not is_local_model(model_id):
         return None
-    path = model_gguf_path(spec)
-    return path if path.is_file() else None
+
+    files = _scan_gguf_files()
+    spec = get_catalog_spec(model_id)
+    if spec is not None and spec.filename in files:
+        return LocalModelRef(
+            id=spec.id,
+            label=spec.label,
+            path=files[spec.filename],
+            n_ctx=spec.n_ctx,
+            n_gpu_layers=spec.n_gpu_layers,
+        )
+
+    if is_dropped_file_model(model_id):
+        filename = model_id[len(LOCAL_FILE_PREFIX) :]
+        if filename in files:
+            return LocalModelRef(
+                id=model_id,
+                label=_label_for_dropped_file(filename),
+                path=files[filename],
+            )
+
+    return None
+
+
+def resolve_model_path(model_id: str) -> Path | None:
+    ref = resolve_local_model(model_id)
+    return ref.path if ref is not None else None
+
+
+def local_model_label(model_id: str) -> str:
+    ref = resolve_local_model(model_id)
+    if ref is not None:
+        return ref.label
+    return LOCAL_MODEL_LABELS.get(model_id, model_id)
 
 
 def list_installed_models() -> list[str]:
-    return [
-        spec.id
-        for spec in LOCAL_MODEL_CATALOG.values()
-        if model_gguf_path(spec).is_file()
-    ]
+    """Catalog matches first, then any other ``.gguf`` files in the models directory."""
+    files = _scan_gguf_files()
+    ids: list[str] = []
+    claimed: set[Path] = set()
+
+    for spec in _LOCAL_MODEL_SPECS:
+        path = files.get(spec.filename)
+        if path is None:
+            continue
+        ids.append(spec.id)
+        claimed.add(path.resolve())
+
+    for filename in sorted(files):
+        path = files[filename]
+        if path.resolve() in claimed:
+            continue
+        ids.append(_model_id_for_file(filename))
+
+    return ids
 
 
 def has_installed_local_model(model_id: str | None) -> bool:
     if not is_local_model(model_id):
         return False
-    return resolve_model_path(model_id) is not None
+    return resolve_local_model(model_id) is not None
 
 
 def require_local_deps() -> None:
@@ -238,7 +325,6 @@ def _download_gguf_file(
     )
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    mode = "ab" if resume_from > 0 else "wb"
 
     with Progress(
         TextColumn("[bold blue]{task.description}"),
@@ -333,14 +419,12 @@ class LocalModelRunner:
         require_local_deps()
         from llama_cpp import Llama
 
-        path = resolve_model_path(model_id)
-        if path is None:
+        ref = resolve_local_model(model_id)
+        if ref is None:
             raise click.ClickException(
                 f"Local model weights not found for {model_id}. "
-                "Run: goodboy setup"
+                f"Place a .gguf in {models_dir()} or run: goodboy setup"
             )
-        spec = get_catalog_spec(model_id)
-        assert spec is not None
 
         with self._lock:
             if self._llama is not None and self._loaded_id == model_id:
@@ -350,13 +434,13 @@ class LocalModelRunner:
                 self._loaded_id = None
 
             click.echo(
-                click.style(f"Loading local model {spec.label}…", fg="yellow"),
+                click.style(f"Loading local model {ref.label}…", fg="yellow"),
                 err=True,
             )
             self._llama = Llama(
-                model_path=str(path),
-                n_ctx=spec.n_ctx,
-                n_gpu_layers=spec.n_gpu_layers,
+                model_path=str(ref.path),
+                n_ctx=ref.n_ctx,
+                n_gpu_layers=ref.n_gpu_layers,
                 verbose=False,
             )
             self._loaded_id = model_id

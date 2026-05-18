@@ -117,7 +117,7 @@ def is_local_model(model_id: str | None) -> bool:
 
 def get_selectable_models(*, api_key: str | None = None) -> list[str]:
     """Return OpenAI cloud models (when configured) plus installed local models."""
-    from agent.local_llm import LOCAL_MODEL_LABELS, list_installed_models
+    from agent.local_llm import list_installed_models
 
     local = list_installed_models()
     cloud: list[str] = []
@@ -141,17 +141,13 @@ def get_selectable_models(*, api_key: str | None = None) -> list[str]:
     return MODEL_CHOICES.copy()
 
 
-def local_model_label(model_id: str) -> str:
-    from agent.local_llm import LOCAL_MODEL_LABELS
-
-    return LOCAL_MODEL_LABELS.get(model_id, model_id)
-
-
 def _model_choice(model_id: str) -> questionary.Choice:
     from agent.models import format_model_select_label
 
     if is_local_model(model_id):
-        description = local_model_label(model_id)
+        from agent.local_llm import local_model_label as _local_label
+
+        description = _local_label(model_id)
         label = f"[Local] {description}"
     else:
         description = MODEL_LABELS.get(model_id, model_id)

@@ -23,12 +23,11 @@ from agent.repl_commands import (
     next_plan_mode,
 )
 from agent.ui import ConversationUI
-from agent.local_llm import clear_runner_cache
+from agent.local_llm import clear_runner_cache, local_model_label
 from llm import (
     MODEL_LABELS,
     get_selectable_models,
     is_local_model,
-    local_model_label,
     select_model_interactive,
     select_reasoning_interactive,
 )

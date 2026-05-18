@@ -61,6 +61,8 @@ This walks you through:
 
 Local model IDs use the `local:` prefix (for example `local:qwen2.5-coder-7b-q4`). During setup you can pick from several GGUF options (Llama 3.2 3B, Phi-3.5 Mini, Qwen2.5 Coder 7B/14B, Mistral 7B, Gemma 2 9B, Granite 8B, DeepSeek Coder V2 Lite, and more). Weights are stored under `~/.goodboy/models/` (override with `GOODBOY_MODELS_DIR`).
 
+You can also drop any `.gguf` file directly into that folder (top level); it will show up in `/model` automatically—no rename required unless you want it to match a catalog download name.
+
 To check current saved settings:
 
 ```bash

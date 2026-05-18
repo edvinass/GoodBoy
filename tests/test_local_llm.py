@@ -10,6 +10,7 @@ from agent.local_llm import (
     has_installed_local_model,
     is_local_model,
     list_installed_models,
+    resolve_local_model,
 )
 from llm import complete_structured_with_id, get_selectable_models, is_local_model as llm_is_local
 
@@ -26,6 +27,42 @@ def test_list_installed_models_empty(tmp_path, monkeypatch):
 
     get_settings.cache_clear()
     assert list_installed_models() == []
+
+
+def test_list_installed_models_dropped_gguf(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    from settings import get_settings
+
+    get_settings.cache_clear()
+    (tmp_path / "my-custom-model.gguf").write_bytes(b"gguf")
+    ids = list_installed_models()
+    assert ids == ["local:file:my-custom-model.gguf"]
+
+
+def test_resolve_dropped_gguf(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    from settings import get_settings
+
+    get_settings.cache_clear()
+    path = tmp_path / "custom.Q4_K_M.gguf"
+    path.write_bytes(b"x" * 1000)
+    ref = resolve_local_model("local:file:custom.Q4_K_M.gguf")
+    assert ref is not None
+    assert ref.path == path
+    assert "custom.Q4_K_M.gguf" in ref.label
+
+
+def test_catalog_takes_priority_over_duplicate_filename(tmp_path, monkeypatch):
+    spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
+    assert spec is not None
+    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    from settings import get_settings
+
+    get_settings.cache_clear()
+    (tmp_path / spec.filename).write_bytes(b"gguf")
+    ids = list_installed_models()
+    assert ids == ["local:qwen2.5-coder-7b-q4"]
+    assert "local:file:" not in ids[0]
 
 
 def test_list_installed_models_when_file_present(tmp_path, monkeypatch):
