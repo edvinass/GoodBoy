@@ -59,7 +59,7 @@ This walks you through:
 - Downloading a local GGUF model (when local or both is selected)
 - Choosing the default model from the combined picker (cloud + installed local models)
 
-Local model IDs use the `local:` prefix (for example `local:qwen2.5-coder-7b-q4`). Weights are stored under `~/.goodboy/models/` (override with `GOODBOY_MODELS_DIR`).
+Local model IDs use the `local:` prefix (for example `local:qwen2.5-coder-7b-q4`). During setup you can pick from several GGUF options (Llama 3.2 3B, Phi-3.5 Mini, Qwen2.5 Coder 7B/14B, Mistral 7B, Gemma 2 9B, Granite 8B, DeepSeek Coder V2 Lite, and more). Weights are stored under `~/.goodboy/models/` (override with `GOODBOY_MODELS_DIR`).
 
 To check current saved settings:
 

@@ -37,22 +37,87 @@ class LocalModelSpec:
         return self.id
 
 
-LOCAL_MODEL_CATALOG: dict[str, LocalModelSpec] = {
-    "qwen2.5-coder-7b-q4": LocalModelSpec(
+# Ordered small → large for setup menus (bartowski GGUF repos, Q4_K_M quants).
+_LOCAL_MODEL_SPECS: tuple[LocalModelSpec, ...] = (
+    LocalModelSpec(
+        id="local:llama-3.2-3b-q4",
+        label="Llama 3.2 3B Instruct (Q4, ~2GB) — fast, light RAM",
+        repo_id="bartowski/Llama-3.2-3B-Instruct-GGUF",
+        filename="Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:phi-3.5-mini-q4",
+        label="Phi-3.5 Mini Instruct (Q4, ~2.4GB) — compact general",
+        repo_id="bartowski/Phi-3.5-mini-instruct-GGUF",
+        filename="Phi-3.5-mini-instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
         id="local:qwen2.5-coder-7b-q4",
-        label="Qwen2.5 Coder 7B (Q4, ~4GB) — coding agent",
+        label="Qwen2.5 Coder 7B (Q4, ~4.7GB) — coding agent (default)",
         repo_id="bartowski/Qwen2.5-Coder-7B-Instruct-GGUF",
         filename="Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
         n_ctx=8192,
-        n_gpu_layers=-1,
     ),
+    LocalModelSpec(
+        id="local:qwen2.5-7b-q4",
+        label="Qwen2.5 7B Instruct (Q4, ~4.7GB) — strong general",
+        repo_id="bartowski/Qwen2.5-7B-Instruct-GGUF",
+        filename="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:mistral-7b-q4",
+        label="Mistral 7B Instruct v0.3 (Q4, ~4.4GB) — general chat",
+        repo_id="bartowski/Mistral-7B-Instruct-v0.3-GGUF",
+        filename="Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:granite-3.1-8b-q4",
+        label="Granite 3.1 8B Instruct (Q4, ~4.9GB) — enterprise general",
+        repo_id="bartowski/granite-3.1-8b-instruct-GGUF",
+        filename="granite-3.1-8b-instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:gemma-2-9b-q4",
+        label="Gemma 2 9B IT (Q4, ~5.8GB) — capable general",
+        repo_id="bartowski/gemma-2-9b-it-GGUF",
+        filename="gemma-2-9b-it-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:qwen2.5-coder-14b-q4",
+        label="Qwen2.5 Coder 14B (Q4, ~9GB) — best coding, 16GB+ RAM",
+        repo_id="bartowski/Qwen2.5-Coder-14B-Instruct-GGUF",
+        filename="Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+    LocalModelSpec(
+        id="local:deepseek-coder-v2-lite-q4",
+        label="DeepSeek Coder V2 Lite (Q4, ~10GB) — MoE coding, 16GB+ RAM",
+        repo_id="bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF",
+        filename="DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf",
+        n_ctx=8192,
+    ),
+)
+
+LOCAL_MODEL_CATALOG: dict[str, LocalModelSpec] = {
+    spec.short_id: spec for spec in _LOCAL_MODEL_SPECS
 }
 
 LOCAL_MODEL_LABELS: dict[str, str] = {
-    spec.id: spec.label for spec in LOCAL_MODEL_CATALOG.values()
+    spec.id: spec.label for spec in _LOCAL_MODEL_SPECS
 }
 
 _DEFAULT_CATALOG_ID = "qwen2.5-coder-7b-q4"
+
+
+def iter_catalog() -> tuple[LocalModelSpec, ...]:
+    """Catalog entries in setup-menu order (smallest download first)."""
+    return _LOCAL_MODEL_SPECS
 
 _runner_lock = threading.Lock()
 _runner: LocalModelRunner | None = None

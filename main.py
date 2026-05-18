@@ -6,10 +6,10 @@ import questionary
 import settings
 from agent.harness import run_harness
 from agent.local_llm import (
-    LOCAL_MODEL_CATALOG,
     default_catalog_spec,
     download_model,
     is_local_model,
+    iter_catalog,
     list_installed_models,
     resolve_model_path,
 )
@@ -61,7 +61,7 @@ def _select_local_catalog_model() -> str:
     default_spec = default_catalog_spec()
     choices = [
         questionary.Choice(title=spec.label, value=spec.id)
-        for spec in LOCAL_MODEL_CATALOG.values()
+        for spec in iter_catalog()
     ]
     choice = questionary.select(
         "Select a local model to download",
