@@ -3,7 +3,12 @@
 import sys
 from unittest.mock import MagicMock, patch
 
+import click
+import pytest
+
 from agent.local_llm import (
+    _effective_max_tokens,
+    _fit_messages_to_context,
     complete_structured_local,
     download_model,
     get_catalog_spec,
@@ -143,6 +148,44 @@ def test_download_reports_progress(tmp_path, monkeypatch):
         )
 
     assert seen == [(50, 100), (100, 100)]
+
+
+def test_effective_max_tokens_caps_completion_budget():
+    assert _effective_max_tokens(8192, 4096) < 4096
+    assert _effective_max_tokens(8192, 512) == 512
+
+
+def test_fit_messages_truncates_oversized_user_content():
+    llama = MagicMock()
+
+    def _fake_count(_llama, messages):
+        user = next(m["content"] for m in messages if m["role"] == "user")
+        return len(user) // 4
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "x" * 40000},
+    ]
+    with patch("agent.local_llm._count_chat_tokens", side_effect=_fake_count):
+        fitted = _fit_messages_to_context(
+            llama, messages, max_tokens=2048, n_ctx=8192
+        )
+    user = next(m["content"] for m in fitted if m["role"] == "user")
+    assert len(user) < 40000
+    assert "elided" in user
+
+
+def test_fit_messages_raises_when_still_too_large():
+    llama = MagicMock()
+    with patch(
+        "agent.local_llm._count_chat_tokens", return_value=99999
+    ), pytest.raises(click.ClickException):
+        _fit_messages_to_context(
+            llama,
+            [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+            max_tokens=2048,
+            n_ctx=8192,
+        )
 
 
 def test_complete_structured_local_invokes_runner():
