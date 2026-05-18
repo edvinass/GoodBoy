@@ -12,9 +12,12 @@ from typing import Any
 
 import click
 
+from agent.tools import _smart_truncate
 from settings import get_settings
 
 _DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+_CONTEXT_SAFETY_TOKENS = 256
+_LOCAL_DEFAULT_MAX_TOKENS = 2048
 
 LOCAL_MODEL_PREFIX = "local:"
 LOCAL_FILE_PREFIX = "local:file:"
@@ -451,12 +454,17 @@ class LocalModelRunner:
         *,
         model_id: str,
         messages: list[dict[str, str]],
-        max_tokens: int = 4096,
+        max_tokens: int = _LOCAL_DEFAULT_MAX_TOKENS,
         stream: bool = False,
         on_text_delta: StreamTextCallback | None = None,
         grammar: Any | None = None,
     ) -> tuple[str, Any]:
         llama = self._ensure_loaded(model_id)
+        n_ctx = int(llama.n_ctx())
+        max_tokens = _effective_max_tokens(n_ctx, max_tokens)
+        messages = _fit_messages_to_context(
+            llama, messages, max_tokens=max_tokens, n_ctx=n_ctx
+        )
         kwargs: dict[str, Any] = {
             "messages": messages,
             "max_tokens": max_tokens,
@@ -465,25 +473,33 @@ class LocalModelRunner:
         if grammar is not None:
             kwargs["grammar"] = grammar
 
-        if stream and on_text_delta is not None:
-            chunks: list[str] = []
-            stream_out = llama.create_chat_completion(stream=True, **kwargs)
-            for part in stream_out:
-                delta = (
-                    part.get("choices", [{}])[0]
-                    .get("delta", {})
-                    .get("content")
-                )
-                if delta:
-                    chunks.append(delta)
-                    on_text_delta(delta)
-            text = "".join(chunks)
-            return text, None
+        try:
+            if stream and on_text_delta is not None:
+                chunks: list[str] = []
+                stream_out = llama.create_chat_completion(stream=True, **kwargs)
+                for part in stream_out:
+                    delta = (
+                        part.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content")
+                    )
+                    if delta:
+                        chunks.append(delta)
+                        on_text_delta(delta)
+                text = "".join(chunks)
+                return text, None
 
-        response = llama.create_chat_completion(stream=False, **kwargs)
-        text = response["choices"][0]["message"]["content"]
-        usage = response.get("usage")
-        return text or "", usage
+            response = llama.create_chat_completion(stream=False, **kwargs)
+            text = response["choices"][0]["message"]["content"]
+            usage = response.get("usage")
+            return text or "", usage
+        except ValueError as exc:
+            if "exceed context window" in str(exc).lower():
+                raise click.ClickException(
+                    "Local model context window exceeded. Try /clear, a smaller "
+                    "task, or switch to a cloud model with /model."
+                ) from exc
+            raise
 
 
 def get_runner() -> LocalModelRunner:
@@ -507,6 +523,99 @@ def _build_messages(instructions: str, input_text: str) -> list[dict[str, str]]:
         {"role": "system", "content": instructions},
         {"role": "user", "content": input_text},
     ]
+
+
+def _resolve_chat_formatter(llama: Any) -> Callable[..., Any]:
+    """Return the chat template formatter backing ``create_chat_completion``."""
+    import llama_cpp.llama_chat_format as lcf
+
+    handler = (
+        llama.chat_handler
+        or getattr(llama, "_chat_handlers", {}).get(llama.chat_format)
+        or lcf.get_chat_completion_handler(llama.chat_format)
+    )
+    closure = getattr(handler, "__closure__", None)
+    if closure:
+        formatter = closure[0].cell_contents
+        if callable(formatter):
+            return formatter
+    raise RuntimeError("Could not resolve chat formatter for local model")
+
+
+def _count_chat_tokens(llama: Any, messages: list[dict[str, str]]) -> int:
+    formatter = _resolve_chat_formatter(llama)
+    result = formatter(messages=messages)
+    tokens = llama.tokenize(
+        result.prompt.encode("utf-8"),
+        add_bos=not result.added_special,
+        special=True,
+    )
+    return len(tokens)
+
+
+def _effective_max_tokens(n_ctx: int, requested: int) -> int:
+    """Cap completion tokens so a reasonable prompt budget remains."""
+    cap = max(512, (n_ctx * 2) // 5)
+    return min(requested, cap)
+
+
+def _fit_messages_to_context(
+    llama: Any,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int,
+    n_ctx: int,
+) -> list[dict[str, str]]:
+    """Truncate chat content so the rendered prompt fits in ``n_ctx``."""
+    limit = max(512, n_ctx - max_tokens - _CONTEXT_SAFETY_TOKENS)
+    fitted = [dict(m) for m in messages]
+    if _count_chat_tokens(llama, fitted) <= limit:
+        return fitted
+
+    original_user = next(
+        (m.get("content") or "") for m in fitted if m.get("role") == "user"
+    )
+    user_msg = next(m for m in fitted if m.get("role") == "user")
+    encoded = original_user.encode("utf-8", errors="replace")
+    budget = len(encoded)
+    while budget > 2048 and _count_chat_tokens(llama, fitted) > limit:
+        budget = int(budget * 0.85)
+        head = budget // 2
+        tail = budget - head
+        user_msg["content"] = _smart_truncate(
+            original_user, head_bytes=head, tail_bytes=tail
+        )
+
+    if _count_chat_tokens(llama, fitted) > limit:
+        system_msg = next((m for m in fitted if m.get("role") == "system"), None)
+        if system_msg is not None:
+            original_system = system_msg.get("content") or ""
+            sys_encoded = original_system.encode("utf-8", errors="replace")
+            sys_budget = len(sys_encoded)
+            while sys_budget > 2048 and _count_chat_tokens(llama, fitted) > limit:
+                sys_budget = int(sys_budget * 0.85)
+                head = sys_budget // 2
+                tail = sys_budget - head
+                system_msg["content"] = _smart_truncate(
+                    original_system, head_bytes=head, tail_bytes=tail
+                )
+
+    if _count_chat_tokens(llama, fitted) > limit:
+        raise click.ClickException(
+            "Local model context window is too small for this prompt even after "
+            "truncation. Try /clear, shorten the task, or switch to a cloud model "
+            "with /model."
+        )
+
+    if user_msg.get("content") != original_user:
+        click.echo(
+            click.style(
+                "Local model context full — older tool output was truncated to fit.",
+                fg="yellow",
+            ),
+            err=True,
+        )
+    return fitted
 
 
 def _append_schema(instructions: str, json_schema: dict[str, Any]) -> str:
