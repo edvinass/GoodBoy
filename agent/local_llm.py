@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from typing import Any
 import click
 
 from settings import get_settings
+
+_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 
 LOCAL_MODEL_PREFIX = "local:"
 
@@ -182,6 +185,102 @@ def require_local_deps() -> None:
         ) from exc
 
 
+def _resolve_hf_token() -> str | bool | None:
+    for key in ("HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        value = os.getenv(key)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _prefer_http_download_env() -> None:
+    """Xet transfers often hang at 0% on some networks; HTTP CDN is more reliable."""
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+
+def _download_gguf_file(
+    spec: LocalModelSpec,
+    dest: Path,
+    *,
+    on_progress: ProgressCallback | None = None,
+) -> None:
+    """Stream a GGUF from the Hub CDN with a live progress bar."""
+    import httpx
+    from huggingface_hub import get_hf_file_metadata, hf_hub_url
+    from huggingface_hub.utils import build_hf_headers, hf_raise_for_status
+
+    _prefer_http_download_env()
+    token = _resolve_hf_token()
+
+    hub_url = hf_hub_url(repo_id=spec.repo_id, filename=spec.filename)
+    metadata = get_hf_file_metadata(hub_url, token=token)
+    download_url = metadata.location
+    total_size = metadata.size
+
+    partial = dest.with_suffix(dest.suffix + ".part")
+    resume_from = partial.stat().st_size if partial.is_file() else 0
+    if resume_from > 0 and total_size is not None and resume_from >= total_size:
+        partial.replace(dest)
+        return
+
+    headers = build_hf_headers(token=token)
+    headers["Accept-Encoding"] = "identity"
+    if resume_from > 0:
+        headers["Range"] = f"bytes={resume_from}-"
+
+    from rich.progress import (
+        BarColumn,
+        DownloadColumn,
+        Progress,
+        TextColumn,
+        TimeRemainingColumn,
+        TransferSpeedColumn,
+    )
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    mode = "ab" if resume_from > 0 else "wb"
+
+    with Progress(
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=40),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        transient=False,
+    ) as progress:
+        task_id = progress.add_task(
+            spec.filename,
+            total=total_size,
+            completed=resume_from,
+        )
+
+        with httpx.Client(follow_redirects=True, timeout=httpx.Timeout(30.0, read=None)) as client:
+            with client.stream("GET", download_url, headers=headers) as response:
+                if resume_from > 0 and response.status_code == 416:
+                    partial.unlink(missing_ok=True)
+                    return _download_gguf_file(spec, dest, on_progress=on_progress)
+                if resume_from > 0 and response.status_code == 200:
+                    partial.unlink(missing_ok=True)
+                    return _download_gguf_file(spec, dest, on_progress=on_progress)
+                hf_raise_for_status(response)
+                if total_size is None:
+                    content_length = response.headers.get("Content-Length")
+                    if content_length:
+                        total_size = int(content_length) + resume_from
+                        progress.update(task_id, total=total_size)
+
+                with partial.open(mode) as out:
+                    for chunk in response.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_BYTES):
+                        if not chunk:
+                            continue
+                        out.write(chunk)
+                        progress.update(task_id, advance=len(chunk))
+                        if on_progress is not None:
+                            on_progress(partial.stat().st_size, total_size)
+
+    partial.replace(dest)
+
+
 def download_model(
     model_id: str,
     *,
@@ -189,7 +288,6 @@ def download_model(
 ) -> Path:
     """Download a catalog model to the GoodBoy models directory."""
     require_local_deps()
-    from huggingface_hub import hf_hub_download
 
     spec = get_catalog_spec(model_id)
     if spec is None:
@@ -199,23 +297,20 @@ def download_model(
     if dest.is_file():
         return dest
 
-    def _progress(current: int, total: int | None) -> None:
-        if on_progress is not None:
-            on_progress(current, total)
-
     click.echo(f"Downloading {spec.label}…")
     click.echo(f"  Repository: {spec.repo_id}")
     click.echo(f"  File: {spec.filename}")
+    if _resolve_hf_token() is None:
+        click.echo(
+            click.style(
+                "  Tip: set HF_TOKEN for faster Hub downloads "
+                "(https://huggingface.co/settings/tokens)",
+                fg="yellow",
+            )
+        )
 
-    downloaded = hf_hub_download(
-        repo_id=spec.repo_id,
-        filename=spec.filename,
-        local_dir=str(models_dir()),
-        local_dir_use_symlinks=False,
-    )
-    path = Path(downloaded)
-    if path.resolve() != dest.resolve() and path.is_file():
-        dest.write_bytes(path.read_bytes())
+    _download_gguf_file(spec, dest, on_progress=on_progress)
+
     if not dest.is_file():
         raise click.ClickException(f"Download failed: expected file at {dest}")
     return dest

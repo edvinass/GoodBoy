@@ -58,7 +58,7 @@ def test_download_model_skips_when_present(tmp_path, monkeypatch):
     assert path == dest
 
 
-def test_download_model_calls_hf_hub(tmp_path, monkeypatch):
+def test_download_model_calls_http_download(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
     monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
@@ -68,18 +68,44 @@ def test_download_model_calls_hf_hub(tmp_path, monkeypatch):
 
     dest = tmp_path / spec.filename
 
-    def _fake_download(**_kwargs):
-        dest.write_bytes(b"gguf")
-        return str(dest)
+    def _fake_download(spec_arg, dest_arg, **kwargs):
+        assert spec_arg.id == spec.id
+        dest_arg.write_bytes(b"gguf")
 
-    fake_hub = MagicMock()
-    fake_hub.hf_hub_download.side_effect = _fake_download
-    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
-    with patch("agent.local_llm.require_local_deps"):
+    with patch("agent.local_llm.require_local_deps"), patch(
+        "agent.local_llm._download_gguf_file", side_effect=_fake_download
+    ) as mock_dl:
         path = download_model(spec.id)
-    fake_hub.hf_hub_download.assert_called_once()
+    mock_dl.assert_called_once()
     assert path == dest
     assert dest.is_file()
+
+
+def test_download_reports_progress(tmp_path, monkeypatch):
+    spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
+    assert spec is not None
+    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    from settings import get_settings
+
+    get_settings.cache_clear()
+    dest = tmp_path / spec.filename
+    seen: list[tuple[int, int | None]] = []
+
+    def _fake_download(_spec, dest_arg, *, on_progress=None, **kwargs):
+        if on_progress:
+            on_progress(50, 100)
+            on_progress(100, 100)
+        dest_arg.write_bytes(b"gguf")
+
+    with patch("agent.local_llm.require_local_deps"), patch(
+        "agent.local_llm._download_gguf_file", side_effect=_fake_download
+    ):
+        download_model(
+            spec.id,
+            on_progress=lambda cur, tot: seen.append((cur, tot)),
+        )
+
+    assert seen == [(50, 100), (100, 100)]
 
 
 def test_complete_structured_local_invokes_runner():
