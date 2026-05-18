@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from agent.types import ToolResult
+from settings import DEFAULT_TOOL_TIMEOUT_SEC
 
 # Cap per-stream output sent back to the model (bytes before decode).
 # Lowered from 48 KB so the *first* time output enters context it's already
@@ -71,7 +72,7 @@ def run_shell(
     command: str,
     *,
     cwd: Path | str | None = None,
-    timeout: float = 120.0,
+    timeout: float = DEFAULT_TOOL_TIMEOUT_SEC,
 ) -> ToolResult:
     """Run a shell command with full user privileges (local dev harness)."""
     workdir = str(cwd) if cwd is not None else None
@@ -125,7 +126,7 @@ def run_python(
     code: str,
     *,
     cwd: Path | str | None = None,
-    timeout: float = 120.0,
+    timeout: float = DEFAULT_TOOL_TIMEOUT_SEC,
 ) -> ToolResult:
     """Run Python code in a subprocess (same interpreter as the harness)."""
     workdir = str(cwd) if cwd is not None else None
