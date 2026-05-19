@@ -30,12 +30,15 @@ The install URL is always:
 https://<your-domain>/install.sh
 ```
 
-`public/install.sh` and `public/goodboy.tar.gz` are committed for Railway (web-only deploys). Local builds refresh them from the repo when `../install.sh` and `../goodboy` exist. The install command sets `GOODBOY_INSTALL_BASE_URL` so users do not need GitHub. After changing the CLI, refresh both artifacts and redeploy:
+`public/install.sh` and `public/goodboy.tar.gz` are committed for Railway (web-only deploys). After changing the CLI or installer, refresh and redeploy:
 
 ```bash
-cp ../install.sh public/install.sh
-tar -czf public/goodboy.tar.gz -C .. goodboy
+./scripts/release-web-tar.sh
 ```
+
+Optional versioned copy: `./scripts/release-web-tar.sh --version 0.1.0`
+
+`npm run build` in `web/` runs the same script when `../goodboy` exists.
 
 ## Custom domain
 
