@@ -7,8 +7,8 @@
 #   ./scripts/release-web-tar.sh --version 0.1.0
 #
 # Defaults:
-#   Tarball:  web/public/goodboy.tar.gz
-#   Installer: web/public/install.sh (copied from repo root)
+#   Tarball:   web/public/goodboy.tar.gz
+#   Installer: web/install.sh (copied from repo root; Railway only deploys web/)
 
 set -euo pipefail
 
@@ -16,11 +16,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GOODBOY_DIR="$ROOT/goodboy"
 INSTALL_SH="$ROOT/install.sh"
 DEFAULT_OUTPUT="$ROOT/web/public/goodboy.tar.gz"
-DEFAULT_INSTALL_COPY="$ROOT/web/public/install.sh"
+WEB_INSTALL_SH="$ROOT/web/install.sh"
 
 OUTPUT="$DEFAULT_OUTPUT"
 VERSION=""
-SKIP_INSTALL_SH=0
 
 usage() {
   sed -n '2,12p' "$0"
@@ -39,10 +38,6 @@ while [[ $# -gt 0 ]]; do
     --version)
       VERSION="$2"
       shift 2
-      ;;
-    --skip-install-sh)
-      SKIP_INSTALL_SH=1
-      shift
       ;;
     *)
       echo "error: unknown argument: $1" >&2
@@ -79,15 +74,12 @@ if [[ -n "$VERSION" ]]; then
   echo "Also wrote $(basename "$versioned")"
 fi
 
-if [[ "$SKIP_INSTALL_SH" -eq 0 ]]; then
-  if [[ ! -f "$INSTALL_SH" ]]; then
-    echo "error: missing $INSTALL_SH" >&2
-    exit 1
-  fi
-  mkdir -p "$(dirname "$DEFAULT_INSTALL_COPY")"
-  cp -f "$INSTALL_SH" "$DEFAULT_INSTALL_COPY"
-  echo "Synced install.sh -> web/public/install.sh"
+if [[ ! -f "$INSTALL_SH" ]]; then
+  echo "error: missing $INSTALL_SH" >&2
+  exit 1
 fi
+cp -f "$INSTALL_SH" "$WEB_INSTALL_SH"
+echo "Synced install.sh -> web/install.sh"
 
 bytes="$(wc -c <"$OUTPUT" | tr -d ' ')"
 echo "Done: $OUTPUT ($(numfmt --to=iec-i --suffix=B "$bytes" 2>/dev/null || echo "${bytes} bytes"))"

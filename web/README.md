@@ -30,7 +30,7 @@ The install URL is always:
 https://<your-domain>/install.sh
 ```
 
-`public/install.sh` and `public/goodboy.tar.gz` are committed for Railway (web-only deploys). After changing the CLI or installer, refresh and redeploy:
+`public/goodboy.tar.gz` and `install.sh` (in this directory) are release artifacts committed for Railway — Railway only deploys `web/`, not the repo root. Edit the installer at the repo root, then run the release script. After changing the CLI or installer, refresh and redeploy:
 
 ```bash
 ./scripts/release-web-tar.sh

@@ -15,13 +15,13 @@ const installShTemplate = readInstallShTemplate()
 
 const app = express()
 
-app.use(express.static(dist, { index: false }))
-
 app.get('/install.sh', (req, res) => {
   const base = requestInstallBase(req)
   res.type('text/plain; charset=utf-8')
   res.send(injectInstallBase(installShTemplate, base))
 })
+
+app.use(express.static(dist, { index: false }))
 
 app.use((_req, res) => {
   res.sendFile(path.join(dist, 'index.html'))

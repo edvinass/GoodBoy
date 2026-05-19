@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "sh -c 'if [ -d ../goodboy ]; then ../scripts/release-web-tar.sh; elif [ -f public/goodboy.tar.gz ] && [ -f public/install.sh ]; then :; else echo \"error: run ../scripts/release-web-tar.sh from repo root\" >&2; exit 1; fi'",
+    "prebuild": "sh -c 'if [ -d ../goodboy ]; then ../scripts/release-web-tar.sh; elif [ -f public/goodboy.tar.gz ] && [ -f install.sh ]; then :; else echo \"error: run ../scripts/release-web-tar.sh from repo root\" >&2; exit 1; fi'",
     "dev": "npm run prebuild && vite",
     "build": "npm run prebuild && vite build",
     "preview": "vite preview",

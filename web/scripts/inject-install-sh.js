@@ -16,16 +16,15 @@ export function injectInstallBase(installSh, base) {
 
 export function readInstallShTemplate() {
   const candidates = [
-    path.join(__dirname, '..', 'public', 'install.sh'),
+    path.join(__dirname, '..', 'install.sh'),
     path.join(__dirname, '..', '..', 'install.sh'),
-    path.join(__dirname, '..', 'dist', 'install.sh'),
   ]
   for (const file of candidates) {
     if (fs.existsSync(file)) {
       return fs.readFileSync(file, 'utf8')
     }
   }
-  throw new Error('install.sh not found')
+  throw new Error(`install.sh not found (tried ${candidates.join(', ')})`)
 }
 
 export function requestInstallBase(req) {
