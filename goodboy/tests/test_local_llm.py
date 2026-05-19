@@ -11,6 +11,7 @@ from agent.local_llm import (
     _fit_messages_to_context,
     complete_structured_local,
     download_model,
+    ensure_local_deps,
     get_catalog_spec,
     has_installed_local_model,
     is_local_model,
@@ -250,3 +251,9 @@ def test_is_configured_with_local_only(tmp_path, monkeypatch):
     get_settings.cache_clear()
     (tmp_path / spec.filename).write_bytes(b"gguf")
     assert is_configured()
+
+
+def test_ensure_local_deps_raises_without_install(monkeypatch):
+    monkeypatch.setattr("agent.local_llm._local_deps_available", lambda: False)
+    with pytest.raises(click.ClickException, match="pip install"):
+        ensure_local_deps(install=False)

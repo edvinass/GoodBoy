@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -264,15 +266,51 @@ def has_installed_local_model(model_id: str | None) -> bool:
     return resolve_local_model(model_id) is not None
 
 
-def require_local_deps() -> None:
+def _package_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _local_deps_available() -> bool:
     try:
         import llama_cpp  # noqa: F401
         import huggingface_hub  # noqa: F401
-    except ImportError as exc:
-        raise click.ClickException(
-            "Local models require optional dependencies. Install with:\n"
-            '  pip install -e ".[local]"'
-        ) from exc
+    except ImportError:
+        return False
+    return True
+
+
+def ensure_local_deps(*, install: bool = True) -> None:
+    """Import local-model dependencies, optionally pip-installing [local] extras."""
+    if _local_deps_available():
+        return
+    if not install:
+        raise click.ClickException(_local_deps_install_hint())
+
+    pkg = _package_root()
+    pyproject = pkg / "pyproject.toml"
+    if not pyproject.is_file():
+        raise click.ClickException(_local_deps_install_hint())
+
+    click.echo(
+        "Installing local model dependencies (llama-cpp-python, huggingface-hub)…"
+    )
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "-q", "-e", f"{pkg}[local]"],
+    )
+    if not _local_deps_available():
+        raise click.ClickException(_local_deps_install_hint())
+
+
+def _local_deps_install_hint() -> str:
+    pkg = _package_root()
+    return (
+        "Local models require optional dependencies. Install with:\n"
+        f'  {sys.executable} -m pip install -e "{pkg}[local]"'
+    )
+
+
+def require_local_deps() -> None:
+    ensure_local_deps(install=True)
 
 
 def _resolve_hf_token() -> str | bool | None:

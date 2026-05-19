@@ -8,6 +8,7 @@ from agent.harness import run_harness
 from agent.local_llm import (
     default_catalog_spec,
     download_model,
+    ensure_local_deps,
     is_local_model,
     iter_catalog,
     list_installed_models,
@@ -117,6 +118,7 @@ def run_setup() -> None:
             api_key = None
 
     if mode in ("local", "both"):
+        ensure_local_deps()
         local_id = _select_local_catalog_model()
         _download_local_model(local_id)
 
