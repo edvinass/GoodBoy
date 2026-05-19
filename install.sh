@@ -5,12 +5,13 @@
 #   curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
 #
 # Environment (optional):
-#   GOODBOY_INSTALL_DIR   install location (default: ~/.local/share/goodboy)
-#   GOODBOY_REPO_URL      git remote (default: https://github.com/edvinass/GoodBoy.git)
-#   GOODBOY_REPO_REF      branch or tag to install (default: main)
-#   GOODBOY_SOURCE_DIR    use an existing clone instead of fetching (for local runs/tests)
-#   GOODBOY_LOCAL=1       also install optional local GGUF dependencies
-#   GOODBOY_NO_PATH=1     do not append the venv bin dir to shell startup files
+#   GOODBOY_INSTALL_DIR        install location (default: ~/.local/share/goodboy)
+#   GOODBOY_INSTALL_BASE_URL   download goodboy.tar.gz from here (no git/GitHub)
+#   GOODBOY_REPO_URL           git remote when not using a tarball (default: GitHub)
+#   GOODBOY_REPO_REF           branch or tag to install (default: main)
+#   GOODBOY_SOURCE_DIR         use an existing checkout instead of fetching
+#   GOODBOY_LOCAL=1            also install optional local GGUF dependencies
+#   GOODBOY_NO_PATH=1          do not append the venv bin dir to shell startup files
 
 set -euo pipefail
 
@@ -68,10 +69,39 @@ venv_bin_dir() {
   fi
 }
 
+package_dir() {
+  if [[ -f "$INSTALL_DIR/goodboy/pyproject.toml" ]]; then
+    printf '%s\n' "$INSTALL_DIR/goodboy"
+  elif [[ -f "$INSTALL_DIR/python/pyproject.toml" ]]; then
+    printf '%s\n' "$INSTALL_DIR/python"
+  else
+    die "Missing goodboy/ or python/ package under $INSTALL_DIR"
+  fi
+}
+
+fetch_from_tarball() {
+  local url="${GOODBOY_INSTALL_BASE_URL%/}/goodboy.tar.gz"
+  local tmp archive
+  need_cmd curl
+  need_cmd tar
+  tmp="$(mktemp -d)"
+  archive="$tmp/goodboy.tar.gz"
+  info "Downloading GoodBoy from $url"
+  curl -fsSL "$url" -o "$archive"
+  mkdir -p "$INSTALL_DIR"
+  tar -xzf "$archive" -C "$INSTALL_DIR"
+  rm -rf "$tmp"
+}
+
 ensure_source_tree() {
   if [[ -n "${GOODBOY_SOURCE_DIR:-}" ]]; then
     INSTALL_DIR="$(cd "$GOODBOY_SOURCE_DIR" && pwd)"
     info "Using existing source tree: $INSTALL_DIR"
+    return 0
+  fi
+
+  if [[ -n "${GOODBOY_INSTALL_BASE_URL:-}" ]]; then
+    fetch_from_tarball
     return 0
   fi
 
@@ -83,8 +113,8 @@ ensure_source_tree() {
   else
     info "Cloning GoodBoy into $INSTALL_DIR"
     mkdir -p "$(dirname "$INSTALL_DIR")"
-    git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null \
-      || git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+    GIT_TERMINAL_PROMPT=0 git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null \
+      || GIT_TERMINAL_PROMPT=0 git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
   fi
 }
 
@@ -99,14 +129,15 @@ create_venv() {
 }
 
 install_package() {
-  local python
+  local python pkg
   python="$(venv_python)"
+  pkg="$(package_dir)"
   info "Installing GoodBoy (editable)..."
   "$python" -m pip install -q --upgrade pip
-  "$python" -m pip install -q -e "$INSTALL_DIR/python"
+  "$python" -m pip install -q -e "$pkg"
   if [[ "${GOODBOY_LOCAL:-}" == "1" ]]; then
     info "Installing local model dependencies..."
-    "$python" -m pip install -q -e "$INSTALL_DIR/python[local]"
+    "$python" -m pip install -q -e "$pkg[local]"
   fi
 }
 
@@ -192,7 +223,7 @@ main() {
   py="$(find_python)" || die "Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+ is required (install python3 and try again)."
 
   ensure_source_tree
-  [[ -f "$INSTALL_DIR/python/pyproject.toml" ]] || die "Missing python/pyproject.toml in $INSTALL_DIR"
+  package_dir >/dev/null
 
   create_venv "$py"
   install_package

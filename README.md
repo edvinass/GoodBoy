@@ -40,16 +40,18 @@ One-time setup installs GoodBoy on your machine. After that, run `goodboy` from 
 ### Quick install (macOS / Linux)
 
 ```bash
-curl -fsSL https://YOUR-DOMAIN/install.sh | bash
+GOODBOY_INSTALL_BASE_URL=https://YOUR-DOMAIN curl -fsSL https://YOUR-DOMAIN/install.sh | bash
 ```
 
-(Replace `YOUR-DOMAIN` with your [Railway-hosted install page](web/) domain, or use the GitHub raw URL below.)
+(Replace `YOUR-DOMAIN` with your [Railway-hosted install page](web/) domain. This downloads the app tarball from your site — no GitHub account or `git clone` required.)
+
+Or install from GitHub (needs a public repo and `git`):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
 ```
 
-This clones GoodBoy to `~/.local/share/goodboy`, creates a venv, installs the CLI, and appends the venv’s `bin` directory to your shell profile. Open a new terminal, then run `goodboy setup` once.
+This installs GoodBoy to `~/.local/share/goodboy`, creates a venv, installs the CLI, and appends the venv’s `bin` directory to your shell profile. Open a new terminal, then run `goodboy setup` once.
 
 Optional: install local GGUF model dependencies during install:
 
@@ -57,7 +59,7 @@ Optional: install local GGUF model dependencies during install:
 GOODBOY_LOCAL=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh)"
 ```
 
-Using a fork? Point `GOODBOY_REPO_URL` at your clone, or run [`install.sh`](install.sh) from your checkout with `GOODBOY_SOURCE_DIR="$PWD"`.
+No GitHub at all: use `GOODBOY_INSTALL_BASE_URL` (as on the Railway landing page) or run from a checkout with `GOODBOY_SOURCE_DIR="$PWD" bash install.sh`. For a fork via git, set `GOODBOY_REPO_URL`.
 
 ### Manual install
 
