@@ -163,6 +163,16 @@ def run_setup() -> None:
     click.echo(f"  Saved to {settings.ENV_FILE}")
 
 
+def ensure_configured() -> None:
+    """Run interactive setup when API key and default model are not configured."""
+    load_env()
+    if is_configured(get_settings()):
+        return
+    run_setup()
+    if not is_configured(get_settings()):
+        raise SystemExit(1)
+
+
 @click.group(invoke_without_command=True)
 @click.option(
     "-f",
@@ -226,7 +236,7 @@ def cli(
 ) -> None:
     """GoodBoy CLI."""
     if ctx.invoked_subcommand is None:
-        load_env()
+        ensure_configured()
         cfg = get_settings()
         run_harness(
             show_thoughts=show_thoughts,
@@ -247,7 +257,7 @@ def status() -> None:
     load_env()
     cfg = get_settings()
     if not is_configured(cfg):
-        click.echo("Not configured yet. Run: goodboy setup")
+        click.echo("Not configured yet. Run: goodboy")
         raise SystemExit(1)
     _brown = 94
     model = cfg.default_model

@@ -66,16 +66,12 @@ async function copy(text) {
             {{ copied ? 'Copied' : 'Copy' }}
           </button>
         </div>
-
-        <p class="hint">
-          Then open a new terminal and run <code>goodboy setup</code> once.
-        </p>
       </section>
 
       <section class="steps">
         <h3>After install</h3>
         <ol>
-          <li><code>goodboy setup</code> — API key and default model</li>
+          <li><code>goodboy</code> — first run configures API key and default model</li>
           <li><code>cd your-project && goodboy</code> — run the agent in any repo</li>
         </ol>
       </section>

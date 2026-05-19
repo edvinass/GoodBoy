@@ -283,7 +283,7 @@ def get_client(*, api_key: str | None = None) -> OpenAI:
     resolved_key = api_key or cfg.openai_api_key
     if not resolved_key:
         raise click.ClickException(
-            "OPENAI_API_KEY is not set. Run: goodboy setup"
+            "OPENAI_API_KEY is not set. Run: goodboy"
         )
     return _openai_client(resolved_key, cfg.ssl_verify, cfg.ssl_ca_bundle)
 

@@ -46,7 +46,7 @@ def test_install_from_source_dir(tmp_path: Path):
     venv_python = REPO_ROOT / ".venv" / "bin" / "python"
     assert venv_python.is_file()
     assert "GoodBoy is installed." in result.stdout
-    assert "goodboy setup" in result.stdout
+    assert "goodboy    # first run" in result.stdout
 
 
 def test_install_from_tarball(tmp_path: Path):

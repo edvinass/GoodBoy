@@ -216,7 +216,7 @@ print_next_steps() {
     info "Open a new terminal (or: source ~/.zshrc), then:"
     info ""
   fi
-  info "  goodboy setup    # once: API key and default model"
+  info "  goodboy    # first run: API key and default model"
   info "  cd /path/to/your-repo && goodboy"
   info ""
   if [[ "${GOODBOY_NO_PATH:-}" == "1" ]]; then

@@ -462,7 +462,7 @@ def run_harness(
     """Entry point for the GoodBoy harness."""
     cfg = get_settings()
     if not is_configured(cfg):
-        click.echo("Not configured yet. Run: goodboy setup", err=True)
+        click.echo("Not configured yet. Run: goodboy", err=True)
         raise SystemExit(1)
     use_autoswitch = (auto_model_switch or cfg.auto_model_switch) and not is_local_model(
         cfg.default_model

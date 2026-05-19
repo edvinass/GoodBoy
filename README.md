@@ -51,7 +51,7 @@ Or install from GitHub (needs a public repo and `git`):
 curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
 ```
 
-This installs GoodBoy to `~/.local/share/goodboy`, creates a venv, installs the CLI, and appends the venv’s `bin` directory to your shell profile. Open a new terminal, then run `goodboy setup` once.
+This installs GoodBoy to `~/.local/share/goodboy`, creates a venv, installs the CLI, and appends the venv’s `bin` directory to your shell profile. Open a new terminal, then run `goodboy` once (first run walks through API key and model setup).
 
 Optional: install local GGUF model dependencies during install:
 

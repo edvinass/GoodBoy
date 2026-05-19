@@ -396,6 +396,7 @@ def _download_gguf_file(
                         total_size = int(content_length) + resume_from
                         progress.update(task_id, total=total_size)
 
+                mode = "ab" if resume_from > 0 else "wb"
                 with partial.open(mode) as out:
                     for chunk in response.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_BYTES):
                         if not chunk:
