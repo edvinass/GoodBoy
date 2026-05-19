@@ -27,7 +27,25 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 
 One-time setup installs GoodBoy on your machine. After that, run `goodboy` from **any** project directory—the agent uses that repo as its workspace (git root when you are inside a repo).
 
-### 1. Clone GoodBoy somewhere permanent
+### Quick install (macOS / Linux)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
+```
+
+This clones GoodBoy to `~/.local/share/goodboy`, creates a venv, installs the CLI, and appends the venv’s `bin` directory to your shell profile. Open a new terminal, then run `goodboy setup` once.
+
+Optional: install local GGUF model dependencies during install:
+
+```bash
+GOODBOY_LOCAL=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh)"
+```
+
+Using a fork? Point `GOODBOY_REPO_URL` at your clone, or run [`install.sh`](install.sh) from your checkout with `GOODBOY_SOURCE_DIR="$PWD"`.
+
+### Manual install
+
+#### 1. Clone GoodBoy somewhere permanent
 
 Pick a fixed location (you will not need to `cd` here for daily use):
 
@@ -38,13 +56,21 @@ cd ~/.local/share/goodboy
 
 Replace the URL with your fork or copy of the repo if needed.
 
-### 2. Create a venv and install the CLI
+#### 2. Create a venv and install the CLI
+
+From the clone directory:
 
 ```bash
-python3 dev.py
+GOODBOY_SOURCE_DIR="$PWD" bash install.sh
 ```
 
-This creates `.venv` in the clone and installs the `goodboy` command into `.venv/bin`.
+Or run the installer after cloning (same as the curl one-liner, without re-cloning):
+
+```bash
+bash install.sh
+```
+
+This creates `.venv` in the install directory and installs the `goodboy` command into `.venv/bin`.
 
 **Cloud-only (OpenAI API):** the steps above are enough.
 
@@ -56,7 +82,7 @@ This creates `.venv` in the clone and installs the `goodboy` command into `.venv
 
 This adds `llama-cpp-python` and `huggingface-hub` for on-device models.
 
-### 3. Put `goodboy` on your PATH
+#### 3. Put `goodboy` on your PATH
 
 Add the venv’s `bin` directory to your shell profile so `goodboy` works in every terminal and from any repo.
 
@@ -85,7 +111,7 @@ which goodboy   # macOS/Linux
 goodboy --help
 ```
 
-### 4. Configure API key and default model
+#### 4. Configure API key and default model
 
 GoodBoy stores credentials in `.env` inside the **GoodBoy install directory** (not in each project you work on).
 
@@ -95,7 +121,7 @@ goodboy setup
 
 Run this once after install (and again whenever you want to change keys or models).
 
-### 5. Use it in any repository
+#### 5. Use it in any repository
 
 ```bash
 cd ~/projects/my-app
