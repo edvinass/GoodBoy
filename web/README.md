@@ -30,7 +30,7 @@ The install URL is always:
 https://<your-domain>/install.sh
 ```
 
-`install.sh` is copied from the repo root on each build (`prebuild` script), so redeploy after changing the installer.
+`public/install.sh` is committed for Railway (web-only deploys). Local builds copy from the repo root when `../install.sh` exists. After changing the root `install.sh`, run `cp ../install.sh public/install.sh` and commit, then redeploy.
 
 ## Custom domain
 

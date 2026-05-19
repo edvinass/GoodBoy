@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "cp ../install.sh public/install.sh",
+    "prebuild": "sh -c 'mkdir -p public && if [ -f ../install.sh ]; then cp ../install.sh public/install.sh; elif [ ! -f public/install.sh ]; then echo \"error: public/install.sh missing\" >&2; exit 1; fi'",
     "dev": "npm run prebuild && vite",
     "build": "npm run prebuild && vite build",
     "preview": "vite preview",
