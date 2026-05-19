@@ -91,8 +91,10 @@ def test_main_bootstraps_and_prints_posix_activation(monkeypatch, tmp_path: Path
     assert calls == ["create_venv", "install_editable"]
     out = capsys.readouterr().out
     assert "Installing package in editable mode..." in out
+    bin_dir = (venv_dir / "bin").resolve()
+    assert f'export PATH="{bin_dir}:$PATH"' in out
+    assert "goodboy setup" in out
     assert f"source {venv_dir}/bin/activate" in out
-    assert "Then run: python main.py  or  goodboy" in out
 
 
 def test_main_prints_windows_activation(monkeypatch, tmp_path: Path, capsys):
@@ -104,4 +106,7 @@ def test_main_prints_windows_activation(monkeypatch, tmp_path: Path, capsys):
 
     dev.main()
 
-    assert rf"  {venv_dir}\Scripts\activate" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    scripts = (venv_dir / "Scripts").resolve()
+    assert str(scripts) in out
+    assert "goodboy setup" in out

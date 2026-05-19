@@ -25,29 +25,113 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 
 ## Install
 
-### From source (editable)
+One-time setup installs GoodBoy on your machine. After that, run `goodboy` from **any** project directory—the agent uses that repo as its workspace (git root when you are inside a repo).
+
+### 1. Clone GoodBoy somewhere permanent
+
+Pick a fixed location (you will not need to `cd` here for daily use):
 
 ```bash
-pip install -e .
+git clone https://github.com/edvinass/GoodBoy.git ~/.local/share/goodboy
+cd ~/.local/share/goodboy
 ```
 
-### Local model support (optional)
+Replace the URL with your fork or copy of the repo if needed.
+
+### 2. Create a venv and install the CLI
 
 ```bash
-pip install -e ".[local]"
+python3 dev.py
 ```
 
-This adds `llama-cpp-python` and `huggingface-hub` for downloading and running GGUF models in-process.
+This creates `.venv` in the clone and installs the `goodboy` command into `.venv/bin`.
 
-### Install into a fresh venv (helper)
+**Cloud-only (OpenAI API):** the steps above are enough.
+
+**Local GGUF models (optional):** install extra dependencies, then re-run setup:
 
 ```bash
-python dev.py
+.venv/bin/pip install -e ".[local]"
 ```
+
+This adds `llama-cpp-python` and `huggingface-hub` for on-device models.
+
+### 3. Put `goodboy` on your PATH
+
+Add the venv’s `bin` directory to your shell profile so `goodboy` works in every terminal and from any repo.
+
+**macOS / Linux (zsh — default on macOS):**
+
+```bash
+echo 'export PATH="$HOME/.local/share/goodboy/.venv/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**macOS / Linux (bash):**
+
+```bash
+echo 'export PATH="$HOME/.local/share/goodboy/.venv/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Windows (PowerShell):** add the `Scripts` folder to your user `Path`, for example:
+
+`%USERPROFILE%\.local\share\goodboy\.venv\Scripts`
+
+Adjust the path if you cloned somewhere other than `~/.local/share/goodboy`. After editing your profile, open a **new** terminal and check:
+
+```bash
+which goodboy   # macOS/Linux
+goodboy --help
+```
+
+### 4. Configure API key and default model
+
+GoodBoy stores credentials in `.env` inside the **GoodBoy install directory** (not in each project you work on).
+
+```bash
+goodboy setup
+```
+
+Run this once after install (and again whenever you want to change keys or models).
+
+### 5. Use it in any repository
+
+```bash
+cd ~/projects/my-app
+goodboy
+```
+
+The harness runs tools in that project’s git root (or the current directory if it is not a git repo).
+
+### Alternative: pipx (global CLI without editing PATH)
+
+If you use [pipx](https://pipx.pypa.io/):
+
+```bash
+git clone https://github.com/edvinass/GoodBoy.git ~/.local/share/goodboy
+cd ~/.local/share/goodboy
+pipx install -e .
+# optional local models:
+pipx install -e ".[local]" --force
+goodboy setup
+```
+
+`pipx` installs `goodboy` into an isolated environment and links it on your PATH automatically.
+
+### Manual install (editable, existing venv)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .            # or: pip install -e ".[local]"
+```
+
+Then add `.venv/bin` (or `Scripts` on Windows) to your PATH as in step 3.
 
 ## Configure credentials and models
 
-GoodBoy stores configuration in a local `.env` file at the project root.
+Configuration lives in `.env` at the GoodBoy install root (see step 4 above). Project-specific notes belong in each repo (`AGENTS.md`, `.goodboy/memory.md`, or `GOODBOY.md`).
 
 ```bash
 goodboy setup
