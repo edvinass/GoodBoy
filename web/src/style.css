@@ -94,10 +94,6 @@ body {
   overflow: hidden;
 }
 
-.command-block.compact {
-  margin-top: 0.5rem;
-}
-
 .command {
   flex: 1;
   margin: 0;
@@ -155,7 +151,6 @@ body {
   color: var(--accent);
 }
 
-.secondary h3,
 .steps h3 {
   margin: 0 0 0.5rem;
   font-size: 0.95rem;

@@ -16,10 +16,6 @@ const installCommand = computed(
   () => `curl -fsSL ${installUrl.value} | bash`,
 )
 
-const localInstallCommand = computed(
-  () => `curl -fsSL ${installUrl.value} | GOODBOY_LOCAL=1 bash`,
-)
-
 async function copy(text) {
   try {
     await navigator.clipboard.writeText(text)
@@ -74,21 +70,6 @@ async function copy(text) {
         <p class="hint">
           Then open a new terminal and run <code>goodboy setup</code> once.
         </p>
-      </section>
-
-      <section class="secondary">
-        <h3>Optional: local GGUF models</h3>
-        <div class="command-block compact">
-          <pre class="command"><code>{{ localInstallCommand }}</code></pre>
-          <button
-            type="button"
-            class="copy-btn"
-            aria-label="Copy local install command"
-            @click="copy(localInstallCommand)"
-          >
-            Copy
-          </button>
-        </div>
       </section>
 
       <section class="steps">
