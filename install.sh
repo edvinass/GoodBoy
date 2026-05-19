@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # GoodBoy installer
 #
-#   curl -fsSL https://YOUR-DOMAIN/install.sh | bash
+#   GOODBOY_INSTALL_BASE_URL=https://YOUR-DOMAIN bash -c "$(curl -fsSL https://YOUR-DOMAIN/install.sh)"
 #   curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
+#
+# Env vars before curl do not reach the piped bash — set them on bash instead.
 #
 # Environment (optional):
 #   GOODBOY_INSTALL_DIR        install location (default: ~/.local/share/goodboy)

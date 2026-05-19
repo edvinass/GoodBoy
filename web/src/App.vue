@@ -12,15 +12,18 @@ const installUrl = computed(() =>
   origin.value ? `${origin.value}/install.sh` : 'https://your-app.up.railway.app/install.sh',
 )
 
-const installCommand = computed(() =>
-  origin.value
-    ? `GOODBOY_INSTALL_BASE_URL=${origin.value} curl -fsSL ${installUrl.value} | bash`
-    : `GOODBOY_INSTALL_BASE_URL=https://your-app.up.railway.app curl -fsSL ${installUrl.value} | bash`,
+const installBase = computed(
+  () => origin.value || 'https://your-app.up.railway.app',
+)
+
+const installCommand = computed(
+  () =>
+    `GOODBOY_INSTALL_BASE_URL=${installBase.value} bash -c "$(curl -fsSL ${installUrl.value})"`,
 )
 
 const localInstallCommand = computed(
   () =>
-    `GOODBOY_LOCAL=1 GOODBOY_INSTALL_BASE_URL=${origin.value || 'https://your-app.up.railway.app'} bash -c "$(curl -fsSL ${installUrl.value})"`,
+    `GOODBOY_LOCAL=1 GOODBOY_INSTALL_BASE_URL=${installBase.value} bash -c "$(curl -fsSL ${installUrl.value})"`,
 )
 
 async function copy(text) {
