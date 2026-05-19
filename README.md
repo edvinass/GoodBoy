@@ -40,10 +40,10 @@ One-time setup installs GoodBoy on your machine. After that, run `goodboy` from 
 ### Quick install (macOS / Linux)
 
 ```bash
-GOODBOY_INSTALL_BASE_URL=https://YOUR-DOMAIN bash -c "$(curl -fsSL https://YOUR-DOMAIN/install.sh)"
+curl -fsSL https://YOUR-DOMAIN/install.sh | bash
 ```
 
-(Replace `YOUR-DOMAIN` with your [Railway-hosted install page](web/) domain. This downloads the app tarball from your site — no GitHub account or `git clone` required.)
+(Replace `YOUR-DOMAIN` with your [Railway-hosted install page](web/) domain. The installer downloads the app tarball from the same host — no GitHub account or `git clone` required.)
 
 Or install from GitHub (needs a public repo and `git`):
 

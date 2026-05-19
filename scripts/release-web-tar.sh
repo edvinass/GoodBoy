@@ -94,4 +94,4 @@ echo "Done: $OUTPUT ($(numfmt --to=iec-i --suffix=B "$bytes" 2>/dev/null || echo
 echo ""
 echo "Commit and redeploy web/ (or push to trigger Railway)."
 echo "Install:"
-echo "  GOODBOY_INSTALL_BASE_URL=https://YOUR-DOMAIN bash -c \"\$(curl -fsSL https://YOUR-DOMAIN/install.sh)\""
+echo "  curl -fsSL https://YOUR-DOMAIN/install.sh | bash"

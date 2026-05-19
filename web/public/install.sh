@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # GoodBoy installer
 #
-#   GOODBOY_INSTALL_BASE_URL=https://YOUR-DOMAIN bash -c "$(curl -fsSL https://YOUR-DOMAIN/install.sh)"
+#   curl -fsSL https://YOUR-DOMAIN/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
 #
-# Env vars before curl do not reach the piped bash — set them on bash instead.
+# Env vars before curl do not reach piped bash — prefix bash instead, e.g.:
+#   curl -fsSL https://YOUR-DOMAIN/install.sh | GOODBOY_LOCAL=1 bash
 #
 # Environment (optional):
 #   GOODBOY_INSTALL_DIR        install location (default: ~/.local/share/goodboy)
@@ -18,6 +19,13 @@
 set -euo pipefail
 
 INSTALL_DIR="${GOODBOY_INSTALL_DIR:-$HOME/.local/share/goodboy}"
+# Set by the web host when serving install.sh (see web/server.js). Empty in git/GitHub copies.
+GOODBOY_INSTALL_BASE_DEFAULT=
+GOODBOY_INSTALL_BASE_URL="${GOODBOY_INSTALL_BASE_URL:-${GOODBOY_INSTALL_BASE_DEFAULT:-}}"
+if [[ $# -ge 1 && -z "${GOODBOY_INSTALL_BASE_URL:-}" ]]; then
+  GOODBOY_INSTALL_BASE_URL="$1"
+  shift
+fi
 REPO_URL="${GOODBOY_REPO_URL:-https://github.com/edvinass/GoodBoy.git}"
 REPO_REF="${GOODBOY_REPO_REF:-main}"
 MIN_PYTHON_MAJOR=3
