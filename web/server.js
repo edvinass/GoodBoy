@@ -5,7 +5,7 @@ import {
   injectInstallBase,
   readInstallShTemplate,
   requestInstallBase,
-} from './lib/inject-install-sh.js'
+} from './scripts/inject-install-sh.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const dist = path.join(__dirname, 'dist')

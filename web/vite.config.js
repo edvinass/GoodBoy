@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import {
   injectInstallBase,
   readInstallShTemplate,
-} from './lib/inject-install-sh.js'
+} from './scripts/inject-install-sh.js'
 
 function installShDevPlugin() {
   const template = readInstallShTemplate()
