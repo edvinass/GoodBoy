@@ -10,7 +10,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ROOT_DIR = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+ROOT_DIR = PACKAGE_DIR.parent
 ENV_FILE = ROOT_DIR / ".env"
 
 OPENAI_API_KEY_VAR = "OPENAI_API_KEY"

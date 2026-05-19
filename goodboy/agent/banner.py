@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from importlib.metadata import PackageNotFoundError, version
 
-from settings import ROOT_DIR
+from settings import PACKAGE_DIR
 
 _BRAND_STYLE = "rgb(139,69,19)"
 
@@ -28,7 +28,7 @@ def get_version() -> str:
     try:
         return version("goodboy")
     except PackageNotFoundError:
-        text = (ROOT_DIR / "pyproject.toml").read_text(encoding="utf-8")
+        text = (PACKAGE_DIR / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
         return match.group(1) if match else "unknown"
 

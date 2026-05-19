@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # GoodBoy installer
 #
+#   curl -fsSL https://YOUR-DOMAIN/install.sh | bash
 #   curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
 #
 # Environment (optional):
@@ -102,10 +103,10 @@ install_package() {
   python="$(venv_python)"
   info "Installing GoodBoy (editable)..."
   "$python" -m pip install -q --upgrade pip
-  "$python" -m pip install -q -e "$INSTALL_DIR"
+  "$python" -m pip install -q -e "$INSTALL_DIR/python"
   if [[ "${GOODBOY_LOCAL:-}" == "1" ]]; then
     info "Installing local model dependencies..."
-    "$python" -m pip install -q -e "$INSTALL_DIR[local]"
+    "$python" -m pip install -q -e "$INSTALL_DIR/python[local]"
   fi
 }
 
@@ -191,7 +192,7 @@ main() {
   py="$(find_python)" || die "Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+ is required (install python3 and try again)."
 
   ensure_source_tree
-  [[ -f "$INSTALL_DIR/pyproject.toml" ]] || die "Missing pyproject.toml in $INSTALL_DIR"
+  [[ -f "$INSTALL_DIR/python/pyproject.toml" ]] || die "Missing python/pyproject.toml in $INSTALL_DIR"
 
   create_venv "$py"
   install_package

@@ -7,6 +7,16 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 - handles clarifications / retries
 - supports per-session model selection
 
+## Repository layout
+
+| Directory | Purpose |
+|-----------|---------|
+| [`python/`](python/) | CLI, agent harness, and tests (`pyproject.toml` lives here) |
+| [`web/`](web/) | Vue install landing page (Railway) |
+| [`install.sh`](install.sh) | One-line installer (repo root) |
+
+`.env` and the install venv (`.venv`) stay at the **repo/install root**, not inside `python/`.
+
 ## Features
 
 - **Interactive CLI** (conversation-style): run tasks, then keep iterating.
@@ -28,6 +38,12 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 One-time setup installs GoodBoy on your machine. After that, run `goodboy` from **any** project directory—the agent uses that repo as its workspace (git root when you are inside a repo).
 
 ### Quick install (macOS / Linux)
+
+```bash
+curl -fsSL https://YOUR-DOMAIN/install.sh | bash
+```
+
+(Replace `YOUR-DOMAIN` with your [Railway-hosted install page](web/) domain, or use the GitHub raw URL below.)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/edvinass/GoodBoy/main/install.sh | bash
@@ -77,7 +93,7 @@ This creates `.venv` in the install directory and installs the `goodboy` command
 **Local GGUF models (optional):** install extra dependencies, then re-run setup:
 
 ```bash
-.venv/bin/pip install -e ".[local]"
+.venv/bin/pip install -e "python[local]"
 ```
 
 This adds `llama-cpp-python` and `huggingface-hub` for on-device models.
@@ -137,9 +153,9 @@ If you use [pipx](https://pipx.pypa.io/):
 ```bash
 git clone https://github.com/edvinass/GoodBoy.git ~/.local/share/goodboy
 cd ~/.local/share/goodboy
-pipx install -e .
+pipx install -e python
 # optional local models:
-pipx install -e ".[local]" --force
+pipx install -e "python[local]" --force
 goodboy setup
 ```
 
@@ -150,7 +166,7 @@ goodboy setup
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .            # or: pip install -e ".[local]"
+pip install -e python       # or: pip install -e "python[local]"
 ```
 
 Then add `.venv/bin` (or `Scripts` on Windows) to your PATH as in step 3.
@@ -190,7 +206,7 @@ goodboy
 or equivalently:
 
 ```bash
-python main.py
+cd python && python main.py
 ```
 
 You’ll be prompted to enter a task. During the session you can also type special commands (see below).
@@ -249,18 +265,18 @@ TLS / HTTPS proxy configuration:
 During an interactive session, GoodBoy supports built-in REPL commands (e.g. exit/clear/model/reasoning).
 
 For a full list, see:
-- `agent/repl_commands.py`
+- `python/agent/repl_commands.py`
 
 ## Tests
 
 Run the test suite with:
 
 ```bash
-pytest
+cd python && pytest
 ```
 
 ## Project scripts
 
-This repository defines console scripts via `pyproject.toml`:
+Console scripts are defined in [`python/pyproject.toml`](python/pyproject.toml):
 - `goodboy` → `main:cli`
 - `llm` → `llm:main`
