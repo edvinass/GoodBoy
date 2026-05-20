@@ -12,18 +12,26 @@ from agent.memory import load_project_memory
 from agent.types import AgentAction, PlanItem, PlanItemStatus, TurnRecord
 
 
+def _strikethrough(text: str) -> str:
+    return "".join(f"{char}\u0336" for char in text)
+
+
 def format_plan_items(items: list[PlanItem]) -> str:
     """Render plan rows for model context and terminal output."""
     lines: list[str] = []
     for item in items:
-        mark = " "
         if item.status == PlanItemStatus.DONE:
-            mark = "x"
+            mark = "✓"
         elif item.status == PlanItemStatus.CANCELLED:
-            mark = "-"
+            mark = "–"
         elif item.status == PlanItemStatus.IN_PROGRESS:
-            mark = ">"
-        lines.append(f"- [{mark}] ({item.id}) {item.text}")
+            mark = "→"
+        else:
+            mark = " "
+        label = item.text
+        if item.status in (PlanItemStatus.DONE, PlanItemStatus.CANCELLED):
+            label = _strikethrough(label)
+        lines.append(f"[{mark}] {item.id}. {label}")
     return "\n".join(lines)
 
 

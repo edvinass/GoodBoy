@@ -59,7 +59,7 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
-from agent.context import format_plan_items, format_plan_step_progress
+from agent.context import format_plan_step_progress
 from agent.mentions import (
     active_mention_query,
     expand_file_mentions,
@@ -73,7 +73,7 @@ from agent.repl_commands import (
 )
 from agent.workspace import resolve_workspace
 from settings import get_settings
-from agent.types import AgentAction, AgentStep, PlanItem, ToolResult
+from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(139,69,19)"
@@ -877,6 +877,23 @@ def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
     return title
 
 
+def _render_plan_items(items: list[PlanItem]) -> Text:
+    text = Text()
+    for index, item in enumerate(items):
+        if index:
+            text.append("\n")
+        if item.status == PlanItemStatus.DONE:
+            mark, style = "✓", "strike green"
+        elif item.status == PlanItemStatus.CANCELLED:
+            mark, style = "–", "strike dim"
+        elif item.status == PlanItemStatus.IN_PROGRESS:
+            mark, style = "→", "yellow"
+        else:
+            mark, style = " ", "dim"
+        text.append(f"[{mark}] {item.id}. {item.text}", style=style)
+    return text
+
+
 def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) -> RenderableType:
     body = text.rstrip() or ""
     panel_width = max(width - 6, 40)
@@ -1198,6 +1215,16 @@ class ConversationUI:
                 title=user_title,
                 border_style="green",
                 padding=(0, 1),
+            )
+            return
+        if kind == "plan":
+            yield ""
+            yield self._panel(
+                _render_plan_items(data["items"]),
+                title=_role_panel_title("agent", subtitle="plan"),
+                border_style=_BRAND_STYLE,
+                padding=(0, 1),
+                width=self._fresh_terminal_width(),
             )
             return
         if kind == "agent_message":
@@ -1583,8 +1610,10 @@ class ConversationUI:
 
     def print_plan(self, items: list[PlanItem]) -> None:
         """Show the durable task plan in the GoodBoy panel."""
-        body = format_plan_items(items) if items else "Planning"
-        self.print_agent(body, subtitle="plan")
+        if items:
+            self._record("plan", items=items)
+        else:
+            self.print_agent("Planning", subtitle="plan")
 
     def print_llm_request(
         self,

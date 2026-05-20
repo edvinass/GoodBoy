@@ -588,6 +588,29 @@ def test_print_agent_step_need_user_input(capsys):
     assert "Which file?" in out
 
 
+def test_render_plan_items_colors():
+    from agent.ui import _render_plan_items
+
+    rendered = _render_plan_items(
+        [
+            PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
+            PlanItem(id="2", text="edit file", status=PlanItemStatus.IN_PROGRESS),
+            PlanItem(id="3", text="verify", status=PlanItemStatus.PENDING),
+            PlanItem(id="4", text="skip", status=PlanItemStatus.CANCELLED),
+        ]
+    )
+    assert rendered.plain.splitlines() == [
+        "[✓] 1. recon",
+        "[→] 2. edit file",
+        "[ ] 3. verify",
+        "[–] 4. skip",
+    ]
+    assert rendered.spans[0].style == "strike green"
+    assert rendered.spans[1].style == "yellow"
+    assert rendered.spans[2].style == "dim"
+    assert rendered.spans[3].style == "strike dim"
+
+
 def test_print_plan_shows_plan_items(capsys):
     ui = ConversationUI()
     ui.print_plan(
@@ -601,8 +624,8 @@ def test_print_plan_shows_plan_items(capsys):
         ],
     )
     out = capsys.readouterr().out
-    assert "[x] (1) recon" in out
-    assert "[>] (2) edit file" in out
+    assert "[✓] 1." in out
+    assert "[→] 2. edit file" in out
     assert "(plan)" in out
 
 
