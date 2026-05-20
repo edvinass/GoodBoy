@@ -601,9 +601,9 @@ def test_print_plan_shows_plan_items(capsys):
         ],
     )
     out = capsys.readouterr().out
-    assert "│ 1   │ done       │ recon     │" in out
-    assert "│ 2   │ >          │ edit file │" in out
-    assert "│ #   │ Status     │ Task      │" in out
+    assert "[x] (1) recon" in out
+    assert "[>] (2) edit file" in out
+    assert "(plan)" in out
 
 
 def test_print_agent_step_does_not_show_plan_items(capsys):

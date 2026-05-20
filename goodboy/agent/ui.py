@@ -73,7 +73,7 @@ from agent.repl_commands import (
 )
 from agent.workspace import resolve_workspace
 from settings import get_settings
-from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
+from agent.types import AgentAction, AgentStep, PlanItem, ToolResult
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(139,69,19)"
@@ -1249,12 +1249,6 @@ class ConversationUI:
             yield ""
             yield self._render_llm_request_group(data)
             return
-        if kind == "plan":
-            yield ""
-            renderable = data.get("renderable")
-            if renderable:
-                yield renderable
-            return
         if kind == "llm_response":
             yield ""
             panel_width = self._panel_text_width()
@@ -1587,37 +1581,10 @@ class ConversationUI:
     ) -> None:
         self._record("agent_message", text=text, subtitle=subtitle)
 
-    def render_plan_table(self, items: list[PlanItem]) -> Table:
-        """Build a Rich Table showing plan items with status markers."""
-        table = Table(
-            box=ROUNDED,
-            border_style="dim",
-            padding=(0, 1),
-            show_header=True,
-            header_style="bold",
-            highlight=True,
-        )
-        table.add_column("#", style="dim", width=3, no_wrap=True)
-        table.add_column("Status", width=10, no_wrap=True)
-        table.add_column("Task")
-        status_labels = {
-            PlanItemStatus.DONE: "[green]done[/]",
-            PlanItemStatus.IN_PROGRESS: "[yellow]>[/]",
-            PlanItemStatus.CANCELLED: "[red]cancelled[/]",
-            PlanItemStatus.PENDING: "[dim]pending[/]",
-        }
-        for item in items:
-            label = status_labels.get(item.status, "[dim]?[/]")
-            table.add_row(str(item.id), label, item.text or "")
-        return table
-
     def print_plan(self, items: list[PlanItem]) -> None:
         """Show the durable task plan in the GoodBoy panel."""
-        if not items:
-            self.print_agent("Planning", subtitle="plan")
-            return
-        table = self.render_plan_table(items)
-        self._record("plan", renderable=table)
+        body = format_plan_items(items) if items else "Planning"
+        self.print_agent(body, subtitle="plan")
 
     def print_llm_request(
         self,
