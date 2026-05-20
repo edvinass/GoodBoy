@@ -27,6 +27,7 @@ GOODBOY_SHOW_COMMANDS_VAR = "GOODBOY_SHOW_COMMANDS"
 GOODBOY_AUTO_MODEL_SWITCH_VAR = "GOODBOY_AUTO_MODEL_SWITCH"
 GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
 GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR = "GOODBOY_CONTEXT_RECENT_FULL_TURNS"
+GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR = "GOODBOY_LOCAL_RECENT_FULL_TURNS"
 GOODBOY_RESPONSE_CHAIN_VAR = "GOODBOY_RESPONSE_CHAIN"
 GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
 GOODBOY_PLAN_MODE_VAR = "GOODBOY_PLAN_MODE"
@@ -41,6 +42,7 @@ DEFAULT_MAX_TURNS = 500
 DEFAULT_TOOL_TIMEOUT_SEC = 180.0
 DEFAULT_MAX_CLARIFICATIONS = 3
 DEFAULT_CONTEXT_RECENT_FULL_TURNS = 15
+DEFAULT_LOCAL_RECENT_FULL_TURNS = 3
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -151,6 +153,7 @@ class Settings:
     auto_model_switch: bool = False
     default_reasoning_effort: str | None = None
     context_recent_full_turns: int = DEFAULT_CONTEXT_RECENT_FULL_TURNS
+    local_recent_full_turns: int = DEFAULT_LOCAL_RECENT_FULL_TURNS
     response_chain_enabled: bool = True
     strict_json_schema: bool = True
     plan_mode: str = DEFAULT_PLAN_MODE
@@ -201,6 +204,13 @@ class Settings:
                 _env_int(
                     GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR,
                     DEFAULT_CONTEXT_RECENT_FULL_TURNS,
+                ),
+            ),
+            local_recent_full_turns=max(
+                1,
+                _env_int(
+                    GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR,
+                    DEFAULT_LOCAL_RECENT_FULL_TURNS,
                 ),
             ),
             response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, True),

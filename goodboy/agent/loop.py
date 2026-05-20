@@ -126,12 +126,19 @@ class AgentLoop:
             if max_clarifications is not None
             else cfg.max_clarifications
         )
-        self.recent_full_turns = (
+        self._explicit_recent_full_turns: int | None = recent_full_turns
+        self._cloud_recent_full_turns = (
             recent_full_turns
             if recent_full_turns is not None
             else cfg.context_recent_full_turns
         )
+        self._local_recent_full_turns = (
+            recent_full_turns
+            if recent_full_turns is not None
+            else cfg.local_recent_full_turns
+        )
         self._default_model = model or cfg.default_model
+        self.recent_full_turns = self._window_for_model(self._default_model)
         self._default_reasoning: str | None = cfg.default_reasoning_effort
         self._allowed_models = allowed_models or get_selectable_models(
             api_key=cfg.openai_api_key
@@ -205,6 +212,18 @@ class AgentLoop:
     def session_reasoning(self) -> str | None:
         return self._default_reasoning
 
+    def _window_for_model(self, model: str) -> int:
+        """Pick a transcript window that fits the model's context budget.
+
+        Local GGUF models typically have small (8k) windows, so the default
+        cloud-sized 15-turn window blows the prompt budget and forces the
+        local truncator to throw away context every call. Use a tighter
+        window when the active model is local.
+        """
+        if is_local_model(model):
+            return self._local_recent_full_turns
+        return self._cloud_recent_full_turns
+
     def set_session_model(self, model: str) -> None:
         """Set the default model for subsequent tasks in this harness session."""
         selectable = get_selectable_models(
@@ -221,6 +240,7 @@ class AgentLoop:
         self._pending_model = None
         self._hosted_tools = ()
         self._reset_response_chain()
+        self.recent_full_turns = self._window_for_model(model)
         if is_local_model(model):
             self._chain_enabled = False
         elif self._llm_call is None:
@@ -264,6 +284,13 @@ class AgentLoop:
             ctx = ctx.model_copy(
                 update={"recent_full_turns": self.recent_full_turns}
             )
+        # Re-arm the local-model context-full warning so the next truncation
+        # event in this task triggers exactly one notice (instead of one per
+        # LLM call, which spammed the terminal).
+        if is_local_model(self._default_model):
+            from agent.local_llm import reset_context_full_notice
+
+            reset_context_full_notice()
         # Each task runs an independent server-side response chain.
         self._reset_response_chain()
         if context is not None and ctx.active_hosted_tools:

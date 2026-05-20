@@ -142,6 +142,39 @@ def iter_catalog() -> tuple[LocalModelSpec, ...]:
 _runner_lock = threading.Lock()
 _runner: LocalModelRunner | None = None
 
+# One-shot throttle for the "context full" warning. The agent loop calls
+# `reset_context_full_notice()` at the start of every task so the user sees a
+# single actionable notice per task instead of one per LLM call.
+_truncation_state: dict[str, int] = {"events": 0, "warned_at": 0}
+
+
+def reset_context_full_notice() -> None:
+    """Re-arm the per-task context-full warning."""
+    _truncation_state["events"] = 0
+    _truncation_state["warned_at"] = 0
+
+
+def context_full_events() -> int:
+    """How many LLM calls in the current task had to trim prompt content."""
+    return _truncation_state["events"]
+
+
+def _emit_context_full_notice() -> None:
+    """Track a truncation event; warn once per task with actionable advice."""
+    _truncation_state["events"] += 1
+    if _truncation_state["warned_at"]:
+        return
+    _truncation_state["warned_at"] = _truncation_state["events"]
+    click.echo(
+        click.style(
+            "Local model context is tight — older tool output is being "
+            "truncated. For better results: /clear to drop conversation, "
+            "narrow the task, or /model a larger-context model.",
+            fg="yellow",
+        ),
+        err=True,
+    )
+
 
 def is_local_model(model_id: str | None) -> bool:
     return bool(model_id and model_id.startswith(LOCAL_MODEL_PREFIX))
@@ -647,13 +680,7 @@ def _fit_messages_to_context(
         )
 
     if user_msg.get("content") != original_user:
-        click.echo(
-            click.style(
-                "Local model context full — older tool output was truncated to fit.",
-                fg="yellow",
-            ),
-            err=True,
-        )
+        _emit_context_full_notice()
     return fitted
 
 
