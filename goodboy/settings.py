@@ -47,8 +47,15 @@ DEFAULT_LOCAL_RECENT_FULL_TURNS = 3
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
 
-def load_env() -> None:
-    load_dotenv(ENV_FILE, override=True)
+def load_env(*, override: bool = False) -> None:
+    """Populate ``os.environ`` from ``.env``.
+
+    By default, existing environment variables (shell exports, test
+    monkeypatches, CI-provided values) take precedence over ``.env``. Pass
+    ``override=True`` to force ``.env`` to win, e.g. after :func:`save_env`
+    just rewrote a key and the running process should pick up the new value.
+    """
+    load_dotenv(ENV_FILE, override=override)
 
 
 def _parse_env_lines(lines: list[str]) -> tuple[list[str], dict[str, str]]:
@@ -102,7 +109,7 @@ def save_env(updates: dict[str, str]) -> None:
 
     ENV_FILE.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
     get_settings.cache_clear()
-    load_env()
+    load_env(override=True)
     try:
         from llm import clear_openai_client_cache
 

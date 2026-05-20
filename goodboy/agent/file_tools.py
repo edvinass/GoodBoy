@@ -29,6 +29,17 @@ def _patch_success_stdout(
     return stdout
 
 
+def _patch_strip_level(patch_text: str) -> int:
+    """Infer ``patch -pN`` from unified-diff headers (``--- a/...`` → 1)."""
+    for line in patch_text.splitlines():
+        if line.startswith("--- ") or line.startswith("+++ "):
+            name = line.split(maxsplit=1)[-1]
+            if name.startswith("a/") or name.startswith("b/"):
+                return 1
+            break
+    return 0
+
+
 def _resolve_path(workspace: Path, path: str) -> Path:
     raw = Path(path)
     if raw.is_absolute():
@@ -154,7 +165,7 @@ def apply_patch(
     *,
     workspace: Path,
 ) -> ToolResult:
-    """Apply a unified diff to a file (``patch -p0`` from the workspace root)."""
+    """Apply a unified diff to a file (``patch -pN`` from the workspace root)."""
     executed = f"apply_patch {path}"
     try:
         target = _resolve_path(workspace, path)
@@ -193,14 +204,27 @@ def apply_patch(
                 target, patch_text, executed=executed, path=path, before_text=before_text
             )
 
+        strip = _patch_strip_level(patch_text)
         completed = subprocess.run(
-            ["patch", "-p0", "--forward", "-i", patch_path],
+            [
+                "patch",
+                f"-p{strip}",
+                "--forward",
+                "-t",  # batch: never prompt (BSD patch otherwise hangs on TTY)
+                "-i",
+                patch_path,
+            ],
             cwd=workdir,
             capture_output=True,
             text=True,
             timeout=30,
+            stdin=subprocess.DEVNULL,
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired:
+        return _apply_patch_python(
+            target, patch_text, executed=executed, path=path, before_text=before_text
+        )
+    except OSError as exc:
         return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
     finally:
         if patch_path is not None:

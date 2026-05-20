@@ -37,7 +37,7 @@ from agent.ui import (
 
 def test_user_input_placeholder_and_footer_are_separate():
     assert _USER_INPUT_PLACEHOLDER == "Ask anything"
-    assert _USER_INPUT_FOOTER == "@ files, / commands"
+    assert _USER_INPUT_FOOTER == "@ - files, / - commands, ? - help, Cmd+D - clear"
     assert _user_input_placeholder() == [("class:placeholder", "Ask anything")]
 
 
@@ -54,7 +54,9 @@ def test_input_frame_fragments_use_dim_style_classes():
     from agent.ui import _input_border_fragments, _input_footer_fragments
 
     assert _input_border_fragments()[0][0] == "class:input-border"
-    assert _input_footer_fragments() == [("class:input-footer", "@ files, / commands")]
+    assert _input_footer_fragments() == [
+        ("class:input-footer", "@ - files, / - commands, ? - help, Cmd+D - clear")
+    ]
 
 
 def test_format_pasted_text_label():

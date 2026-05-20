@@ -851,7 +851,7 @@ def test_complex_task_blocks_edit_until_plan(tmp_path: Path):
                 ),
                 AgentStep(
                     action=AgentAction.RUN_SHELL,
-                    command="pytest --version",
+                    command="python3 -m pytest --version",
                 ),
                 AgentStep(
                     action=AgentAction.TASK_COMPLETE,
@@ -895,7 +895,7 @@ def test_verify_gate_blocks_task_complete_until_pytest(tmp_path: Path):
                 ),
                 AgentStep(
                     action=AgentAction.RUN_SHELL,
-                    command="pytest --version",
+                    command="python3 -m pytest --version",
                 ),
                 AgentStep(
                     action=AgentAction.TASK_COMPLETE,
