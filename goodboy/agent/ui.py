@@ -883,12 +883,16 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
         "padding": (0, 1),
         "width": width,
         "title": agent_title,
+        "title_align": "left",
+        "subtitle_align": "left",
     }
     if subtitle == "shell":
         return Panel(
             _syntax(body, "bash", width=panel_width),
             title=agent_title,
+            title_align="left",
             subtitle="[shell]command[/]",
+            subtitle_align="left",
             border_style="yellow",
             box=ROUNDED,
             padding=(0, 1),
@@ -898,7 +902,9 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
         return Panel(
             _syntax(body, "python", width=panel_width),
             title=agent_title,
+            title_align="left",
             subtitle="[python]code[/]",
+            subtitle_align="left",
             border_style="magenta",
             box=ROUNDED,
             padding=(0, 1),
@@ -908,7 +914,9 @@ def _render_body(text: str, *, subtitle: str | None = None, width: int = 100) ->
         return Panel(
             _directory_tree(body),
             title=agent_title,
+            title_align="left",
             subtitle="[muted]directory[/]",
+            subtitle_align="left",
             border_style=_BRAND_STYLE,
             box=ROUNDED,
             padding=(0, 1),
@@ -1091,6 +1099,8 @@ class ConversationUI:
     def _panel(self, renderable: RenderableType, **kwargs) -> Panel:
         kwargs.setdefault("box", ROUNDED)
         kwargs.setdefault("width", self._fresh_terminal_width())
+        kwargs.setdefault("title_align", "left")
+        kwargs.setdefault("subtitle_align", "left")
         return Panel(renderable, **kwargs)
 
     def _panel_text_width(self) -> int:
