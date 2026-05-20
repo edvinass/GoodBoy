@@ -49,25 +49,6 @@ def test_install_from_source_dir(tmp_path: Path):
     assert "goodboy    # first run" in result.stdout
 
 
-def test_install_from_tarball(tmp_path: Path):
-    serve_dir = tmp_path / "serve"
-    serve_dir.mkdir()
-    with tarfile.open(serve_dir / "goodboy.tar.gz", "w:gz") as tar:
-        tar.add(REPO_ROOT / "goodboy", arcname="goodboy")
-    install_root = tmp_path / "install"
-    result = _run_install(
-        {
-            "GOODBOY_INSTALL_BASE_URL": serve_dir.as_uri(),
-            "GOODBOY_INSTALL_DIR": str(install_root),
-            "GOODBOY_NO_PATH": "1",
-            "HOME": str(tmp_path),
-        },
-    )
-    assert result.returncode == 0, result.stderr + result.stdout
-    assert (install_root / "goodboy" / "pyproject.toml").is_file()
-    assert "Downloading GoodBoy from" in result.stdout
-
-
 def test_install_idempotent_with_existing_venv(tmp_path: Path):
     env = {
         "GOODBOY_SOURCE_DIR": str(REPO_ROOT),

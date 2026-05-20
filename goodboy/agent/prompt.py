@@ -58,6 +58,19 @@ When the user task involves refactoring, migration, multi-file changes, or deep 
 
 `thought` is ephemeral; **Active plan** and **Working memory** in context are durable."""
 
+_TERMINAL_MESSAGE_FORMAT = """## Terminal message formatting
+
+User-facing **`message`** values (`need_user_input`, `task_complete`, `failed`) are shown in a Rich terminal panel. The harness detects **markdown** and renders headings, lists, bold, inline code, and fenced code blocks (with syntax highlighting).
+
+Write `message` for terminal readability:
+- **Structure longer answers**: one-line summary, then bullets or numbered steps for results, paths, and commands run.
+- **Use markdown when it helps**: `##`/`###` headings for sections, `-` bullets for lists, `` `backticks` `` for paths/commands/symbols, fenced ``` blocks for multi-line output or snippets.
+- **task_complete** — what changed (files/edits), how you verified (command + outcome), and follow-ups/risks as separate bullets or short sections.
+- **need_user_input** — the exact question first; optional bullets for choices or constraints.
+- **failed** — what blocked you, what you already tried, and the smallest next step for the user.
+- Keep lines reasonably short; avoid HTML, very wide tables, or emoji unless the user uses them.
+- JSON turns stay valid: markdown belongs only inside string fields like `message` — never wrap the whole step in a markdown fence."""
+
 _HARNESS_RULES = """## Harness rules (strict)
 
 1. One JSON object per turn. No markdown fences or prose outside JSON.
@@ -66,7 +79,7 @@ _HARNESS_RULES = """## Harness rules (strict)
 4. Never re-ask the same question after a user clarification.
 5. **task_complete** only when the request is fully satisfied (or analysis-only task is done).
 6. **failed** when you cannot continue safely.
-7. `message` is user-facing: clear, professional, with concrete results when asked. No emojis or prose in `command`/`code`.
+7. `message` is user-facing: clear, professional, markdown-friendly for the terminal (see **Terminal message formatting**). No emojis or prose in `command`/`code`.
 
 ## Routing fields (each turn)
 
@@ -86,6 +99,7 @@ _BASE_RULES = "\n\n".join(
         _CODING_METHODOLOGY,
         _AVAILABLE_TOOLS,
         _COMPLEX_TASKS,
+        _TERMINAL_MESSAGE_FORMAT,
         _HARNESS_RULES,
     ]
 )

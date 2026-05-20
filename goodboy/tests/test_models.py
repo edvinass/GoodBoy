@@ -74,6 +74,13 @@ def test_format_hosted_tools_reference():
     assert "file_search" in text
 
 
+def test_build_system_prompt_terminal_message_formatting():
+    prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"])
+    assert "Terminal message formatting" in prompt
+    assert "markdown" in prompt.lower()
+    assert "task_complete" in prompt
+
+
 def test_build_system_prompt_coding_agent_identity():
     prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"])
     assert "powerful autonomous coding agent" in prompt
