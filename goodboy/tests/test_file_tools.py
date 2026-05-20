@@ -13,7 +13,7 @@ def test_read_file_numbered(tmp_path: Path):
     assert "line2" in result.stdout
     assert "     2|" in result.stdout
 
-
+q
 def test_str_replace_unique_match(tmp_path: Path):
     target = tmp_path / "a.txt"
     target.write_text("hello world\n", encoding="utf-8")
