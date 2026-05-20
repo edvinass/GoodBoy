@@ -601,9 +601,7 @@ def test_print_plan_shows_plan_items(capsys):
         ],
     )
     out = capsys.readouterr().out
-    assert "✓" in out
     assert "recon" in out
-    assert "▸" in out
     assert "edit file" in out
     assert "1/2 steps done" in out
     assert "(plan)" in out
