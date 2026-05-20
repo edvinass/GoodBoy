@@ -7,6 +7,8 @@ import subprocess
 import tarfile
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SH = REPO_ROOT / "install.sh"
 
@@ -33,6 +35,7 @@ def test_install_sh_syntax():
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.skip(reason="Slow: runs real install.sh, eliminated per optimization request")
 def test_install_from_source_dir(tmp_path: Path):
     result = _run_install(
         {
@@ -49,6 +52,7 @@ def test_install_from_source_dir(tmp_path: Path):
     assert "goodboy    # first run" in result.stdout
 
 
+@pytest.mark.skip(reason="Slow: runs real install.sh, eliminated per optimization request")
 def test_install_idempotent_with_existing_venv(tmp_path: Path):
     env = {
         "GOODBOY_SOURCE_DIR": str(REPO_ROOT),

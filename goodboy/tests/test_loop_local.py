@@ -89,6 +89,10 @@ def test_set_session_model_resizes_window(tmp_path, monkeypatch):
     """Switching between cloud and local models adjusts the prompt window."""
     monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
     monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.setattr(
+        "agent.loop.get_selectable_models",
+        lambda api_key=None, **_: ["gpt-5.4-nano", "local:qwen2.5-coder-7b-q4"],
+    )
     from settings import (
         DEFAULT_CONTEXT_RECENT_FULL_TURNS,
         DEFAULT_LOCAL_RECENT_FULL_TURNS,
