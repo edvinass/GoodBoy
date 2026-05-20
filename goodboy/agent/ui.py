@@ -63,6 +63,7 @@ from agent.context import (
     active_plan_counts,
     format_plan_progress_label,
     format_plan_step_progress,
+    plan_status_mark,
 )
 from agent.mentions import (
     active_mention_query,
@@ -867,6 +868,17 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
+def _plan_mark_cell(item: PlanItem) -> Text:
+    mark = plan_status_mark(item.status)
+    if item.status == PlanItemStatus.IN_PROGRESS:
+        return Text(mark, style=f"bold {_BRAND_STYLE}")
+    if item.status == PlanItemStatus.DONE:
+        return Text(mark, style="success")
+    if item.status == PlanItemStatus.CANCELLED:
+        return Text(mark, style="muted")
+    return Text(mark, style="dim")
+
+
 def _plan_text_cell(item: PlanItem) -> Text:
     if item.status == PlanItemStatus.DONE:
         return Text(item.text, style="muted strike")
@@ -901,12 +913,13 @@ def _plan_list_table(
     )
     if include_step_numbers:
         table.add_column("step", width=4, justify="right", no_wrap=True)
+    table.add_column("mark", width=2, justify="center", no_wrap=True)
     table.add_column("text", overflow="fold")
     for step_num, item in enumerate(items, start=1):
         row: list[RenderableType] = []
         if include_step_numbers:
             row.append(_plan_step_number_cell(step_num, item))
-        row.append(_plan_text_cell(item))
+        row.extend((_plan_mark_cell(item), _plan_text_cell(item)))
         table.add_row(*row)
     return table
 
