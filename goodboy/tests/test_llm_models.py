@@ -21,14 +21,3 @@ def test_get_curated_models_excludes_api_extras():
     assert "gpt-3.5-turbo" not in models
     assert "gpt-4.1-2025-04-14" not in models
     assert all(m in MODEL_CHOICES for m in models)
-
-
-def test_format_models_section_only_curated_entries():
-    from agent.models import format_models_section
-
-    text = format_models_section(["gpt-5.4-nano", "gpt-3.5-turbo", "gpt-5.5"])
-    assert "gpt-5.4-nano" in text
-    assert "gpt-5.5" in text
-    assert "gpt-3.5-turbo" not in text
-    assert "No curated guidance" not in text
-    assert "Other allowed IDs" not in text

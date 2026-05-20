@@ -32,13 +32,6 @@ _EDIT_ACTIONS = frozenset(
     {AgentAction.STR_REPLACE, AgentAction.APPLY_PATCH}
 )
 
-_COMPLEX_ROUTER_PREFERENCES = (
-    "gpt-5.4-mini",
-    "gpt-5-mini",
-    "gpt-5.4",
-    "gpt-5.4-nano",
-)
-
 
 def is_complex_task(task: str) -> bool:
     text = task.strip()
@@ -118,21 +111,3 @@ def verification_blocks_complete(
         "project verification command (e.g. pytest) and confirm exit 0 before "
         "task_complete."
     )
-
-
-def complex_task_router_model(
-    allowed_ids: list[str],
-    hosted_tools: tuple[str, ...],
-) -> str | None:
-    """Pick a capable model for complex-task routing turn 1."""
-    from agent.models import cheapest_capable_model, cheapest_model_with_tools
-
-    if hosted_tools:
-        picked = cheapest_model_with_tools(allowed_ids, list(hosted_tools))
-        if picked is not None:
-            return picked
-    allowed = set(allowed_ids)
-    for model_id in _COMPLEX_ROUTER_PREFERENCES:
-        if model_id in allowed:
-            return model_id
-    return cheapest_capable_model(allowed_ids)

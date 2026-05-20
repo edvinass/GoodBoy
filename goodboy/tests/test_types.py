@@ -42,56 +42,6 @@ def test_need_user_input_requires_message():
         AgentStep.model_validate({"action": "need_user_input"})
 
 
-def test_switch_model_requires_model():
-    with pytest.raises(ValidationError):
-        AgentStep.model_validate({"action": "switch_model"})
-
-
-def test_switch_model_with_reasoning_effort():
-    step = AgentStep.model_validate(
-        {
-            "action": "switch_model",
-            "model": "gpt-5.4-nano",
-            "reasoning_effort": "low",
-        }
-    )
-    assert step.model == "gpt-5.4-nano"
-    assert step.reasoning_effort == "low"
-
-
-def test_model_on_run_shell():
-    step = AgentStep.model_validate(
-        {
-            "action": "run_shell",
-            "command": "pwd",
-            "model": "gpt-5.4-nano",
-        }
-    )
-    assert step.model == "gpt-5.4-nano"
-
-
-def test_model_not_on_switch_tools():
-    with pytest.raises(ValidationError, match="switch_tools"):
-        AgentStep.model_validate(
-            {
-                "action": "switch_tools",
-                "tools": ["web_search"],
-                "model": "gpt-5.4-mini",
-            }
-        )
-
-
-def test_invalid_reasoning_effort_rejected():
-    with pytest.raises(ValidationError):
-        AgentStep.model_validate(
-            {
-                "action": "task_complete",
-                "message": "done",
-                "reasoning_effort": "ultra",
-            }
-        )
-
-
 def test_parse_switch_tools():
     raw = json.dumps({"action": "switch_tools", "tools": ["web_search"]})
     step = parse_agent_step(raw)
@@ -129,11 +79,10 @@ def test_tools_only_on_switch_tools():
         )
 
 
-def test_model_strips_whitespace():
+def test_switch_model_action_is_not_recognized():
+    """The legacy switch_model action was removed; it must not validate."""
     with pytest.raises(ValidationError):
-        AgentStep.model_validate(
-            {"action": "switch_model", "model": "  "}
-        )
+        AgentStep.model_validate({"action": "switch_model", "model": "gpt-5.4-nano"})
 
 
 def test_parse_duplicate_json_objects_uses_first():

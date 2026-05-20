@@ -5,8 +5,6 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from llm import REASONING_EFFORT
-
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -31,7 +29,6 @@ class AgentAction(str, Enum):
     READ_FILE = "read_file"
     APPLY_PATCH = "apply_patch"
     STR_REPLACE = "str_replace"
-    SWITCH_MODEL = "switch_model"
     SWITCH_TOOLS = "switch_tools"
     SWITCH_API = "switch_api"  # deprecated alias for switch_tools
     UPDATE_PLAN = "update_plan"
@@ -64,8 +61,6 @@ class AgentStep(BaseModel):
     tools: list[str] | None = None
     plan_items: list[PlanItem] | None = None
     memory: list[str] | None = None
-    model: str | None = None
-    reasoning_effort: str | None = None
 
     @field_validator(
         "status",
@@ -76,8 +71,6 @@ class AgentStep(BaseModel):
         "old_string",
         "new_string",
         "message",
-        "model",
-        "reasoning_effort",
         mode="before",
     )
     @classmethod
@@ -109,15 +102,6 @@ class AgentStep(BaseModel):
             OpenAITool(tool)
         return value
 
-    @field_validator("reasoning_effort")
-    @classmethod
-    def _validate_reasoning_effort_value(cls, value: str | None) -> str | None:
-        if value is not None and value not in REASONING_EFFORT:
-            raise ValueError(
-                f"reasoning_effort must be one of: {', '.join(REASONING_EFFORT)}"
-            )
-        return value
-
     @model_validator(mode="after")
     def _validate_action_fields(self) -> AgentStep:
         if self.action == AgentAction.RUN_SHELL:
@@ -141,9 +125,6 @@ class AgentStep(BaseModel):
                 raise ValueError("str_replace requires non-empty 'old_string'")
             if self.new_string is None:
                 raise ValueError("str_replace requires 'new_string' (may be empty)")
-        elif self.action == AgentAction.SWITCH_MODEL:
-            if not self.model:
-                raise ValueError("switch_model requires non-empty 'model'")
         elif self.action in _SWITCH_TOOLS_ACTIONS:
             if not self.tools:
                 raise ValueError("switch_tools requires non-empty 'tools' list")
@@ -167,11 +148,6 @@ class AgentStep(BaseModel):
         ):
             if not self.message:
                 raise ValueError(f"{self.action.value} requires non-empty 'message'")
-        if self.model is not None and self.action in _SWITCH_TOOLS_ACTIONS:
-            raise ValueError(
-                "model is not allowed on switch_tools — set model on the next "
-                "run_shell, run_python, switch_model, or terminal action"
-            )
         if self.tools is not None and self.action not in _SWITCH_TOOLS_ACTIONS:
             raise ValueError(
                 "tools is only allowed with switch_tools — use "

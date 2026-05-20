@@ -29,12 +29,10 @@ def test_get_tool_and_harness_checks():
     assert get_tool(AgentAction.TASK_COMPLETE) is None
     assert is_harness_tool(AgentAction.RUN_PYTHON)
     assert not is_harness_tool(AgentAction.FAILED)
-    assert is_routing_action(AgentAction.SWITCH_MODEL)
     assert is_routing_action(AgentAction.SWITCH_TOOLS)
     assert is_routing_action(AgentAction.SWITCH_API)
     assert not is_harness_tool(AgentAction.SWITCH_TOOLS)
     assert is_valid_action(AgentAction.NEED_USER_INPUT)
-    assert is_valid_action(AgentAction.SWITCH_MODEL)
     assert is_valid_action(AgentAction.SWITCH_TOOLS)
     assert is_valid_action(AgentAction.UPDATE_PLAN)
     assert is_valid_action(AgentAction.REMEMBER)

@@ -36,7 +36,6 @@ def get_version() -> str:
 def format_startup(
     *,
     model: str,
-    auto_model_switch: bool = False,
     reasoning_effort: str | None = None,
 ) -> str:
     ver = get_version()

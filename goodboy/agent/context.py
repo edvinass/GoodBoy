@@ -347,11 +347,6 @@ class SessionContext(BaseModel):
         lines.append(f"Action: {step.action.value}")
         if step.tools:
             lines.append(f"Tools: {', '.join(step.tools)}")
-        if step.model:
-            next_effort = step.reasoning_effort or "(default)"
-            lines.append(
-                f"Next LLM: {step.model} (reasoning: {next_effort})"
-            )
 
         if record.parse_error:
             lines.append(f"Parse note: {record.parse_error}")

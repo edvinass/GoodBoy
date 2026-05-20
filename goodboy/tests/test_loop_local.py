@@ -152,15 +152,13 @@ def test_switch_tools_rejected_on_local_model(tmp_path):
         allowed_models=_ALLOWED_LOCAL(),
         llm_call=_llm_ok,
     )
-    ui = MagicMock()
-    ui.auto_model_switch = False
-    loop._ui = ui
+    loop._ui = MagicMock()
     step = AgentStep(
         action=AgentAction.SWITCH_TOOLS,
         tools=["web_search"],
         status="Enabling tools",
     )
-    err = loop._validate_routing(step, "local:qwen2.5-coder-7b-q4")
+    err = loop._validate_action(step, "local:qwen2.5-coder-7b-q4")
     assert err is not None
     assert "switch_tools" in err
     assert "local" in err.lower()

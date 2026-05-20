@@ -226,7 +226,6 @@ Common options:
 - `-m` / `--show-model`: print the model used on each agent response
 - `-c` / `--show-commands`: print shell/Python commands the agent runs (not their output)
 - `/commands`: toggle command visibility during a session (same as `-c`)
-- `/autoswitch`: toggle automatic model switching (agent may escalate models between turns)
 - `/reasoning`: set the default reasoning effort for reasoning models
 - `-s` / `--stream-output` or `/stream`: stream each model response to the console as it is generated
 - `-d` / `--debug`: show commands and stdout/stderr from shell and Python tool runs
@@ -242,7 +241,6 @@ Key variables:
 - `OPENAI_MODEL` – default model id (OpenAI id or `local:…` for on-device inference)
 - `GOODBOY_MODELS_DIR` – directory for downloaded GGUF weights (default: `~/.goodboy/models`)
 - `GOODBOY_SHOW_COMMANDS` – when `true`, show shell/Python commands (no output); updated by `/commands`
-- `GOODBOY_AUTO_MODEL_SWITCH` – when `true`, allow proactive model escalation; updated by `/autoswitch`
 - `GOODBOY_REASONING_EFFORT` – default reasoning effort for reasoning models; updated by `/reasoning`
 
 Agent behavior:

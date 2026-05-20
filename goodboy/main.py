@@ -18,9 +18,6 @@ from llm import get_selectable_models, select_model_interactive
 from settings import OPENAI_API_KEY_VAR, OPENAI_MODEL_VAR, get_settings, is_configured, save_env
 
 
-# mode: mode-switching notes for GoodBoy CLI
-# mode: This module participates in model switching policies (test visibility only).
-
 def load_env() -> None:
     settings.load_env()
 
@@ -251,7 +248,6 @@ def cli(
             verbose=verbose,
             show_model=show_model,
             show_commands=show_commands or cfg.show_commands,
-            auto_model_switch=cfg.auto_model_switch,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,

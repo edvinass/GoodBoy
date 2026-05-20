@@ -8,7 +8,6 @@ from agent.context import ConversationExchange, SessionContext
 from agent.loop import AgentLoop, LoopOutcome, LoopResult
 from agent.session_log import open_session_log
 from agent.repl_commands import (
-    AUTOSWITCH_COMMAND_NAMES,
     CLEAR_COMMAND_NAMES,
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
@@ -33,7 +32,6 @@ from llm import (
     select_reasoning_interactive,
 )
 from settings import (
-    GOODBOY_AUTO_MODEL_SWITCH_VAR,
     GOODBOY_PLAN_MODE_VAR,
     GOODBOY_REASONING_EFFORT_VAR,
     GOODBOY_SHOW_COMMANDS_VAR,
@@ -54,7 +52,6 @@ class AgentHarness:
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
-        auto_model_switch: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
@@ -67,7 +64,6 @@ class AgentHarness:
             verbose=verbose,
             show_model=show_model,
             show_commands=show_commands,
-            auto_model_switch=auto_model_switch,
             debug=debug,
             debug_input=debug_input,
             debug_output=debug_output,
@@ -173,15 +169,6 @@ class AgentHarness:
                         )
                     continue
 
-                if self._is_autoswitch_command(task):
-                    self._toggle_autoswitch()
-                    if session_log is not None:
-                        session_log.event(
-                            "auto_model_switch_changed",
-                            auto_model_switch=self._ui.auto_model_switch,
-                        )
-                    continue
-
                 if self._is_stream_command(task):
                     self._toggle_stream()
                     if session_log is not None:
@@ -238,7 +225,6 @@ class AgentHarness:
     def _print_help(self) -> None:
         text = format_help_text(
             show_commands=self._ui.show_commands,
-            auto_model_switch=self._ui.auto_model_switch,
             stream_output=self._ui.stream_output,
             session_model=self._loop.session_model,
             default_reasoning_effort=self._loop.session_reasoning,
@@ -261,10 +247,6 @@ class AgentHarness:
     @classmethod
     def _is_commands_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in COMMANDS_COMMAND_NAMES
-
-    @classmethod
-    def _is_autoswitch_command(cls, task: str) -> bool:
-        return cls._normalize_command(task) in AUTOSWITCH_COMMAND_NAMES
 
     @classmethod
     def _is_stream_command(cls, task: str) -> bool:
@@ -300,29 +282,6 @@ class AgentHarness:
         else:
             self._ui.print_notice("Stream output off.")
 
-    def _toggle_autoswitch(self) -> None:
-        self._ui.auto_model_switch = not self._ui.auto_model_switch
-        save_env(
-            {
-                GOODBOY_AUTO_MODEL_SWITCH_VAR: (
-                    "true" if self._ui.auto_model_switch else "false"
-                )
-            }
-        )
-        self._loop.refresh_system_prompt(rebuild_stable=True)
-        if self._ui.auto_model_switch:
-            self._ui.print_notice(
-                "Automatic model switching on — turn 1 uses the cheapest model "
-                "to pick the next model; the agent may change models and "
-                "reasoning effort between turns when needed."
-            )
-        else:
-            self._ui.print_notice(
-                "Automatic model switching off — model and reasoning are session-only "
-                "(/model, /reasoning). The agent cannot change them per turn."
-            )
-        self._ui.refresh_startup_banner()
-
     def _change_model(self) -> None:
         cfg = get_settings()
         try:
@@ -340,7 +299,7 @@ class AgentHarness:
         self._loop.set_session_model(chosen)
         save_env({OPENAI_MODEL_VAR: chosen})
         self._ui.set_session_model(chosen)
-        self._loop.refresh_system_prompt(rebuild_stable=True)
+        self._loop.refresh_system_prompt()
         if is_local_model(chosen):
             label = local_model_label(chosen)
         else:
@@ -403,7 +362,7 @@ class AgentHarness:
                 label = MODEL_LABELS.get(new_model, new_model)
             self._ui.print_notice(f"Model set to {label} ({new_model}).")
 
-        self._loop.refresh_system_prompt(rebuild_stable=True)
+        self._loop.refresh_system_prompt()
         self._ui.refresh_startup_banner()
 
     def _change_plan_mode(self) -> None:
@@ -500,7 +459,6 @@ def run_harness(
     verbose: bool = False,
     show_model: bool = False,
     show_commands: bool = False,
-    auto_model_switch: bool = False,
     debug: bool = False,
     debug_input: bool = False,
     debug_output: bool = False,
@@ -511,15 +469,11 @@ def run_harness(
     if not is_configured(cfg):
         click.echo("Not configured yet. Run: goodboy", err=True)
         raise SystemExit(1)
-    use_autoswitch = (auto_model_switch or cfg.auto_model_switch) and not is_local_model(
-        cfg.default_model
-    )
     harness = AgentHarness(
         show_thoughts=show_thoughts,
         verbose=verbose,
         show_model=show_model,
         show_commands=show_commands or cfg.show_commands,
-        auto_model_switch=use_autoswitch,
         debug=debug,
         debug_input=debug_input,
         debug_output=debug_output,

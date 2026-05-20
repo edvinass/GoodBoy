@@ -311,7 +311,6 @@ class _UserInputCompleter(Completer):
         workspace: Path,
         *,
         show_commands: bool = False,
-        auto_model_switch: bool = False,
         stream_output: bool = False,
         session_model: str | None = None,
         default_reasoning_effort: str | None = None,
@@ -319,7 +318,6 @@ class _UserInputCompleter(Completer):
     ) -> None:
         self._workspace = workspace.resolve()
         self._show_commands = show_commands
-        self._auto_model_switch = auto_model_switch
         self._stream_output = stream_output
         self._session_model = session_model
         self._default_reasoning_effort = default_reasoning_effort
@@ -340,7 +338,6 @@ class _UserInputCompleter(Completer):
                     display_meta=slash_command_display_meta(
                         command,
                         show_commands=self._show_commands,
-                        auto_model_switch=self._auto_model_switch,
                         stream_output=self._stream_output,
                         session_model=self._session_model,
                         default_reasoning_effort=self._default_reasoning_effort,
@@ -668,7 +665,6 @@ def _prompt_user_line(
     *,
     workspace: Path | None = None,
     show_commands: bool = False,
-    auto_model_switch: bool = False,
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
@@ -697,10 +693,10 @@ def _prompt_user_line(
     completer = _UserInputCompleter(
         root,
         show_commands=show_commands,
-        auto_model_switch=auto_model_switch,
         stream_output=stream_output,
         session_model=session_model,
         default_reasoning_effort=default_reasoning_effort,
+        plan_mode=plan_mode,
     )
 
     if not sys.stdout.isatty():
@@ -930,7 +926,6 @@ class ConversationUI:
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
-        auto_model_switch: bool = False,
         debug: bool = False,
         debug_input: bool = False,
         debug_output: bool = False,
@@ -945,7 +940,6 @@ class ConversationUI:
         self.show_activity = show_activity
         self.show_model = show_model
         self.show_commands = show_commands
-        self.auto_model_switch = auto_model_switch
         self.debug = debug
         self.debug_input = debug_input
         self.debug_output = debug_output
@@ -1317,7 +1311,6 @@ class ConversationUI:
     def _startup_data(self) -> dict[str, Any]:
         return {
             "model": self.session_model,
-            "auto_model_switch": self.auto_model_switch,
             "reasoning_effort": self._session_reasoning,
         }
 
@@ -1325,7 +1318,6 @@ class ConversationUI:
         payload = data or self._startup_data()
         return format_startup(
             model=payload.get("model", self.session_model),
-            auto_model_switch=bool(payload.get("auto_model_switch")),
             reasoning_effort=payload.get("reasoning_effort"),
         )
 
@@ -1439,7 +1431,6 @@ class ConversationUI:
                 paste_state,
                 workspace=self._workspace or resolve_workspace(),
                 show_commands=self.show_commands,
-                auto_model_switch=self.auto_model_switch,
                 stream_output=self.stream_output,
                 session_model=self.session_model,
                 default_reasoning_effort=self._session_reasoning,
@@ -1533,8 +1524,6 @@ class ConversationUI:
         *,
         model: str | None = None,
         reasoning: str | None = None,
-        next_model: str | None = None,
-        next_reasoning: str | None = None,
         hosted_tools: list[str] | None = None,
     ) -> None:
         """Show the agent's reasoning and intended action."""
@@ -1547,11 +1536,7 @@ class ConversationUI:
                 AgentAction.FAILED,
             ):
                 self.print_agent(step.message)
-            if step.action == AgentAction.SWITCH_MODEL and step.model:
-                self.print_notice(
-                    f"Model set to {step.model} for the next turn."
-                )
-            elif step.action in (
+            if step.action in (
                 AgentAction.SWITCH_TOOLS,
                 AgentAction.SWITCH_API,
             ) and step.tools:
@@ -1571,12 +1556,7 @@ class ConversationUI:
                 self._record("routing", rows=routing_rows)
             return
 
-        show_routing = (
-            (self.show_model and model)
-            or next_model
-            or next_reasoning
-            or hosted_tools
-        )
+        show_routing = (self.show_model and model) or hosted_tools
         if show_routing:
             routing_rows = []
             if self.show_model and model:
@@ -1585,10 +1565,6 @@ class ConversationUI:
                 routing_rows.append(("reasoning", reasoning))
             if hosted_tools:
                 routing_rows.append(("hosted tools", ", ".join(hosted_tools)))
-            if next_model:
-                routing_rows.append(("next model", next_model))
-            if next_reasoning:
-                routing_rows.append(("next reasoning", next_reasoning))
             self._record("routing", rows=routing_rows)
 
         if self._show_thoughts and step.thought:
@@ -1598,8 +1574,6 @@ class ConversationUI:
             self.print_agent(step.command, subtitle="shell")
         elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
             self.print_agent(step.code.strip(), subtitle="python")
-        elif step.action == AgentAction.SWITCH_MODEL and step.model:
-            self.print_agent(step.model, subtitle="model")
         elif step.action in (
             AgentAction.SWITCH_TOOLS,
             AgentAction.SWITCH_API,

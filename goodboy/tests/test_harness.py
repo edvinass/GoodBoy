@@ -29,7 +29,6 @@ class FakeUI:
     def __init__(self, prompts: Iterator[str], *, show_commands: bool = False) -> None:
         self.prompts = prompts
         self.show_commands = show_commands
-        self.auto_model_switch = False
         self.stream_output = False
         self.clear_session_calls = 0
         self.notices: list[str] = []
@@ -323,27 +322,6 @@ def test_harness_slash_stream_toggles_mid_session():
     assert loop.run.call_count == 0
     assert ui.stream_output is True
     assert "on" in ui.notices[0].lower()
-
-
-def test_harness_slash_autoswitch_toggles_and_persists(monkeypatch):
-    loop = Mock()
-    loop.run.return_value = LoopResult(
-        outcome=LoopOutcome.TASK_COMPLETE,
-        message="done",
-        context=SessionContext(user_task="task"),
-    )
-    loop.refresh_system_prompt = Mock()
-    loop.session_model = "gpt-5.4-nano"
-    ui = FakeUI(prompts=iter(["/autoswitch", "exit"]))
-    harness = AgentHarness(loop=loop, ui=ui)
-    saved: dict[str, str] = {}
-    monkeypatch.setattr("agent.harness.save_env", saved.update)
-
-    assert harness.run() == 0
-    assert loop.run.call_count == 0
-    assert ui.auto_model_switch is True
-    loop.refresh_system_prompt.assert_called()
-    assert saved == {"GOODBOY_AUTO_MODEL_SWITCH": "true"}
 
 
 def test_harness_setup_command_reruns_setup_and_applies_model(monkeypatch):

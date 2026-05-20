@@ -3,14 +3,12 @@
 import json
 from pathlib import Path
 
-from agent.context import SessionContext
 from agent.loop import AgentLoop, LoopOutcome
 from agent.types import (
     AgentAction,
     AgentStep,
     PlanItem,
     PlanItemStatus,
-    TurnRecord,
 )
 from agent.ui import ConversationUI
 
@@ -421,178 +419,6 @@ def test_loop_resumes_after_user_reply(tmp_path: Path):
     assert "main" in second.context.to_prompt()
 
 
-def test_loop_model_field_on_run_shell_applied_on_next_call(tmp_path: Path):
-    calls: list[dict] = []
-
-    def tracking_llm(**kwargs):
-        calls.append(dict(kwargs))
-        if len(calls) == 1:
-            return json.dumps(
-                AgentStep(
-                    action=AgentAction.RUN_SHELL,
-                    command="true",
-                    model="gpt-5.4-mini",
-                ).model_dump(mode="json")
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.4-nano",
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=tracking_llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-4.1-nano"
-    assert calls[1]["model"] == "gpt-5.4-mini"
-    assert loop.session_model == "gpt-5.4-mini"
-
-
-def test_loop_autoswitch_routes_first_turn_on_cheapest_model(tmp_path: Path):
-    calls: list[dict] = []
-
-    def tracking_llm(**kwargs):
-        calls.append(dict(kwargs))
-        if len(calls) == 1:
-            return json.dumps(
-                AgentStep(
-                    action=AgentAction.RUN_SHELL,
-                    command="echo hi",
-                    model="gpt-5.4-mini",
-                ).model_dump(mode="json")
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.5",
-        llm_call=tracking_llm,
-        ui=ConversationUI(auto_model_switch=True),
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-4.1-nano"
-    assert calls[1]["model"] == "gpt-5.4-mini"
-    assert loop.session_model == "gpt-5.4-mini"
-
-
-def test_loop_autoswitch_routing_turn_requires_model(tmp_path: Path):
-    calls: list[dict] = []
-
-    def tracking_llm(**kwargs):
-        calls.append(dict(kwargs))
-        if len(calls) == 1:
-            return json.dumps(
-                AgentStep(
-                    action=AgentAction.RUN_SHELL,
-                    command="echo hi",
-                ).model_dump(mode="json")
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.RUN_SHELL,
-                command="echo hi",
-                model="gpt-5.4-mini",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.5",
-        llm_call=tracking_llm,
-        ui=ConversationUI(auto_model_switch=True),
-    )
-    result = loop.run("task")
-    assert any("Routing turn" in e for e in result.context.parse_errors)
-    assert calls[0]["model"] == "gpt-4.1-nano"
-    assert len(calls) >= 2
-
-
-def test_loop_autoswitch_skips_router_on_resume(tmp_path: Path):
-    calls: list[dict] = []
-
-    def tracking_llm(**kwargs):
-        calls.append(dict(kwargs))
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.5",
-        llm_call=tracking_llm,
-        ui=ConversationUI(auto_model_switch=True),
-    )
-    paused = SessionContext(user_task="task", workspace=str(tmp_path))
-    paused.add_turn(
-        TurnRecord(
-            turn=1,
-            step=AgentStep(action=AgentAction.RUN_SHELL, command="echo x"),
-        )
-    )
-    loop.run("task", context=paused)
-    assert calls[0]["model"] == "gpt-5.5"
-
-
-def test_loop_pending_model_applied_on_next_call(tmp_path: Path):
-    calls: list[dict] = []
-
-    def tracking_llm(**kwargs):
-        calls.append(dict(kwargs))
-        if len(calls) == 1:
-            return json.dumps(
-                AgentStep(
-                    action=AgentAction.SWITCH_MODEL,
-                    model="gpt-5.4-mini",
-                ).model_dump(mode="json")
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.4-nano",
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=tracking_llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert len(calls) == 2
-    assert calls[0]["model"] == "gpt-4.1-nano"
-    assert calls[1]["model"] == "gpt-5.4-mini"
-    assert loop.session_model == "gpt-5.4-mini"
-
-
 def test_loop_stops_after_repeated_failed_shell(tmp_path: Path):
     cmd = "false"
     llm = _llm_responses(
@@ -612,37 +438,6 @@ def test_loop_stops_after_repeated_failed_shell(tmp_path: Path):
     assert result.outcome == LoopOutcome.FAILED
     assert "repeatedly" in result.message.lower()
     assert len(result.context.turns) == 2
-
-
-def test_loop_invalid_model_parse_error_then_recovery(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "switch_model",
-                    "model": "not-a-real-model",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="ok",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("Unknown model" in e for e in result.context.parse_errors)
 
 
 def test_loop_switch_tools_enables_hosted_tools(tmp_path: Path):
@@ -678,69 +473,6 @@ def test_loop_switch_tools_enables_hosted_tools(tmp_path: Path):
     assert "tools" not in calls[0]
     assert calls[1]["tools"] == ["web_search"]
     assert result.context.active_hosted_tools == ["web_search"]
-
-
-def test_loop_switch_tools_rejects_reasoning_on_same_turn(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "switch_tools",
-                    "tools": ["web_search"],
-                    "reasoning_effort": "high",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=llm,
-    )
-    result = loop.run("weather in London")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("reasoning_effort on switch_tools" in e for e in result.context.parse_errors)
-
-
-def test_loop_switch_tools_rejects_model_on_same_turn(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "switch_tools",
-                    "tools": ["web_search"],
-                    "model": "gpt-5.4-mini",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        llm_call=llm,
-    )
-    result = loop.run("weather in London")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("switch_tools" in e and "model" in e for e in result.context.parse_errors)
 
 
 def test_loop_switch_tools_rejects_web_search_on_gpt41_nano(tmp_path: Path):
@@ -780,39 +512,6 @@ def test_loop_switch_tools_rejects_web_search_on_gpt41_nano(tmp_path: Path):
     assert "tools" not in llm_calls[0]
     assert "tools" not in llm_calls[1]
     assert result.context.active_hosted_tools == []
-
-
-def test_loop_reasoning_effort_rejected_for_non_reasoning_model(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "task_complete",
-                    "message": "ok",
-                    "reasoning_effort": "high",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="ok",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-4.1-nano",
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("does not support" in e for e in result.context.parse_errors)
 
 
 def test_loop_stop_requested_before_tool_still_runs_planned_command(tmp_path: Path):
@@ -916,71 +615,6 @@ def test_loop_resume_after_stop_continues_from_existing_context(tmp_path: Path):
     assert second.message == "resumed"
     assert calls["n"] == 2
     assert len(second.context.turns) == 2
-
-
-def test_loop_rejects_model_when_autoswitch_off(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "run_shell",
-                    "command": "echo hi",
-                    "model": "gpt-5.4-mini",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        ui=ConversationUI(auto_model_switch=False),
-        llm_call=llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("automatic model switching is off" in e for e in result.context.parse_errors)
-
-
-def test_loop_rejects_reasoning_effort_when_autoswitch_off(tmp_path: Path):
-    calls = {"n": 0}
-
-    def llm(**_kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:
-            return json.dumps(
-                {
-                    "action": "task_complete",
-                    "message": "ok",
-                    "reasoning_effort": "high",
-                }
-            )
-        return json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="ok",
-            ).model_dump(mode="json")
-        )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        model="gpt-5.4-mini",
-        ui=ConversationUI(auto_model_switch=False),
-        llm_call=llm,
-    )
-    result = loop.run("task")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert any("reasoning_effort" in e and "automatic model switching is off" in e for e in result.context.parse_errors)
 
 
 # ---------------------------------------------------------------------------
@@ -1139,49 +773,6 @@ def test_response_chain_disabled_uses_full_prompt_each_turn(
     for call in calls:
         assert "previous_response_id" not in call
         assert "## User task" in call["input"]
-
-
-def test_response_chain_resets_on_switch_model(tmp_path: Path, monkeypatch):
-    """Switching the model invalidates the server-side chain."""
-    calls: list[dict] = []
-    payloads = [
-        json.dumps(
-            AgentStep(
-                action=AgentAction.SWITCH_MODEL,
-                model="gpt-5.4-mini",
-            ).model_dump(mode="json")
-        ),
-        json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="done",
-            ).model_dump(mode="json")
-        ),
-    ]
-
-    def fake_with_id(**kwargs):
-        calls.append(dict(kwargs))
-        return payloads[len(calls) - 1], f"resp_{len(calls) - 1}", None
-
-    monkeypatch.setattr(
-        "agent.loop.complete_structured_with_id", fake_with_id
-    )
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        ui=ConversationUI(auto_model_switch=True),
-        response_chain_enabled=True,
-    )
-    result = loop.run("plan")
-    assert result.outcome == LoopOutcome.TASK_COMPLETE
-    assert len(calls) == 2
-    # Second call after switch_model must NOT carry previous_response_id and
-    # must re-send the full prompt.
-    second = calls[1]
-    assert "previous_response_id" not in second
-    assert "## User task" in second["input"]
 
 
 def test_llm_stream_updates_thinking_label(tmp_path: Path, monkeypatch):
@@ -1354,42 +945,6 @@ def test_verify_gate_disabled_via_env(tmp_path: Path, monkeypatch):
     result = loop.run("update z")
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     get_settings.cache_clear()
-
-
-def test_complex_task_router_uses_capable_model(tmp_path: Path):
-    captured: list[str] = []
-
-    payloads = [
-        json.dumps(
-            AgentStep(
-                action=AgentAction.SWITCH_MODEL,
-                model="gpt-5.4-mini",
-            ).model_dump(mode="json")
-        ),
-        json.dumps(
-            AgentStep(
-                action=AgentAction.TASK_COMPLETE,
-                message="routed",
-            ).model_dump(mode="json")
-        ),
-    ]
-    index = {"i": 0}
-
-    def fake_llm2(**kwargs):
-        captured.append(kwargs["model"])
-        i = index["i"]
-        index["i"] += 1
-        return payloads[i]
-
-    loop = AgentLoop(
-        workspace=tmp_path,
-        max_turns=5,
-        allowed_models=_ALLOWED,
-        ui=ConversationUI(auto_model_switch=True),
-        llm_call=fake_llm2,
-    )
-    loop.run("refactor the entire codebase architecture")
-    assert captured[0] == "gpt-5.4-mini"
 
 
 def test_remember_appends_working_memory(tmp_path: Path):

@@ -19,12 +19,8 @@ def test_format_startup_includes_version_model_and_description():
     assert DESCRIPTION in text
 
 
-def test_format_startup_omits_routing_when_autoswitch_on():
-    text = format_startup(
-        model="gpt-5.4-nano",
-        auto_model_switch=True,
-        reasoning_effort="low",
-    )
+def test_format_startup_renders_reasoning_effort_when_provided():
+    text = format_startup(model="gpt-5.4-nano", reasoning_effort="low")
     assert "Routing" not in text
     assert "/autoswitch" not in text
     assert "/model" not in text

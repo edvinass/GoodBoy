@@ -536,19 +536,6 @@ def test_default_print_agent_step_surfaces_switch_tools_notice(capsys):
     assert "Enable hosted" not in captured.out
 
 
-def test_default_print_agent_step_surfaces_switch_model_notice(capsys):
-    ui = ConversationUI()
-    ui.print_agent_step(
-        AgentStep(
-            action=AgentAction.SWITCH_MODEL,
-            model="gpt-5.5",
-        ),
-    )
-    captured = capsys.readouterr()
-    assert "gpt-5.5" in captured.err
-    assert "Model set to" in captured.err
-
-
 def test_follow_print_agent_step_shows_thought(capsys):
     ui = ConversationUI(show_thoughts=True)
     ui.print_agent_step(

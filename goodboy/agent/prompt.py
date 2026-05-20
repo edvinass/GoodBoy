@@ -5,8 +5,6 @@ from __future__ import annotations
 from agent.models import (
     format_cost_policy_section,
     format_hosted_tools_reference,
-    format_models_section,
-    format_reasoning_section,
 )
 from agent.registry import DEFAULT_TOOLS, format_tools_section
 from agent.types import AgentStep
@@ -72,28 +70,6 @@ _HARNESS_RULES = """## Harness rules (strict)
 
 ## Routing fields (each turn)
 
-- **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | update_plan | remember | switch_model | switch_tools | need_user_input | task_complete | failed.
-- **status** (required on every turn except task_complete/failed): short user-facing progress line (5–72 chars), present participle, no trailing ellipsis. Emit **first** in JSON so the UI can show it while the rest streams. Examples: "Inspecting project structure", "Searching for relevant files", "Implementing authentication flow", "Running tests".
-- **model**: optional on any action except switch_tools (next LLM call); required for switch_model.
-- **tools**: required for switch_tools (hosted tool IDs for next call).
-- **reasoning_effort**: optional on any action except switch_tools (next call only).
-- **plan_items**: required for update_plan (`id`, `text`, `status`).
-- **memory**: required for remember (list of strings).
-- **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
-"""
-
-_HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
-
-1. One JSON object per turn. No markdown fences or prose outside JSON.
-2. Small verifiable steps; read tool output before task_complete.
-3. **need_user_input** only when required info is missing (which file, which API). Never use it for permission — if the user said proceed/yes/go ahead, continue.
-4. Never re-ask the same question after a user clarification.
-5. **task_complete** only when the request is fully satisfied (or analysis-only task is done).
-6. **failed** when you cannot continue safely.
-7. `message` is user-facing: clear, professional, with concrete results when asked. No emojis or prose in `command`/`code`.
-
-## Routing fields (each turn)
-
 - **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | update_plan | remember | switch_tools | need_user_input | task_complete | failed.
 - **status** (required on every turn except task_complete/failed): short user-facing progress line (5–72 chars), present participle, no trailing ellipsis. Emit **first** in JSON so the UI can show it while the rest streams. Examples: "Inspecting project structure", "Searching for relevant files", "Implementing authentication flow", "Running tests".
 - **tools**: required for switch_tools (hosted tool IDs for next call).
@@ -101,7 +77,7 @@ _HARNESS_RULES_FIXED_SESSION = """## Harness rules (strict)
 - **memory**: required for remember (list of strings).
 - **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
 
-Session **model** and **reasoning_effort** are fixed for this run (user sets them with `/model` and `/reasoning`). Do not set `model` or `reasoning_effort` in JSON."""
+Session **model** and **reasoning_effort** are fixed for this run (user sets them with `/model` and `/reasoning`)."""
 
 _BASE_RULES = "\n\n".join(
     [
@@ -115,45 +91,17 @@ _BASE_RULES = "\n\n".join(
 )
 
 
-def format_configuration_guide_section(*, auto_model_switch: bool = False) -> str:
-    """Step-by-step instructions for API, model, reasoning, and tool changes."""
-    if not auto_model_switch:
-        return """## Configuration (hosted tools only)
+def format_configuration_guide_section() -> str:
+    """Hosted-tool-only configuration guide; model and reasoning are session-fixed."""
+    return """## Configuration (hosted tools only)
 
-Automatic model switching is **off**. Session model and reasoning effort are fixed — the user changes them with `/model` and `/reasoning`. Do not set `model` or `reasoning_effort` in JSON.
+Session model and reasoning effort are fixed — the user changes them with `/model` and `/reasoning`.
 
 **switch_tools** enables hosted OpenAI tools for subsequent LLM calls:
 `{"action": "switch_tools", "tools": ["web_search"]}`
 Don't re-call if already active. Check **Active API** in the user message after switch_tools.
 
 If the current session model lacks a hosted tool, use **need_user_input** and ask the user to run `/model` with a model that supports the tool."""
-    return """## Configuration guide (model, reasoning, hosted tools)
-
-**switch_tools** is a routing action. **model** and **reasoning_effort** are optional fields on any other action (including **switch_model** for a model-only turn) and configure the **next** LLM call only. Never set model or reasoning_effort on switch_tools.
-
-Defaults at task start: hosted tools off (only run_shell/run_python); model = session default; reasoning_effort omitted. Check **Active API** in the user message after switch_tools.
-
-### 1. Enable hosted tools (switch_tools)
-`{"action": "switch_tools", "tools": ["web_search"]}`
-Don't re-call if already active. Don't task_complete claiming you lack live data — switch tools first.
-
-### 2. Change model (and/or reasoning_effort)
-Set `model` (and optional `reasoning_effort`) on any action except switch_tools:
-`{"action": "run_shell", "command": "pytest -q", "model": "gpt-5.4-mini", "reasoning_effort": "medium"}`
-Model-only step: `{"action": "switch_model", "model": "gpt-5.4-mini"}`.
-Model must be in the allowlist and support every Active API tool. If switch_tools failed because the current model lacks a tool, set `model` on the next turn — do not repeat switch_tools.
-
-### 3. reasoning_effort
-Valid only on reasoning models (gpt-5.x etc.); omit on gpt-4.1-* general models (harness will error). Escalate one level at a time; prefer none/low unless stuck.
-
-### 4. Multiple config changes → separate turns
-Never combine switch_tools with model or reasoning_effort in the same JSON object.
-
-### Common mistakes
-- task_complete saying you cannot browse the web — switch_tools + web_search first.
-- Using switch_model when you could set `model` on run_shell and run a command the same turn.
-- Setting model/reasoning_effort on switch_tools, or re-running switch_tools when already Active.
-- Expecting run_shell to search the web."""
 
 
 def format_user_visibility_section(
@@ -184,46 +132,25 @@ SYSTEM_PROMPT = _BASE_RULES
 _JSON_SCHEMA = AgentStep.model_json_schema()
 
 
-def _base_rules_section(*, auto_model_switch: bool) -> str:
-    harness = _HARNESS_RULES if auto_model_switch else _HARNESS_RULES_FIXED_SESSION
-    return "\n\n".join(
-        [
-            _CODING_AGENT_IDENTITY,
-            _CORE_OBJECTIVE,
-            _CODING_METHODOLOGY,
-            _AVAILABLE_TOOLS,
-            _COMPLEX_TASKS,
-            harness,
-        ]
-    )
-
-
 def build_stable_system_prompt(
     *,
-    allowed_models: list[str],
+    allowed_models: list[str] | None = None,
     tools: tuple | None = None,
-    auto_model_switch: bool = False,
 ) -> str:
     """Cache-friendly instructions: stable across visibility toggles.
 
     Put session-varying text (user visibility) in ``build_session_prompt_suffix``
     so toggling ``/commands`` or ``-f`` does not bust the cached prefix.
     """
+    del allowed_models  # kept for backward-compat with callers
     tool_specs = tools if tools is not None else DEFAULT_TOOLS
     sections = [
-        _base_rules_section(auto_model_switch=auto_model_switch),
-        format_configuration_guide_section(auto_model_switch=auto_model_switch),
+        _BASE_RULES,
+        format_configuration_guide_section(),
         format_hosted_tools_reference(),
-        format_cost_policy_section(auto_model_switch=auto_model_switch),
+        format_cost_policy_section(),
+        format_tools_section(tool_specs),
     ]
-    if auto_model_switch:
-        sections.extend(
-            [
-                format_models_section(allowed_models),
-                format_reasoning_section(),
-            ]
-        )
-    sections.append(format_tools_section(tool_specs))
     return "\n\n".join(sections)
 
 
@@ -243,18 +170,16 @@ def build_session_prompt_suffix(
 
 def build_system_prompt(
     *,
-    allowed_models: list[str],
+    allowed_models: list[str] | None = None,
     tools: tuple | None = None,
     debug: bool = False,
     show_thoughts: bool = True,
     show_commands: bool = False,
-    auto_model_switch: bool = False,
 ) -> str:
     """Compose full system prompt (stable core + session suffix)."""
     stable = build_stable_system_prompt(
         allowed_models=allowed_models,
         tools=tools,
-        auto_model_switch=auto_model_switch,
     )
     suffix = build_session_prompt_suffix(
         debug=debug,

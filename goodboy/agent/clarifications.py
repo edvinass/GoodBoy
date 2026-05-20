@@ -162,8 +162,6 @@ def build_stopped_message(*, turns: list) -> str:
         summary = step.thought.strip()
     elif step.message and step.message.strip():
         summary = step.message.strip()
-    elif step.action == AgentAction.SWITCH_MODEL and step.model:
-        summary = f"Model set to {step.model} for the next turn."
     elif step.action in _SWITCH_TOOLS_ACTIONS and step.tools:
         summary = f"Hosted tools enabled: {', '.join(step.tools)}."
 

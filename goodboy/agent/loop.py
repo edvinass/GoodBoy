@@ -27,18 +27,13 @@ from agent.context import (
     should_print_plan_progress,
 )
 from agent.models import (
-    cheapest_capable_model,
-    cheapest_model_with_tools,
     model_supports_openai_tool,
     resolve_reasoning_effort,
-    validate_reasoning_effort_for_model,
 )
 from agent.file_tools import apply_patch, read_file, str_replace
 from agent.prompt import build_session_prompt_suffix, build_stable_system_prompt
-from agent.routing import should_skip_routing_turn
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.task_policy import (
-    is_complex_task,
     is_edit_action,
     is_verification_command,
     plan_blocks_edit,
@@ -143,8 +138,6 @@ class AgentLoop:
         self._allowed_models = allowed_models or get_selectable_models(
             api_key=cfg.openai_api_key
         )
-        self._pending_model: str | None = None
-        self._pending_reasoning: str | None = None
         self._hosted_tools: tuple[str, ...] = ()
         # Custom llm_call hooks (tests, mocks) bypass response chaining; only
         # the production path through complete_structured_with_id can chain.
@@ -165,13 +158,7 @@ class AgentLoop:
         self._instructions = self._compose_instructions()
 
     def _build_stable_instructions(self) -> str:
-        ui = self._ui
-        return build_stable_system_prompt(
-            allowed_models=self._allowed_models,
-            auto_model_switch=(
-                ui.auto_model_switch if ui is not None else False
-            ),
-        )
+        return build_stable_system_prompt(allowed_models=self._allowed_models)
 
     def _build_session_suffix(self) -> str:
         ui = self._ui
@@ -186,21 +173,8 @@ class AgentLoop:
     def _compose_instructions(self) -> str:
         return f"{self._stable_instructions}\n\n{self._session_suffix}"
 
-    def refresh_system_prompt(self, *, rebuild_stable: bool = False) -> None:
-        """Rebuild instructions after runtime UI toggles.
-
-        By default only the session suffix (visibility) is refreshed so
-        ``/commands`` does not bust the cached stable prefix. Pass
-        ``rebuild_stable=True`` after ``/autoswitch``.
-        """
-        if rebuild_stable:
-            ui = self._ui
-            self._stable_instructions = build_stable_system_prompt(
-                allowed_models=self._allowed_models,
-                auto_model_switch=(
-                    ui.auto_model_switch if ui is not None else False
-                ),
-            )
+    def refresh_system_prompt(self) -> None:
+        """Rebuild instructions after runtime UI toggles."""
         self._session_suffix = self._build_session_suffix()
         self._instructions = self._compose_instructions()
 
@@ -237,7 +211,6 @@ class AgentLoop:
             clear_runner_cache()
         self._default_model = model
         self._allowed_models = self._models_for_session()
-        self._pending_model = None
         self._hosted_tools = ()
         self._reset_response_chain()
         self.recent_full_turns = self._window_for_model(model)
@@ -260,7 +233,6 @@ class AgentLoop:
         if effort is not None and effort not in REASONING_EFFORT:
             raise ValueError(f"Unknown reasoning effort: {effort}")
         self._default_reasoning = effort
-        self._pending_reasoning = None
 
     def run(
         self,
@@ -303,7 +275,6 @@ class AgentLoop:
             )
         json_schema = AgentStep.model_json_schema()
         consecutive_parse_failures = 0
-        fresh_task = len(ctx.turns) == 0
 
         def finish(result: LoopResult) -> LoopResult:
             if session_log is not None:
@@ -327,28 +298,13 @@ class AgentLoop:
             )
 
         for turn in range(1, self.max_turns + 1):
-            routing_turn = (
-                fresh_task
-                and self._auto_model_switch_enabled()
-                and turn == 1
-                and self._pending_model is None
-                and not is_local_model(self._default_model)
-                and not should_skip_routing_turn(ctx.user_task)
-            )
-            if routing_turn:
-                call_model = self._router_model(ctx.user_task)
-            else:
-                call_model = self._pending_model or self._default_model
-            effort = self._pending_reasoning
-            if effort is None:
-                effort = self._default_reasoning
+            call_model = self._default_model
+            effort = self._default_reasoning
             local_call = is_local_model(call_model)
             if local_call:
                 call_reasoning = None
             else:
                 call_reasoning = resolve_reasoning_effort(call_model, effort)
-            self._pending_model = None
-            self._pending_reasoning = None
 
             input_text, prev_id = self._build_llm_input(ctx)
             llm_kwargs = {
@@ -427,57 +383,23 @@ class AgentLoop:
                     )
                 continue
 
-            routing_err = self._validate_routing(step, call_model)
-            if routing_err:
-                ctx.add_parse_error(routing_err)
+            action_err = self._validate_action(step, call_model)
+            if action_err:
+                ctx.add_parse_error(action_err)
                 if session_log is not None:
-                    session_log.event("parse_error", turn=turn, error=routing_err)
+                    session_log.event("parse_error", turn=turn, error=action_err)
                 consecutive_parse_failures += 1
                 if consecutive_parse_failures >= 2:
                     return finish(
                         LoopResult(
                             outcome=LoopOutcome.FAILED,
-                            message=routing_err,
+                            message=action_err,
                             context=ctx,
                         )
                     )
                 continue
 
             consecutive_parse_failures = 0
-            self._apply_pending_routing(step)
-            if (
-                routing_turn
-                and is_complex_task(ctx.user_task)
-                and step.reasoning_effort is None
-                and self._pending_reasoning is None
-            ):
-                self._pending_reasoning = "medium"
-
-            routing_err = self._routing_turn_model_required(
-                routing_turn, step, ctx.user_task
-            )
-            if routing_err:
-                ctx.add_parse_error(routing_err)
-                if session_log is not None:
-                    session_log.event("parse_error", turn=turn, error=routing_err)
-                consecutive_parse_failures += 1
-                if consecutive_parse_failures >= 2:
-                    return finish(
-                        LoopResult(
-                            outcome=LoopOutcome.FAILED,
-                            message=routing_err,
-                            context=ctx,
-                        )
-                    )
-                ctx.add_turn(
-                    TurnRecord(
-                        turn=turn,
-                        step=step,
-                        call_model=call_model,
-                        call_reasoning_effort=call_reasoning,
-                    )
-                )
-                continue
 
             if session_log is not None:
                 session_log.log_agent_step(turn=turn, step=step)
@@ -487,27 +409,8 @@ class AgentLoop:
                     step,
                     model=call_model,
                     reasoning=call_reasoning,
-                    next_model=self._pending_model,
-                    next_reasoning=self._pending_reasoning,
                     hosted_tools=list(self._hosted_tools) or None,
                 )
-
-            if step.action == AgentAction.SWITCH_MODEL:
-                # The chain is bound to the prior model; switching invalidates
-                # the server-side conversation state.
-                self._reset_response_chain()
-                ctx.add_turn(
-                    TurnRecord(
-                        turn=turn,
-                        step=step,
-                        call_model=call_model,
-                        call_reasoning_effort=call_reasoning,
-                    )
-                )
-                stopped = stop_after_current_step()
-                if stopped is not None:
-                    return stopped
-                continue
 
             if step.action in _SWITCH_TOOLS_ACTIONS:
                 tools_err = self._apply_switch_tools(step, call_model)
@@ -1015,67 +918,9 @@ class AgentLoop:
             llm_kwargs["input"] = ctx.to_prompt()
             return _call_through_ui()
 
-    def _auto_model_switch_enabled(self) -> bool:
-        if is_local_model(self._default_model):
-            return False
-        return self._ui.auto_model_switch if self._ui is not None else False
-
-    def _router_model(self, task: str) -> str:
-        from agent.task_policy import complex_task_router_model
-
-        if is_complex_task(task):
-            picked = complex_task_router_model(
-                self._allowed_models, self._hosted_tools
-            )
-            if picked:
-                return picked
-        return (
-            cheapest_capable_model(self._allowed_models) or self._default_model
-        )
-
-    def _routing_turn_model_required(
-        self, routing_turn: bool, step: AgentStep, task: str
-    ) -> str | None:
-        if not routing_turn:
-            return None
-        if step.action in (AgentAction.TASK_COMPLETE, AgentAction.FAILED):
-            return None
-        if step.action == AgentAction.SWITCH_MODEL:
-            return None
-        if self._pending_model is not None:
-            return None
-        base = (
-            "Routing turn (automatic model switching): set **model** on this "
-            "action (or use switch_model) so the next LLM call uses an "
-            "appropriate model from the allowlist."
-        )
-        if is_complex_task(task):
-            return (
-                f"{base} For complex tasks prefer gpt-5.4-mini (or similar) with "
-                "reasoning_effort medium on turn 2+."
-            )
-        return base
-
-    def _validate_routing(self, step: AgentStep, call_model: str) -> str | None:
+    def _validate_action(self, step: AgentStep, call_model: str) -> str | None:
         if not is_valid_action(step.action):
             return f"Invalid action '{step.action.value}'."
-
-        if not self._auto_model_switch_enabled():
-            if step.action == AgentAction.SWITCH_MODEL:
-                return (
-                    "switch_model is disabled while automatic model switching is off. "
-                    "The user sets the session model with /model."
-                )
-            if step.model is not None:
-                return (
-                    "Do not set model in JSON while automatic model switching is off. "
-                    "The user sets the session model with /model."
-                )
-            if step.reasoning_effort is not None:
-                return (
-                    "Do not set reasoning_effort in JSON while automatic model "
-                    "switching is off. The user sets default reasoning with /reasoning."
-                )
 
         if step.action in _SWITCH_TOOLS_ACTIONS:
             if is_local_model(call_model):
@@ -1083,77 +928,17 @@ class AgentLoop:
                     "switch_tools is not available with local models. "
                     "Use run_shell with rg/grep for codebase search."
                 )
-            if step.model is not None:
-                return (
-                    "Do not set model on switch_tools. Set model on the next "
-                    "run_shell, run_python, switch_model, or terminal action."
-                )
-            if step.reasoning_effort is not None:
-                return (
-                    "Do not set reasoning_effort on switch_tools. Set "
-                    "reasoning_effort on a later turn (optionally with model)."
-                )
-
-        if step.model is not None:
-            if step.model not in self._allowed_models:
-                allowed = ", ".join(self._allowed_models[:8])
-                suffix = "..." if len(self._allowed_models) > 8 else ""
-                return (
-                    f"Unknown model '{step.model}'. "
-                    f"Pick from allowlist: {allowed}{suffix}"
-                )
-            for tool in self._hosted_tools:
-                if not model_supports_openai_tool(step.model, tool):
-                    return (
-                        f"Model '{step.model}' does not support hosted tool "
-                        f"'{tool}' required by Active API."
-                    )
-
-        if step.reasoning_effort is not None:
-            next_model = step.model or self._pending_model or call_model
-            err = validate_reasoning_effort_for_model(
-                next_model, step.reasoning_effort
-            )
-            if err:
-                return err
 
         return None
-
-    def _apply_pending_routing(self, step: AgentStep) -> None:
-        if not self._auto_model_switch_enabled():
-            return
-        if step.model is not None:
-            if step.model != self._default_model:
-                # New model means a new chain on the server side.
-                self._reset_response_chain()
-            self._pending_model = step.model
-            self._default_model = step.model
-            if self._ui is not None:
-                self._ui.set_session_model(step.model)
-        if step.reasoning_effort is not None:
-            self._pending_reasoning = step.reasoning_effort
 
     def _apply_switch_tools(self, step: AgentStep, call_model: str) -> str | None:
         tools = step.tools or []
         for tool in tools:
             if not model_supports_openai_tool(call_model, tool):
-                suggestion = cheapest_model_with_tools(self._allowed_models, tools)
-                if suggestion:
-                    if self._auto_model_switch_enabled():
-                        return (
-                            f"Model '{call_model}' does not support hosted tool '{tool}'. "
-                            f"On your next turn, set model to '{suggestion}' "
-                            "(run_shell/switch_model; do not call switch_tools again) "
-                            "and continue the task."
-                        )
-                    return (
-                        f"Model '{call_model}' does not support hosted tool '{tool}'. "
-                        f"Use need_user_input and ask the user to run /model and choose "
-                        f"'{suggestion}', then continue the task."
-                    )
                 return (
-                    f"Model '{call_model}' does not support hosted tool '{tool}' and "
-                    "no allowlisted model supports it."
+                    f"Model '{call_model}' does not support hosted tool '{tool}'. "
+                    f"Use need_user_input and ask the user to run /model and choose "
+                    "a model that supports the tool, then continue the task."
                 )
 
         self._hosted_tools = tuple(tools)

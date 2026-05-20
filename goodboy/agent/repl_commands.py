@@ -51,11 +51,6 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         ("cmds", "show-commands"),
     ),
     ReplCommand(
-        "autoswitch",
-        "Toggle automatic model switching",
-        ("auto",),
-    ),
-    ReplCommand(
         "stream",
         "Toggle streaming model output as it is generated",
         ("streaming",),
@@ -121,12 +116,6 @@ COMMANDS_COMMAND_NAMES = frozenset(
     if command.name == "commands"
     for name in (command.name, *command.aliases)
 )
-AUTOSWITCH_COMMAND_NAMES = frozenset(
-    name
-    for command in REPL_COMMANDS
-    if command.name == "autoswitch"
-    for name in (command.name, *command.aliases)
-)
 STREAM_COMMAND_NAMES = frozenset(
     name
     for command in REPL_COMMANDS
@@ -142,7 +131,6 @@ SETUP_COMMAND_NAMES = frozenset(
 
 _TOGGLE_COMMAND_STATE: dict[str, str] = {
     "commands": "show_commands",
-    "autoswitch": "auto_model_switch",
     "stream": "stream_output",
 }
 
@@ -177,7 +165,6 @@ def slash_command_display_meta(
     command: ReplCommand,
     *,
     show_commands: bool = False,
-    auto_model_switch: bool = False,
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
@@ -186,18 +173,10 @@ def slash_command_display_meta(
     """Completion description; toggle commands include current on/off (default off)."""
     if command.name == "reasoning":
         current = default_reasoning_effort or "not set"
-        if auto_model_switch:
-            return f"{command.description} (current: {current})"
-        return (
-            f"{command.description} (session: {current}; agent cannot change per turn)"
-        )
+        return f"{command.description} (session: {current})"
     if command.name == "model":
         current = session_model or "not set"
-        if auto_model_switch:
-            return f"{command.description} (current: {current})"
-        return (
-            f"{command.description} (session: {current}; agent cannot change per turn)"
-        )
+        return f"{command.description} (session: {current})"
     if command.name == "plan":
         current = (plan_mode or "auto").strip().lower() or "auto"
         return f"{command.description} (current: {current})"
@@ -206,7 +185,6 @@ def slash_command_display_meta(
         return command.description
     toggle_state = {
         "show_commands": show_commands,
-        "auto_model_switch": auto_model_switch,
         "stream_output": stream_output,
     }
     enabled = toggle_state[state_key]
@@ -228,7 +206,6 @@ def active_slash_command_query(text_before_cursor: str) -> tuple[str, int] | Non
 def format_help_text(
     *,
     show_commands: bool = False,
-    auto_model_switch: bool = False,
     stream_output: bool = False,
     session_model: str | None = None,
     default_reasoning_effort: str | None = None,
@@ -241,7 +218,6 @@ def format_help_text(
         meta = slash_command_display_meta(
             command,
             show_commands=show_commands,
-            auto_model_switch=auto_model_switch,
             stream_output=stream_output,
             session_model=session_model,
             default_reasoning_effort=default_reasoning_effort,

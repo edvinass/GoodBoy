@@ -24,7 +24,6 @@ GOODBOY_SESSION_LOG_VAR = "GOODBOY_SESSION_LOG"
 GOODBOY_SSL_CA_BUNDLE_VAR = "GOODBOY_SSL_CA_BUNDLE"
 GOODBOY_SSL_VERIFY_VAR = "GOODBOY_SSL_VERIFY"
 GOODBOY_SHOW_COMMANDS_VAR = "GOODBOY_SHOW_COMMANDS"
-GOODBOY_AUTO_MODEL_SWITCH_VAR = "GOODBOY_AUTO_MODEL_SWITCH"
 GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
 GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR = "GOODBOY_CONTEXT_RECENT_FULL_TURNS"
 GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR = "GOODBOY_LOCAL_RECENT_FULL_TURNS"
@@ -150,7 +149,6 @@ class Settings:
     ssl_ca_bundle: str | None = None
     ssl_verify: bool = True
     show_commands: bool = False
-    auto_model_switch: bool = False
     default_reasoning_effort: str | None = None
     context_recent_full_turns: int = DEFAULT_CONTEXT_RECENT_FULL_TURNS
     local_recent_full_turns: int = DEFAULT_LOCAL_RECENT_FULL_TURNS
@@ -197,7 +195,6 @@ class Settings:
             ssl_ca_bundle=ssl_ca_bundle,
             ssl_verify=_env_bool(GOODBOY_SSL_VERIFY_VAR, True),
             show_commands=_env_bool(GOODBOY_SHOW_COMMANDS_VAR, False),
-            auto_model_switch=_env_bool(GOODBOY_AUTO_MODEL_SWITCH_VAR, False),
             default_reasoning_effort=default_reasoning,
             context_recent_full_turns=max(
                 1,

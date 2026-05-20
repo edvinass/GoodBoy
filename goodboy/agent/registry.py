@@ -18,7 +18,6 @@ HARNESS_ACTIONS = frozenset(
 )
 ROUTING_ACTIONS = frozenset(
     {
-        AgentAction.SWITCH_MODEL,
         AgentAction.SWITCH_TOOLS,
         AgentAction.SWITCH_API,
     }
