@@ -958,13 +958,28 @@ class AgentLoop:
                 buffer.append(delta)
                 if show_stream:
                     self._ui.write_model_stream_delta(delta)
+                    return
                 status = extract_streaming_status("".join(buffer))
                 if status and thinking_holder:
                     thinking_holder[0].update(status)
 
+            # Rich's Live spinner (used by `thinking`) and direct stderr writes
+            # from streaming both move the shared terminal cursor. Running both
+            # concurrently makes the spinner's "move up + erase" passes wipe
+            # parts of the streamed text. When `stream_output` is on the
+            # streamed text is the progress indicator, so skip the spinner.
             if show_stream:
                 self._ui.begin_model_stream(turn=turn)
-            try:
+                try:
+                    with self._ui.escape_stop_listener():
+                        raw_text, rid, usage = self._do_llm_call(
+                            llm_kwargs,
+                            stream=True,
+                            on_text_delta=_on_text_delta,
+                        )
+                finally:
+                    self._ui.end_model_stream()
+            else:
                 with self._ui.thinking(
                     plan_items=effective_plan_items(ctx)
                 ) as thinking_updater:
@@ -974,9 +989,6 @@ class AgentLoop:
                         stream=True,
                         on_text_delta=_on_text_delta,
                     )
-            finally:
-                if show_stream:
-                    self._ui.end_model_stream()
             self._ui.print_llm_response(
                 turn=turn, raw=raw_text, streamed=show_stream
             )

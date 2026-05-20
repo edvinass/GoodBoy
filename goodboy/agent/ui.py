@@ -979,7 +979,7 @@ class ConversationUI:
         return requested
 
     @contextmanager
-    def _escape_stop_listener(self) -> Iterator[None]:
+    def escape_stop_listener(self) -> Iterator[None]:
         """Listen for Escape while the agent is busy, without aborting the step."""
         if (
             not sys.stdin.isatty()
@@ -1726,7 +1726,7 @@ class ConversationUI:
 
         self._transient_ui = True
         try:
-            with self._escape_stop_listener():
+            with self.escape_stop_listener():
                 with self._console.status(
                     updater._render(),
                     spinner="dots",
