@@ -12,6 +12,12 @@
 
 set -euo pipefail
 
+_update_version() {
+  local ver="$1"
+  sed -i '' "s/^version = \"[^\"]*\"/version = \"$ver\"/" "$GOODBOY_DIR/pyproject.toml"
+  echo "Updated version in pyproject.toml to $ver"
+}
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GOODBOY_DIR="$ROOT/goodboy"
 INSTALL_SH="$ROOT/install.sh"
@@ -46,6 +52,26 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$VERSION" ]]; then
+  # Auto-bump patch version from pyproject.toml
+  current=$(grep -E '^version = ' "$GOODBOY_DIR/pyproject.toml" | sed -E 's/version = "([^"]+)"/\1/')
+  major=$(echo "$current" | cut -d. -f1)
+  minor=$(echo "$current" | cut -d. -f2)
+  patch=$(echo "$current" | cut -d. -f3)
+  # Strip any pre-release suffix
+  patch=$(echo "$patch" | sed 's/[^0-9].*//')
+  new_patch=$((patch + 1))
+  VERSION="${major}.${minor}.${new_patch}"
+fi
+
+echo "Setting version to $VERSION"
+_update_version "$VERSION"
+
+if [[ -d "$GOODBOY_DIR/__pycache__" ]]; then
+  echo "Cleaning __pycache__ before tar"
+  rm -rf "$GOODBOY_DIR/__pycache__"
+fi
 
 if [[ ! -d "$GOODBOY_DIR" ]]; then
   echo "error: missing directory: $GOODBOY_DIR" >&2
@@ -82,7 +108,6 @@ cp -f "$INSTALL_SH" "$WEB_INSTALL_SH"
 echo "Synced install.sh -> web/install.sh"
 
 bytes="$(wc -c <"$OUTPUT" | tr -d ' ')"
-echo "Done: $OUTPUT ($(numfmt --to=iec-i --suffix=B "$bytes" 2>/dev/null || echo "${bytes} bytes"))"
 echo ""
 echo "Commit and redeploy web/ (or push to trigger Railway)."
 echo "Install:"

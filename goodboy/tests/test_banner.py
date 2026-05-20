@@ -1,10 +1,16 @@
 """Tests for startup banner."""
 
+import re
+
 from agent.banner import DESCRIPTION, format_startup, get_version
+from settings import PACKAGE_DIR
 
 
 def test_get_version_matches_pyproject():
-    assert get_version() == "0.1.0"
+    text = (PACKAGE_DIR / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    expected = match.group(1) if match else "unknown"
+    assert get_version() == expected
 
 
 def test_format_startup_includes_version_model_and_description():
