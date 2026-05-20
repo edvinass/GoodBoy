@@ -580,6 +580,52 @@ def test_loop_stop_requested_during_tool_pauses_after_tool_step(tmp_path: Path):
     assert "Paused — say continue when you're ready." in result.message
 
 
+def test_loop_user_abort_during_llm_returns_stopped_immediately(tmp_path: Path):
+    """A UserAbort raised mid-stream must short-circuit to STOPPED, not propagate."""
+    from llm import UserAbort
+
+    def llm(**_kwargs):
+        raise UserAbort()
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("interrupt me")
+
+    assert result.outcome == LoopOutcome.STOPPED
+    assert "Paused" in result.message
+    assert result.context.turns == []
+
+
+def test_loop_abort_after_tool_returns_stopped(tmp_path: Path):
+    """When the UI reports abort after a tool runs, the loop returns STOPPED."""
+    ui = ConversationUI()
+
+    def llm(**_kwargs):
+        ui.request_abort()
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.RUN_SHELL,
+                command="echo hi",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+        ui=ui,
+    )
+    result = loop.run("run something then abort")
+    assert result.outcome == LoopOutcome.STOPPED
+    assert len(result.context.turns) == 1
+    assert result.context.turns[0].tool_result is not None
+
+
 def test_loop_resume_after_stop_continues_from_existing_context(tmp_path: Path):
     calls = {"n": 0}
     stop_checks = iter([True, False])

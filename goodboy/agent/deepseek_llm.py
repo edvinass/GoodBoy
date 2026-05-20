@@ -290,6 +290,7 @@ def complete_structured_deepseek(
     reasoning_effort: str | None = None,
     stream: bool = False,
     on_text_delta: Any | None = None,
+    abort_check: Any | None = None,
 ) -> tuple[str, None, Any]:
     """Structured JSON completion via DeepSeek (returns ``(text, None, usage)``).
 
@@ -313,6 +314,8 @@ def complete_structured_deepseek(
     }
     kwargs.update(_reasoning_kwargs(spec, reasoning_effort))
 
+    from llm import UserAbort
+
     use_stream = bool(stream and on_text_delta is not None)
     try:
         if use_stream:
@@ -323,6 +326,12 @@ def complete_structured_deepseek(
             final_response: Any = None
             response = client.chat.completions.create(**stream_kwargs)
             for event in response:
+                if abort_check is not None and abort_check():
+                    try:
+                        response.close()  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    raise UserAbort()
                 final_response = event
                 choices = getattr(event, "choices", None) or []
                 if not choices:
@@ -338,8 +347,12 @@ def complete_structured_deepseek(
             usage = _extract_token_usage(final_response) if final_response is not None else None
             return text, None, usage
 
+        if abort_check is not None and abort_check():
+            raise UserAbort()
         kwargs["stream"] = False
         response = client.chat.completions.create(**kwargs)
+    except UserAbort:
+        raise
     except APIConnectionError as exc:
         raise click.ClickException(
             format_api_connection_error(exc, provider="DeepSeek")

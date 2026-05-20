@@ -530,7 +530,10 @@ class LocalModelRunner:
         stream: bool = False,
         on_text_delta: StreamTextCallback | None = None,
         grammar: Any | None = None,
+        abort_check: Any | None = None,
     ) -> tuple[str, Any]:
+        from llm import UserAbort
+
         llama = self._ensure_loaded(model_id)
         n_ctx = int(llama.n_ctx())
         max_tokens = _effective_max_tokens(n_ctx, max_tokens)
@@ -546,10 +549,18 @@ class LocalModelRunner:
             kwargs["grammar"] = grammar
 
         try:
+            if abort_check is not None and abort_check():
+                raise UserAbort()
             if stream and on_text_delta is not None:
                 chunks: list[str] = []
                 stream_out = llama.create_chat_completion(stream=True, **kwargs)
                 for part in stream_out:
+                    if abort_check is not None and abort_check():
+                        try:
+                            stream_out.close()  # type: ignore[attr-defined]
+                        except Exception:
+                            pass
+                        raise UserAbort()
                     delta = (
                         part.get("choices", [{}])[0]
                         .get("delta", {})
@@ -562,6 +573,8 @@ class LocalModelRunner:
                 return text, None
 
             response = llama.create_chat_completion(stream=False, **kwargs)
+            if abort_check is not None and abort_check():
+                raise UserAbort()
             text = response["choices"][0]["message"]["content"]
             usage = response.get("usage")
             return text or "", usage
@@ -730,6 +743,7 @@ def complete_structured_local(
     json_schema: dict[str, Any],
     stream: bool = False,
     on_text_delta: StreamTextCallback | None = None,
+    abort_check: Any | None = None,
 ) -> tuple[str, None, Any]:
     """Run structured agent completion on a local GGUF model."""
     require_local_deps()
@@ -745,5 +759,6 @@ def complete_structured_local(
         stream=use_stream,
         on_text_delta=on_text_delta,
         grammar=grammar,
+        abort_check=abort_check,
     )
     return text, None, _usage_from_llama(raw_usage)

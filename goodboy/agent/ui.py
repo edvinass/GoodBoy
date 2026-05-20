@@ -867,9 +867,13 @@ def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
         return Text.from_markup("[user]👤 You[/]")
     title = Text.from_markup("[agent]🐶 GoodBoy[/]")
     if subtitle:
-        icon, label = _SUBTITLE_ICONS.get(subtitle, ("·", subtitle))
-        title.append(f"  [{icon}] ", style="subtitle")
-        title.append(f"({label})", style="subtitle")
+        icon_label = _SUBTITLE_ICONS.get(subtitle)
+        if icon_label is not None:
+            icon, label = icon_label
+            title.append(f"  [{icon}] ", style="subtitle")
+            title.append(f"({label})", style="subtitle")
+        else:
+            title.append(f"  ({subtitle})", style="subtitle")
     return title
 
 
@@ -1014,6 +1018,9 @@ class ConversationUI:
         self._pending_redraw = False
         self._transient_ui = False
         self._stop_requested = False
+        self._abort_event = threading.Event()
+        self._abort_lock = threading.Lock()
+        self._abort_callbacks: list[Any] = []
         _install_resize_poller(self)
 
 
@@ -1026,6 +1033,60 @@ class ConversationUI:
         requested = self._stop_requested
         self._stop_requested = False
         return requested
+
+    def request_abort(self) -> None:
+        """Mark the active task as cancelled and notify subscribers immediately.
+
+        Sets both the abort event (consumed by streaming LLM calls and tool
+        execution so they can stop within milliseconds) and the legacy
+        ``_stop_requested`` flag (consumed by :meth:`consume_stop_requested`
+        after the current step boundary). Registered callbacks fire on the
+        thread that pressed Escape so listeners can close I/O resources
+        without waiting for the next event loop tick.
+        """
+        with self._abort_lock:
+            callbacks = list(self._abort_callbacks)
+            already_set = self._abort_event.is_set()
+        self._abort_event.set()
+        self._stop_requested = True
+        if already_set:
+            return
+        for cb in callbacks:
+            try:
+                cb()
+            except Exception:
+                pass
+
+    def is_abort_requested(self) -> bool:
+        """True when Escape has been pressed since the last clear."""
+        return self._abort_event.is_set()
+
+    def clear_abort_request(self) -> None:
+        """Reset abort state and drop any callbacks; called at task boundaries."""
+        self._abort_event.clear()
+        self._stop_requested = False
+        with self._abort_lock:
+            self._abort_callbacks.clear()
+
+    @contextmanager
+    def on_abort(self, callback) -> Iterator[None]:
+        """Run ``callback`` as soon as Escape is pressed (or immediately if already)."""
+        with self._abort_lock:
+            self._abort_callbacks.append(callback)
+            fire_now = self._abort_event.is_set()
+        if fire_now:
+            try:
+                callback()
+            except Exception:
+                pass
+        try:
+            yield
+        finally:
+            with self._abort_lock:
+                try:
+                    self._abort_callbacks.remove(callback)
+                except ValueError:
+                    pass
 
     @contextmanager
     def escape_stop_listener(self) -> Iterator[None]:
@@ -1061,7 +1122,7 @@ class ConversationUI:
                     # bytes that arrive within a short window and ignore them.
                     if _drain_escape_sequence(fd, stop_event):
                         continue
-                    self.request_stop_after_current_step()
+                    self.request_abort()
                     stop_event.set()
                     return
             except OSError:
@@ -1415,7 +1476,7 @@ class ConversationUI:
         """Clear the on-screen transcript and show the startup banner again."""
         self._history.clear()
         self._pending_redraw = False
-        self._stop_requested = False
+        self.clear_abort_request()
         if self._is_interactive_tty():
             with self._display_lock:
                 self._console.clear()
@@ -1480,7 +1541,7 @@ class ConversationUI:
         self._sync_redraw()
         # Drop any stop flag left over from a prior step's escape listener so
         # it can't abort the next task before it runs.
-        self._stop_requested = False
+        self.clear_abort_request()
         self._at_prompt = True
         try:
             paste_state = _PasteState()

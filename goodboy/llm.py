@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
@@ -10,6 +11,16 @@ from collections.abc import Callable
 from typing import Any
 
 StreamTextCallback = Callable[[str], None]
+AbortCheck = Callable[[], bool]
+
+
+class UserAbort(Exception):
+    """Raised when the user pressed Escape during an LLM call.
+
+    The streaming code closes the underlying HTTP stream as soon as the
+    abort flag flips, then raises this so the agent loop can short-circuit
+    to a STOPPED outcome without waiting for the model to finish.
+    """
 
 
 @dataclass(frozen=True)
@@ -422,17 +433,67 @@ def _complete_structured_stream(
     kwargs: dict[str, Any],
     *,
     on_text_delta: StreamTextCallback,
+    abort_check: AbortCheck | None = None,
 ) -> tuple[str, str | None, TokenUsage | None]:
+    """Stream a structured response; close the stream early if ``abort_check`` flips.
+
+    A small watchdog thread polls ``abort_check`` while the for-loop is
+    blocked waiting on the next server-sent event. When the flag flips it
+    calls ``stream.close()`` which makes the iterator raise; the for-loop
+    surfaces this as :class:`UserAbort` so callers can return immediately
+    instead of waiting for reasoning + output tokens to finish.
+    """
+    aborted = {"flag": False}
+    watchdog_stop = threading.Event()
+
     with client.responses.stream(**kwargs) as stream:
-        for event in stream:
-            if event.type == "response.output_text.delta":
-                on_text_delta(event.delta)
-        final = stream.get_final_response()
-        return (
-            _extract_response_text(final),
-            getattr(final, "id", None),
-            _extract_token_usage(final),
-        )
+        def _watch() -> None:
+            while not watchdog_stop.is_set():
+                if abort_check is not None and abort_check():
+                    aborted["flag"] = True
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                    return
+                if watchdog_stop.wait(timeout=0.05):
+                    return
+
+        watcher: threading.Thread | None = None
+        if abort_check is not None:
+            watcher = threading.Thread(
+                target=_watch,
+                daemon=True,
+                name="goodboy-llm-abort-watch",
+            )
+            watcher.start()
+        try:
+            for event in stream:
+                if aborted["flag"] or (
+                    abort_check is not None and abort_check()
+                ):
+                    aborted["flag"] = True
+                    raise UserAbort()
+                if event.type == "response.output_text.delta":
+                    on_text_delta(event.delta)
+            if aborted["flag"]:
+                raise UserAbort()
+            final = stream.get_final_response()
+            return (
+                _extract_response_text(final),
+                getattr(final, "id", None),
+                _extract_token_usage(final),
+            )
+        except UserAbort:
+            raise
+        except Exception:
+            if aborted["flag"]:
+                raise UserAbort()
+            raise
+        finally:
+            watchdog_stop.set()
+            if watcher is not None:
+                watcher.join(timeout=0.2)
 
 
 def complete_structured(
@@ -446,6 +507,7 @@ def complete_structured(
     stream: bool = False,
     on_text_delta: StreamTextCallback | None = None,
     previous_response_id: str | None = None,
+    abort_check: AbortCheck | None = None,
 ) -> str:
     """Call Responses API with JSON schema output; return assistant text only."""
     text, _, _ = complete_structured_with_id(
@@ -458,6 +520,7 @@ def complete_structured(
         stream=stream,
         on_text_delta=on_text_delta,
         previous_response_id=previous_response_id,
+        abort_check=abort_check,
     )
     return text
 
@@ -473,6 +536,7 @@ def complete_structured_with_id(
     stream: bool = False,
     on_text_delta: StreamTextCallback | None = None,
     previous_response_id: str | None = None,
+    abort_check: AbortCheck | None = None,
 ) -> tuple[str, str | None, TokenUsage | None]:
     """Like complete_structured but also returns the OpenAI response id and usage.
 
@@ -496,6 +560,7 @@ def complete_structured_with_id(
             json_schema=json_schema,
             stream=stream,
             on_text_delta=on_text_delta,
+            abort_check=abort_check,
         )
     if is_deepseek_model(resolved_model):
         from agent.deepseek_llm import complete_structured_deepseek
@@ -508,6 +573,7 @@ def complete_structured_with_id(
             reasoning_effort=reasoning_effort,
             stream=stream,
             on_text_delta=on_text_delta,
+            abort_check=abort_check,
         )
 
     client = get_client()
@@ -532,7 +598,10 @@ def complete_structured_with_id(
         call_kwargs["text"]["format"]["strict"] = strict
         if use_stream:
             return _complete_structured_stream(
-                client, call_kwargs, on_text_delta=on_text_delta
+                client,
+                call_kwargs,
+                on_text_delta=on_text_delta,
+                abort_check=abort_check,
             )
         response = client.responses.create(**call_kwargs)
         return (
@@ -544,10 +613,14 @@ def complete_structured_with_id(
     try:
         try:
             return _call(cfg.strict_json_schema)
+        except UserAbort:
+            raise
         except Exception:
             if not cfg.strict_json_schema:
                 raise
             return _call(False)
+    except UserAbort:
+        raise
     except APIConnectionError as exc:
         raise click.ClickException(format_api_connection_error(exc)) from exc
     except BadRequestError as exc:

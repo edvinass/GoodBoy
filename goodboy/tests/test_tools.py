@@ -83,3 +83,58 @@ def test_truncate_stream_default_uses_head_tail_split():
 def test_truncate_stream_no_change_when_within_budget():
     text = "small output"
     assert _truncate_stream(text, max_bytes=1024) == text
+
+
+def test_run_shell_abort_kills_subprocess_quickly(tmp_path: Path):
+    """abort_check=True should kill a running shell command in well under the timeout."""
+    aborted = {"flag": False}
+
+    def _abort() -> bool:
+        return aborted["flag"]
+
+    import threading
+
+    def _trip_abort_soon() -> None:
+        time.sleep(0.2)
+        aborted["flag"] = True
+
+    threading.Thread(target=_trip_abort_soon, daemon=True).start()
+    start = time.monotonic()
+    result = run_shell("sleep 30", cwd=tmp_path, timeout=10.0, abort_check=_abort)
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 5.0, f"abort_check should preempt long sleep, elapsed={elapsed:.2f}s"
+    assert not result.timed_out
+    assert "Aborted by user." in result.stderr
+
+
+def test_run_python_abort_kills_subprocess_quickly(tmp_path: Path):
+    aborted = {"flag": False}
+
+    def _abort() -> bool:
+        return aborted["flag"]
+
+    import threading
+
+    def _trip_abort_soon() -> None:
+        time.sleep(0.2)
+        aborted["flag"] = True
+
+    threading.Thread(target=_trip_abort_soon, daemon=True).start()
+    start = time.monotonic()
+    result = run_python(
+        "import time; time.sleep(30)",
+        cwd=tmp_path,
+        timeout=10.0,
+        abort_check=_abort,
+    )
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 5.0
+    assert "Aborted by user." in result.stderr
+
+
+def test_run_shell_no_abort_callback_still_works(tmp_path: Path):
+    result = run_shell("echo legacy", cwd=tmp_path, timeout=5.0, abort_check=None)
+    assert result.exit_code == 0
+    assert "legacy" in result.stdout

@@ -769,3 +769,36 @@ def test_clear_session_resets_history_and_startup():
     assert ui.consume_stop_requested() is False
     assert len(ui._history) == 1
     assert ui._history[0][0] == "startup"
+
+
+def test_request_abort_sets_flag_and_fires_callbacks():
+    ui = ConversationUI()
+    fired = []
+
+    with ui.on_abort(lambda: fired.append("closed")):
+        assert ui.is_abort_requested() is False
+        ui.request_abort()
+        assert ui.is_abort_requested() is True
+        # request_abort also marks the legacy stop flag so the loop's
+        # consume_stop_requested still works after the abort path runs.
+        assert ui.consume_stop_requested() is True
+
+    assert fired == ["closed"]
+
+
+def test_on_abort_fires_immediately_when_already_aborted():
+    ui = ConversationUI()
+    ui.request_abort()
+    fired = []
+    with ui.on_abort(lambda: fired.append("late")):
+        pass
+    assert fired == ["late"]
+
+
+def test_clear_abort_request_resets_state():
+    ui = ConversationUI()
+    ui.request_abort()
+    assert ui.is_abort_requested() is True
+    ui.clear_abort_request()
+    assert ui.is_abort_requested() is False
+    assert ui.consume_stop_requested() is False

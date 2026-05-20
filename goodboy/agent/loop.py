@@ -65,6 +65,7 @@ from openai import APIConnectionError
 from llm import (
     REASONING_EFFORT,
     ResponseChainBroken,
+    UserAbort,
     complete_structured,
     complete_structured_with_id,
     format_api_connection_error,
@@ -303,6 +304,15 @@ class AgentLoop:
                 )
             )
 
+        def abort_now() -> LoopResult:
+            return finish(
+                LoopResult(
+                    outcome=LoopOutcome.STOPPED,
+                    message=build_stopped_message(turns=ctx.turns),
+                    context=ctx,
+                )
+            )
+
         for turn in range(1, self.max_turns + 1):
             call_model = self._default_model
             effort = self._default_reasoning
@@ -339,6 +349,10 @@ class AgentLoop:
                 raw, response_id, usage = self._invoke_llm(
                     llm_kwargs, ctx=ctx, turn=turn, session_log=session_log
                 )
+            except UserAbort:
+                if session_log is not None:
+                    session_log.event("user_abort", turn=turn, phase="llm")
+                return abort_now()
             except APIConnectionError as exc:
                 return finish(
                     LoopResult(
@@ -687,6 +701,20 @@ class AgentLoop:
             if session_log is not None and tool_result is not None:
                 session_log.log_tool_result(turn=turn, result=tool_result)
 
+            if tool_result is not None and self._abort_requested():
+                if session_log is not None:
+                    session_log.event("user_abort", turn=turn, phase="tool")
+                ctx.add_turn(
+                    TurnRecord(
+                        turn=turn,
+                        step=step,
+                        tool_result=tool_result,
+                        call_model=call_model,
+                        call_reasoning_effort=call_reasoning,
+                    )
+                )
+                return abort_now()
+
             if tool_result is not None:
                 succeeded = tool_result.exit_code == 0 and not tool_result.timed_out
                 if succeeded and is_edit_action(step.action):
@@ -790,13 +818,43 @@ class AgentLoop:
         # turn's delta only includes items appended after this point.
         self._chain_watermark = ctx.watermark()
 
+    def _abort_requested(self) -> bool:
+        if self._ui is None:
+            return False
+        check = getattr(self._ui, "is_abort_requested", None)
+        if check is None:
+            return False
+        try:
+            return bool(check())
+        except Exception:
+            return False
+
+    def _abort_check(self) -> Callable[[], bool] | None:
+        if self._ui is None:
+            return None
+        check = getattr(self._ui, "is_abort_requested", None)
+        if check is None:
+            return None
+        return check  # type: ignore[return-value]
+
     def _run_harness_tool(self, step: AgentStep) -> ToolResult:
         ws = self.workspace
         timeout = self.tool_timeout
+        abort_check = self._abort_check()
         if step.action == AgentAction.RUN_SHELL:
-            return run_shell(step.command or "", cwd=ws, timeout=timeout)
+            return run_shell(
+                step.command or "",
+                cwd=ws,
+                timeout=timeout,
+                abort_check=abort_check,
+            )
         if step.action == AgentAction.RUN_PYTHON:
-            return run_python(step.code or "", cwd=ws, timeout=timeout)
+            return run_python(
+                step.code or "",
+                cwd=ws,
+                timeout=timeout,
+                abort_check=abort_check,
+            )
         if step.action == AgentAction.READ_FILE:
             return read_file(
                 step.path or "",
@@ -830,13 +888,15 @@ class AgentLoop:
                 extras["on_text_delta"] = on_text_delta
             text = self._llm_call(**llm_kwargs, **extras)
             return text, None, None
+        abort_check = self._abort_check()
         if stream:
             return complete_structured_with_id(
                 **llm_kwargs,
                 stream=True,
                 on_text_delta=on_text_delta,
+                abort_check=abort_check,
             )
-        return complete_structured_with_id(**llm_kwargs)
+        return complete_structured_with_id(**llm_kwargs, abort_check=abort_check)
 
     def _invoke_llm(
         self,

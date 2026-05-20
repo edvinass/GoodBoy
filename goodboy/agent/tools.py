@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from agent.types import ToolResult
 from settings import DEFAULT_TOOL_TIMEOUT_SEC
+
+AbortCheck = Callable[[], bool]
+_ABORT_POLL_INTERVAL = 0.1
+_ABORT_MESSAGE = "Aborted by user."
 
 # Cap per-stream output sent back to the model (bytes before decode).
 # Lowered from 48 KB so the *first* time output enters context it's already
@@ -68,30 +76,140 @@ def _truncate_stream(text: str, *, max_bytes: int | None = None) -> str:
     return _smart_truncate(text, head_bytes=head, tail_bytes=tail)
 
 
+class _UserAborted(Exception):
+    """Internal sentinel: subprocess was terminated because the user pressed Escape."""
+
+    def __init__(self, stdout: bytes, stderr: bytes) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _terminate_process(proc: subprocess.Popen) -> None:
+    """Best-effort kill of a child process group started with ``start_new_session``."""
+    try:
+        if os.name == "posix" and proc.pid:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                proc.terminate()
+        else:
+            proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "posix" and proc.pid:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (OSError, ProcessLookupError):
+                    proc.kill()
+            else:
+                proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _communicate_with_abort(
+    proc: subprocess.Popen,
+    *,
+    timeout: float,
+    abort_check: AbortCheck | None,
+) -> tuple[bytes, bytes]:
+    """Wait for ``proc`` to finish; honour ``abort_check`` and a hard ``timeout``.
+
+    Raises :class:`subprocess.TimeoutExpired` on hard timeout and
+    :class:`_UserAborted` when ``abort_check`` flips. In the abort case the
+    child process is killed and any output already buffered is returned in
+    the exception.
+    """
+    if abort_check is None:
+        return proc.communicate(timeout=timeout)
+    start = time.monotonic()
+    while True:
+        slice_timeout = min(_ABORT_POLL_INTERVAL, max(0.0, timeout - (time.monotonic() - start)))
+        try:
+            return proc.communicate(timeout=slice_timeout)
+        except subprocess.TimeoutExpired:
+            if abort_check():
+                _terminate_process(proc)
+                try:
+                    stdout, stderr = proc.communicate(timeout=1.0)
+                except Exception:
+                    stdout, stderr = b"", b""
+                raise _UserAborted(stdout or b"", stderr or b"")
+            if time.monotonic() - start >= timeout:
+                raise subprocess.TimeoutExpired(proc.args, timeout)
+
+
+def _spawn(command_or_args, *, shell: bool, cwd: str | None) -> subprocess.Popen:
+    """Popen wrapper that puts the child in its own session on POSIX.
+
+    A fresh session lets us kill the whole process group on abort, so things
+    like ``bash -c "sleep 60"`` and pipelines die cleanly instead of leaking
+    background children.
+    """
+    popen_kwargs: dict = {
+        "shell": shell,
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+    }
+    if os.name == "posix":
+        popen_kwargs["start_new_session"] = True
+    return subprocess.Popen(command_or_args, **popen_kwargs)
+
+
 def run_shell(
     command: str,
     *,
     cwd: Path | str | None = None,
     timeout: float = DEFAULT_TOOL_TIMEOUT_SEC,
+    abort_check: AbortCheck | None = None,
 ) -> ToolResult:
     """Run a shell command with full user privileges (local dev harness)."""
     workdir = str(cwd) if cwd is not None else None
     try:
-        completed = subprocess.run(
-            command,
-            shell=True,
-            cwd=workdir,
-            capture_output=True,
-            timeout=timeout,
+        proc = _spawn(command, shell=True, cwd=workdir)
+    except OSError as exc:
+        return ToolResult(
+            executed=command,
+            stdout="",
+            stderr=str(exc),
+            exit_code=None,
+            timed_out=False,
+        )
+    try:
+        stdout_b, stderr_b = _communicate_with_abort(
+            proc, timeout=timeout, abort_check=abort_check
         )
         return ToolResult(
             executed=command,
-            stdout=_truncate_stream(_decode_stream(completed.stdout)),
-            stderr=_truncate_stream(_decode_stream(completed.stderr)),
-            exit_code=completed.returncode,
+            stdout=_truncate_stream(_decode_stream(stdout_b)),
+            stderr=_truncate_stream(_decode_stream(stderr_b)),
+            exit_code=proc.returncode,
+            timed_out=False,
+        )
+    except _UserAborted as aborted:
+        stdout = _truncate_stream(_decode_stream(aborted.stdout))
+        stderr = _truncate_stream(_decode_stream(aborted.stderr))
+        if stderr and not stderr.endswith("\n"):
+            stderr += "\n"
+        stderr += _ABORT_MESSAGE
+        return ToolResult(
+            executed=command,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=None,
             timed_out=False,
         )
     except subprocess.TimeoutExpired as exc:
+        _terminate_process(proc)
         stdout = (
             _truncate_stream(_decode_stream(exc.stdout))
             if exc.stdout is not None
@@ -112,14 +230,6 @@ def run_shell(
             exit_code=None,
             timed_out=True,
         )
-    except OSError as exc:
-        return ToolResult(
-            executed=command,
-            stdout="",
-            stderr=str(exc),
-            exit_code=None,
-            timed_out=False,
-        )
 
 
 def run_python(
@@ -127,25 +237,47 @@ def run_python(
     *,
     cwd: Path | str | None = None,
     timeout: float = DEFAULT_TOOL_TIMEOUT_SEC,
+    abort_check: AbortCheck | None = None,
 ) -> ToolResult:
     """Run Python code in a subprocess (same interpreter as the harness)."""
     workdir = str(cwd) if cwd is not None else None
     executed = f"{sys.executable} -c <code>"
     try:
-        completed = subprocess.run(
-            [sys.executable, "-c", code],
-            cwd=workdir,
-            capture_output=True,
-            timeout=timeout,
+        proc = _spawn([sys.executable, "-c", code], shell=False, cwd=workdir)
+    except OSError as exc:
+        return ToolResult(
+            executed=executed,
+            stdout="",
+            stderr=str(exc),
+            exit_code=None,
+            timed_out=False,
+        )
+    try:
+        stdout_b, stderr_b = _communicate_with_abort(
+            proc, timeout=timeout, abort_check=abort_check
         )
         return ToolResult(
             executed=executed,
-            stdout=_truncate_stream(_decode_stream(completed.stdout)),
-            stderr=_truncate_stream(_decode_stream(completed.stderr)),
-            exit_code=completed.returncode,
+            stdout=_truncate_stream(_decode_stream(stdout_b)),
+            stderr=_truncate_stream(_decode_stream(stderr_b)),
+            exit_code=proc.returncode,
+            timed_out=False,
+        )
+    except _UserAborted as aborted:
+        stdout = _truncate_stream(_decode_stream(aborted.stdout))
+        stderr = _truncate_stream(_decode_stream(aborted.stderr))
+        if stderr and not stderr.endswith("\n"):
+            stderr += "\n"
+        stderr += _ABORT_MESSAGE
+        return ToolResult(
+            executed=executed,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=None,
             timed_out=False,
         )
     except subprocess.TimeoutExpired as exc:
+        _terminate_process(proc)
         stdout = (
             _truncate_stream(_decode_stream(exc.stdout))
             if exc.stdout is not None
@@ -165,12 +297,4 @@ def run_python(
             stderr=stderr,
             exit_code=None,
             timed_out=True,
-        )
-    except OSError as exc:
-        return ToolResult(
-            executed=executed,
-            stdout="",
-            stderr=str(exc),
-            exit_code=None,
-            timed_out=False,
         )
