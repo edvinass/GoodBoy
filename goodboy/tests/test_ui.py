@@ -605,8 +605,26 @@ def test_print_plan_shows_plan_items(capsys):
     assert "recon" in out
     assert "▸" in out
     assert "edit file" in out
-    assert "1/2 complete" in out
+    assert "1/2 steps done" in out
     assert "(plan)" in out
+
+
+def test_print_plan_shows_step_numbers_and_skipped(capsys):
+    ui = ConversationUI()
+    ui.print_plan(
+        [
+            PlanItem(id="1", text="recon", status=PlanItemStatus.DONE),
+            PlanItem(
+                id="2",
+                text="edit file",
+                status=PlanItemStatus.IN_PROGRESS,
+            ),
+            PlanItem(id="3", text="old path", status=PlanItemStatus.CANCELLED),
+        ],
+    )
+    out = capsys.readouterr().out
+    assert "skipped" in out.lower()
+    assert "old path" in out
 
 
 def test_print_agent_step_does_not_show_plan_items(capsys):

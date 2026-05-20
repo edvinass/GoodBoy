@@ -30,6 +30,15 @@ def active_plan_counts(items: list[PlanItem]) -> tuple[int, int]:
     return done, len(active)
 
 
+def format_plan_progress_label(done: int, total: int) -> str:
+    """Panel subtitle for the plan list (Rich markup)."""
+    if total == 0:
+        return "[muted]no steps[/]"
+    if done >= total:
+        return f"[success]{done}/{total} steps done[/]"
+    return f"[muted]{done}/{total} steps done[/]"
+
+
 def format_plan_items(items: list[PlanItem]) -> str:
     """Render plan rows for model context (includes item ids)."""
     lines: list[str] = []

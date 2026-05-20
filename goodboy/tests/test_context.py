@@ -335,6 +335,13 @@ def test_should_print_plan_progress():
     assert should_print_plan_progress(pending, only_progress) is False
 
 
+def test_format_plan_progress_label():
+    from agent.context import format_plan_progress_label
+
+    assert "2/5 steps done" in format_plan_progress_label(2, 5)
+    assert "success" in format_plan_progress_label(3, 3)
+
+
 def test_format_plan_items_marks_status():
     from agent.context import format_plan_items
 
