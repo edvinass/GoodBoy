@@ -29,7 +29,7 @@ def format_plan_items(items: list[PlanItem]) -> str:
         else:
             mark = " "
         label = item.text
-        if item.status in (PlanItemStatus.DONE, PlanItemStatus.CANCELLED):
+        if item.status == PlanItemStatus.CANCELLED:
             label = _strikethrough(label)
         lines.append(f"[{mark}] {item.id}. {label}")
     return "\n".join(lines)

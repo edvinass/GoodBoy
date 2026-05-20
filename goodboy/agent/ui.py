@@ -1042,11 +1042,11 @@ def _render_plan_items(items: list[PlanItem]) -> Text:
         if index:
             text.append("\n")
         if item.status == PlanItemStatus.DONE:
-            mark, style = "✓", "strike green"
+            mark, style = "✓", "white"
         elif item.status == PlanItemStatus.CANCELLED:
-            mark, style = "–", "strike dim"
+            mark, style = "–", "dim"
         elif item.status == PlanItemStatus.IN_PROGRESS:
-            mark, style = "→", "yellow"
+            mark, style = "→", "white"
         else:
             mark, style = " ", "dim"
         text.append(f"[{mark}] {item.id}. {item.text}", style=style)

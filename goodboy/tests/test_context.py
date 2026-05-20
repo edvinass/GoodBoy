@@ -336,8 +336,7 @@ def test_format_plan_items_marks_status():
         ]
     )
     done_line, active_line, skipped_line, pending_line = text.splitlines()
-    assert done_line.startswith("[✓] 1.")
-    assert "\u0336" in done_line
+    assert done_line == "[✓] 1. done step"
     assert active_line == "[→] 2. active"
     assert skipped_line.startswith("[–] 3.")
     assert "\u0336" in skipped_line

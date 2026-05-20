@@ -7,6 +7,7 @@ import sys
 import click
 import pytest
 from rich.console import Console
+from rich.text import Text
 
 from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
 from prompt_toolkit.buffer import Buffer, CompletionState
@@ -23,12 +24,18 @@ from agent.ui import (
     _USER_INPUT_MAX_LINES,
     _USER_INPUT_PLACEHOLDER,
     _accept_active_completion,
-    _configure_prompt_toolkit,
+    _append_wrapped_content,
     _clear_user_input,
+    _configure_prompt_toolkit,
+    _diff_display_line_width,
+    _extract_unified_diff,
+    _format_diff_hunk_label,
+    _format_diff_line_range,
     _format_unified_diff_for_display,
     _is_cmd_d_data,
     _is_shift_enter_data,
     _input_window_line_count,
+    _truncate_diff_lines,
     _user_input_placeholder,
     _wrap_long_lines,
     activity_label,
@@ -632,10 +639,10 @@ def test_render_plan_items_colors():
         "[ ] 3. verify",
         "[–] 4. skip",
     ]
-    assert rendered.spans[0].style == "strike green"
-    assert rendered.spans[1].style == "yellow"
+    assert rendered.spans[0].style == "white"
+    assert rendered.spans[1].style == "white"
     assert rendered.spans[2].style == "dim"
-    assert rendered.spans[3].style == "strike dim"
+    assert rendered.spans[3].style == "dim"
 
 
 def test_print_plan_shows_plan_items(capsys):
@@ -852,3 +859,83 @@ def test_clear_abort_request_resets_state():
     ui.clear_abort_request()
     assert ui.is_abort_requested() is False
     assert ui.consume_stop_requested() is False
+
+
+def test_truncate_diff_lines_short_diff():
+    diff = "line1\nline2\nline3"
+    assert _truncate_diff_lines(diff, max_lines=5) == diff
+
+
+def test_truncate_diff_lines_long_diff():
+    diff = "\n".join(f"line{i}" for i in range(10))
+    result = _truncate_diff_lines(diff, max_lines=4)
+    assert result.endswith("... [6 more lines]")
+    assert result.count("\n") == 4
+
+
+def test_format_diff_line_range_single():
+    assert _format_diff_line_range(5, 1) == "5"
+
+
+def test_format_diff_line_range_range():
+    assert _format_diff_line_range(5, 3) == "5–7"
+
+
+def test_format_diff_hunk_label_same_range():
+    assert _format_diff_hunk_label(10, 3, 10, 3) == "lines 10–12"
+
+
+def test_format_diff_hunk_label_different_range():
+    assert _format_diff_hunk_label(10, 3, 15, 5) == "lines 10–12 → 15–19"
+
+
+def test_append_wrapped_content_adds_text():
+    text = Text()
+    _append_wrapped_content(text, "hello\nworld", style="red", width=80, indent="  ")
+    assert "hello" in text.plain
+    assert "\n" in text.plain
+
+
+def test_diff_display_line_width_returns_min_3():
+    assert _diff_display_line_width("no hunks here") >= 3
+
+
+def test_diff_display_line_width_with_hunk():
+    diff = "@@ -5,10 +7,12 @@"
+    width = _diff_display_line_width(diff)
+    assert width >= 2
+
+
+def test_extract_unified_diff_finds_marker():
+    stdout = "some output\n--- a/foo\n+++ b/foo\n@@ -1,3 +1,4 @@"
+    result = _extract_unified_diff(stdout)
+    assert result is not None
+    assert result.startswith("--- a/foo")
+
+
+def test_extract_unified_diff_none():
+    assert _extract_unified_diff("no diff here") is None
+
+
+def test_format_unified_diff_for_display_removes_headers(tmp_path):
+    diff = "--- a/foo\n+++ b/foo\n@@ -1,3 +1,4 @@\n a\n-b\n+c\n d"
+    result = _format_unified_diff_for_display(diff, width=80)
+    assert "--- a/foo" not in result.plain
+    assert "+++ b/foo" not in result.plain
+    assert "a" in result.plain
+    assert "b" in result.plain
+    assert "c" in result.plain
+
+
+def test_format_unified_diff_for_display_with_truncation_marker():
+    diff = "... [5 more lines]"
+    result = _format_unified_diff_for_display(diff, width=80)
+    assert "..." in result.plain
+    assert "5 more lines" in result.plain
+
+
+def test_format_unified_diff_with_no_newline():
+    diff = "@@ -1,2 +1,2 @@\n text\n\\ No newline at end of file"
+    result = _format_unified_diff_for_display(diff, width=80)
+    assert "No newline" in result.plain
+
