@@ -236,7 +236,18 @@ def test_format_plan_step_progress_shows_in_progress_index():
             PlanItem(id="4", text="later", status=PlanItemStatus.PENDING),
         ]
     )
-    assert line == '2/3 step "active"'
+    assert line == "Plan 1/3 · step 2/3 ▸ active"
+
+
+def test_format_plan_step_progress_all_done():
+    from agent.context import format_plan_step_progress
+
+    assert (
+        format_plan_step_progress(
+            [PlanItem(id="1", text="only", status=PlanItemStatus.DONE)]
+        )
+        == "Plan 1/1 complete"
+    )
 
 
 def test_format_plan_step_progress_falls_back_to_first_pending():
@@ -246,7 +257,7 @@ def test_format_plan_step_progress_falls_back_to_first_pending():
         format_plan_step_progress(
             [PlanItem(id="1", text="later", status=PlanItemStatus.PENDING)]
         )
-        == '1/1 step "later"'
+        == "Plan 0/1 · step 1/1 · later"
     )
 
 

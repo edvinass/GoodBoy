@@ -12,8 +12,26 @@ from agent.memory import load_project_memory
 from agent.types import AgentAction, PlanItem, PlanItemStatus, TurnRecord
 
 
+def plan_status_mark(status: PlanItemStatus) -> str:
+    """Single-character status marker for terminal plan UI."""
+    if status == PlanItemStatus.DONE:
+        return "✓"
+    if status == PlanItemStatus.IN_PROGRESS:
+        return "▸"
+    if status == PlanItemStatus.CANCELLED:
+        return "✕"
+    return "·"
+
+
+def active_plan_counts(items: list[PlanItem]) -> tuple[int, int]:
+    """Return ``(done, total)`` for non-cancelled plan rows."""
+    active = [item for item in items if item.status != PlanItemStatus.CANCELLED]
+    done = sum(1 for item in active if item.status == PlanItemStatus.DONE)
+    return done, len(active)
+
+
 def format_plan_items(items: list[PlanItem]) -> str:
-    """Render plan rows for model context and terminal output."""
+    """Render plan rows for model context (includes item ids)."""
     lines: list[str] = []
     for item in items:
         mark = " "
@@ -27,11 +45,23 @@ def format_plan_items(items: list[PlanItem]) -> str:
     return "\n".join(lines)
 
 
-def _plan_step_line(index: int, total: int, text: str) -> str:
-    cleaned = text.strip()
-    if len(cleaned) > 72:
-        cleaned = cleaned[:69] + "..."
-    return f'{index}/{total} step "{cleaned}"'
+def _truncate_plan_text(text: str, *, max_len: int = 64) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 3] + "..."
+
+
+def _current_plan_step(
+    active: list[PlanItem],
+) -> tuple[int, PlanItem] | None:
+    for index, item in enumerate(active, start=1):
+        if item.status == PlanItemStatus.IN_PROGRESS:
+            return index, item
+    for index, item in enumerate(active, start=1):
+        if item.status == PlanItemStatus.PENDING:
+            return index, item
+    return None
 
 
 def count_plan_done(items: list[PlanItem]) -> int:
@@ -51,18 +81,21 @@ def should_print_plan_progress(
 
 
 def format_plan_step_progress(items: list[PlanItem]) -> str | None:
-    """One-line plan progress for the GoodBoy spinner (e.g. ``2/5 step "…"``)."""
-    active = [item for item in items if item.status != PlanItemStatus.CANCELLED]
-    if not active:
+    """One-line plan progress for the GoodBoy spinner."""
+    done, total = active_plan_counts(items)
+    if total == 0:
         return None
-    total = len(active)
-    for index, item in enumerate(active, start=1):
-        if item.status == PlanItemStatus.IN_PROGRESS:
-            return _plan_step_line(index, total, item.text)
-    for index, item in enumerate(active, start=1):
-        if item.status == PlanItemStatus.PENDING:
-            return _plan_step_line(index, total, item.text)
-    return None
+    if done == total:
+        return f"Plan {done}/{total} complete"
+    current = _current_plan_step(
+        [item for item in items if item.status != PlanItemStatus.CANCELLED]
+    )
+    if current is None:
+        return None
+    index, item = current
+    mark = plan_status_mark(item.status)
+    text = _truncate_plan_text(item.text)
+    return f"Plan {done}/{total} · step {index}/{total} {mark} {text}"
 
 
 def plan_items_from_response(raw: str | None) -> list[PlanItem] | None:

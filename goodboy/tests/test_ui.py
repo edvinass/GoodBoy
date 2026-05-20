@@ -483,7 +483,7 @@ def test_thinking_shows_plan_step_under_goodboy(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "GoodBoy" in out
     assert "writing ui.py" in out
-    assert '2/3 step "refactor loop"' in out
+    assert "Plan 1/3 · step 2/3 ▸ refactor loop" in out
 
 
 def test_thinking_updater_render_includes_plan_step():
@@ -494,12 +494,12 @@ def test_thinking_updater_render_includes_plan_step():
     updater = ThinkingUpdater(
         _label="reading files",
         _console=Console(),
-        _plan_step='2/4 step "map modules"',
+        _plan_step="Plan 1/4 · step 2/4 ▸ map modules",
     )
     rendered = updater._render()
     assert isinstance(rendered, Group)
     assert "GoodBoy" in rendered.renderables[0].plain
-    assert '2/4 step "map modules"' in rendered.renderables[1].plain
+    assert "Plan 1/4 · step 2/4 ▸ map modules" in rendered.renderables[1].plain
 
 
 def test_default_hides_task_complete(capsys):
@@ -601,8 +601,11 @@ def test_print_plan_shows_plan_items(capsys):
         ],
     )
     out = capsys.readouterr().out
-    assert "[x] (1) recon" in out
-    assert "[>] (2) edit file" in out
+    assert "✓" in out
+    assert "recon" in out
+    assert "▸" in out
+    assert "edit file" in out
+    assert "1/2 complete" in out
     assert "(plan)" in out
 
 
