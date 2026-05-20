@@ -6,6 +6,7 @@ from agent.repl_commands import (
     COMMANDS_COMMAND_NAMES,
     EXIT_COMMAND_NAMES,
     PLAN_COMMAND_NAMES,
+    SETUP_COMMAND_NAMES,
     STREAM_COMMAND_NAMES,
     REPL_COMMANDS,
     active_slash_command_query,
@@ -38,6 +39,7 @@ def test_search_slash_commands_filters_by_prefix():
         "commands",
         "autoswitch",
         "stream",
+        "setup",
         "exit",
     ]
 
@@ -101,4 +103,5 @@ def test_command_name_sets_match_harness():
     assert PLAN_COMMAND_NAMES == frozenset({"plan", "planmode"})
     assert AUTOSWITCH_COMMAND_NAMES == frozenset({"autoswitch", "auto"})
     assert STREAM_COMMAND_NAMES == frozenset({"stream", "streaming"})
+    assert SETUP_COMMAND_NAMES == frozenset({"setup", "config", "configure"})
     assert EXIT_COMMAND_NAMES == frozenset({"exit", "quit", "q"})

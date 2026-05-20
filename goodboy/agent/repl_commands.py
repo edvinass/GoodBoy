@@ -61,6 +61,11 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
         ("streaming",),
     ),
     ReplCommand(
+        "setup",
+        "Re-run setup (API key, local models, default model)",
+        ("config", "configure"),
+    ),
+    ReplCommand(
         "exit",
         "Exit GoodBoy",
         ("quit", "q"),
@@ -126,6 +131,12 @@ STREAM_COMMAND_NAMES = frozenset(
     name
     for command in REPL_COMMANDS
     if command.name == "stream"
+    for name in (command.name, *command.aliases)
+)
+SETUP_COMMAND_NAMES = frozenset(
+    name
+    for command in REPL_COMMANDS
+    if command.name == "setup"
     for name in (command.name, *command.aliases)
 )
 

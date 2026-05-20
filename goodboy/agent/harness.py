@@ -17,6 +17,7 @@ from agent.repl_commands import (
     PLAN_COMMAND_NAMES,
     REASONING_COMMAND_NAMES,
     RETRY_COMMAND_NAMES,
+    SETUP_COMMAND_NAMES,
     STREAM_COMMAND_NAMES,
     format_help_text,
     is_repl_slash_command,
@@ -190,6 +191,15 @@ class AgentHarness:
                         )
                     continue
 
+                if self._is_setup_command(task):
+                    self._run_setup()
+                    if session_log is not None:
+                        session_log.event(
+                            "setup_completed",
+                            model=self._loop.session_model,
+                        )
+                    continue
+
                 first_prompt = False
                 ctx = self._build_session_context(task)
                 result = self._loop.run(
@@ -259,6 +269,10 @@ class AgentHarness:
     @classmethod
     def _is_stream_command(cls, task: str) -> bool:
         return cls._normalize_command(task) in STREAM_COMMAND_NAMES
+
+    @classmethod
+    def _is_setup_command(cls, task: str) -> bool:
+        return cls._normalize_command(task) in SETUP_COMMAND_NAMES
 
     def _toggle_commands(self) -> None:
         self._ui.show_commands = not self._ui.show_commands
@@ -358,6 +372,39 @@ class AgentHarness:
         else:
             save_env({GOODBOY_REASONING_EFFORT_VAR: chosen})
             self._ui.print_notice(f"Default reasoning effort set to {chosen}.")
+
+    def _run_setup(self) -> None:
+        """Re-run interactive setup and apply any model/API key changes to this session."""
+        from main import run_setup
+
+        previous_model = self._loop.session_model
+        try:
+            run_setup()
+        except click.ClickException as exc:
+            self._ui.print_notice(str(exc))
+            return
+        except (click.Abort, KeyboardInterrupt):
+            self._ui.newline()
+            self._ui.print_notice("Setup cancelled.")
+            return
+
+        cfg = get_settings()
+        new_model = cfg.default_model
+        if new_model and new_model != previous_model:
+            try:
+                self._loop.set_session_model(new_model)
+            except ValueError as exc:
+                self._ui.print_notice(str(exc))
+                return
+            self._ui.set_session_model(new_model)
+            if is_local_model(new_model):
+                label = local_model_label(new_model)
+            else:
+                label = MODEL_LABELS.get(new_model, new_model)
+            self._ui.print_notice(f"Model set to {label} ({new_model}).")
+
+        self._loop.refresh_system_prompt(rebuild_stable=True)
+        self._ui.refresh_startup_banner()
 
     def _change_plan_mode(self) -> None:
         chosen = next_plan_mode(self._loop._plan_mode)

@@ -346,6 +346,45 @@ def test_harness_slash_autoswitch_toggles_and_persists(monkeypatch):
     assert saved == {"GOODBOY_AUTO_MODEL_SWITCH": "true"}
 
 
+def test_harness_setup_command_reruns_setup_and_applies_model(monkeypatch):
+    import main
+    from settings import Settings
+
+    loop = Mock()
+    loop.workspace = "/tmp"
+    loop.session_model = "gpt-5.4-nano"
+    loop.refresh_system_prompt = Mock()
+    loop.set_session_model = Mock()
+    loop.run.return_value = LoopResult(
+        outcome=LoopOutcome.TASK_COMPLETE,
+        message="done",
+        context=SessionContext(user_task="task"),
+    )
+    ui = FakeUI(prompts=iter(["/setup", "exit"]))
+    ui.set_session_model = Mock()
+    harness = AgentHarness(loop=loop, ui=ui)
+
+    called: dict[str, int] = {"n": 0}
+
+    def fake_run_setup() -> None:
+        called["n"] += 1
+
+    monkeypatch.setattr(main, "run_setup", fake_run_setup)
+
+    new_cfg = Settings(
+        openai_api_key="sk-test",
+        openai_model="gpt-5.4-mini",
+    )
+    monkeypatch.setattr("agent.harness.get_settings", lambda: new_cfg)
+
+    assert harness.run() == 0
+    assert called["n"] == 1
+    loop.set_session_model.assert_called_once_with("gpt-5.4-mini")
+    ui.set_session_model.assert_called_with("gpt-5.4-mini")
+    loop.refresh_system_prompt.assert_called()
+    loop.run.assert_not_called()
+
+
 def test_harness_clear_discards_paused_context():
     loop = Mock()
     loop.workspace = "/tmp"
