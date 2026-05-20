@@ -113,7 +113,72 @@ def _spec(
     )
 
 
+_DEEPSEEK_REASONING_EFFORTS: tuple[str, ...] = ("none", "medium", "high")
+
+
 MODEL_CATALOG: dict[str, ModelSpec] = {
+    "deepseek-v4-flash": _spec(
+        "deepseek-v4-flash",
+        family=ModelFamily.GENERAL,
+        best_for=(
+            "Cost-efficient DeepSeek tier with 1M context; routine coding and "
+            "high-volume tasks."
+        ),
+        avoid_when="Hardest reasoning — prefer deepseek-v4-pro.",
+        cost_tier=CostTier.MINIMAL,
+        price_in=0.14,
+        price_cached=0.0028,
+        price_out=0.28,
+        reasoning=True,
+        reasoning_efforts=_DEEPSEEK_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "deepseek-v4-pro": _spec(
+        "deepseek-v4-pro",
+        family=ModelFamily.REASONING,
+        best_for=(
+            "Frontier DeepSeek thinking-mode model for complex coding and "
+            "multi-step reasoning (1M context)."
+        ),
+        avoid_when="Trivial one-liners — flash is much cheaper.",
+        cost_tier=CostTier.MEDIUM,
+        price_in=1.74,
+        price_cached=0.0145,
+        price_out=3.48,
+        reasoning=True,
+        reasoning_efforts=_DEEPSEEK_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "deepseek-chat": _spec(
+        "deepseek-chat",
+        family=ModelFamily.GENERAL,
+        best_for=(
+            "Legacy alias mapping to deepseek-v4-flash non-thinking mode "
+            "(deprecated 2026-07-24)."
+        ),
+        avoid_when="New work — use deepseek-v4-flash directly.",
+        cost_tier=CostTier.MINIMAL,
+        price_in=0.14,
+        price_cached=0.0028,
+        price_out=0.28,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "deepseek-reasoner": _spec(
+        "deepseek-reasoner",
+        family=ModelFamily.REASONING,
+        best_for=(
+            "Legacy alias mapping to deepseek-v4-flash thinking mode "
+            "(deprecated 2026-07-24)."
+        ),
+        avoid_when="New work — use deepseek-v4-flash or deepseek-v4-pro.",
+        cost_tier=CostTier.MINIMAL,
+        price_in=0.14,
+        price_cached=0.0028,
+        price_out=0.28,
+        reasoning=True,
+        reasoning_efforts=_DEEPSEEK_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
     "gpt-4.1-nano": _spec(
         "gpt-4.1-nano",
         family=ModelFamily.GENERAL,
@@ -299,7 +364,11 @@ def format_cost_policy_section() -> str:
 
 
 def assert_catalog_covers_model_choices() -> None:
-    """Ensure MODEL_CHOICES from llm.py all have catalog entries."""
+    """Ensure every OpenAI MODEL_CHOICES entry has catalog coverage.
+
+    DeepSeek and local models are also catalogued but are tracked outside of
+    ``MODEL_CHOICES`` (which is the OpenAI allowlist).
+    """
     missing = [m for m in MODEL_CHOICES if m not in MODEL_CATALOG]
     if missing:
         raise RuntimeError(f"MODEL_CATALOG missing entries for: {missing}")

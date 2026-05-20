@@ -22,10 +22,10 @@ GoodBoy is a **local autonomous agent harness** for your machine. It runs an int
 - **Interactive CLI** (conversation-style): run tasks, then keep iterating.
 - **Structured agent protocol**: model responses are parsed into typed steps.
 - **Local tool execution**: shell commands and Python code (configurable timeout).
-- **Model allowlist + interactive model picker**.
+- **Multiple model providers**: OpenAI Responses API, **DeepSeek** (OpenAI-compatible chat completions), and in-process local GGUF models — all selectable from one model picker.
 - **Default reasoning-effort picker** for reasoning models.
 - **Session logging** (optional) to a local log directory.
-- **TLS/proxy-friendly OpenAI client options** (custom CA bundle, disable verify).
+- **TLS/proxy-friendly HTTP client options** (custom CA bundle, disable verify) shared by all cloud providers.
 - **In-process local LLMs** (optional): download GGUF weights during setup and run them inside GoodBoy via llama-cpp-python — no Ollama or other daemon.
 
 ## Requirements
@@ -182,12 +182,15 @@ goodboy setup
 ```
 
 This walks you through:
-- **Cloud (OpenAI)**, **Local (on this machine)**, or **Both**
-- OpenAI API key when using cloud (optional if your default model is local)
-- Downloading a local GGUF model (when local or both is selected)
-- Choosing the default model from the combined picker (cloud + installed local models)
+- **Cloud (OpenAI)**, **DeepSeek**, **Local (on this machine)**, or **Multiple providers**
+- OpenAI API key when using OpenAI (optional if your default model is local or DeepSeek)
+- DeepSeek API key when using DeepSeek (separate from your OpenAI key — get one at https://platform.deepseek.com/api_keys)
+- Downloading a local GGUF model (when local or multi-provider is selected)
+- Choosing the default model from the combined picker (OpenAI + DeepSeek + installed local models)
 
 Local model IDs use the `local:` prefix (for example `local:qwen2.5-coder-7b-q4`). During setup you can pick from several GGUF options (Llama 3.2 3B, Phi-3.5 Mini, Qwen2.5 Coder 7B/14B, Mistral 7B, Gemma 2 9B, Granite 8B, DeepSeek Coder V2 Lite, and more). Weights are stored under `~/.goodboy/models/` (override with `GOODBOY_MODELS_DIR`).
+
+DeepSeek cloud model IDs use their native names: `deepseek-v4-pro`, `deepseek-v4-flash`, plus legacy aliases `deepseek-chat` and `deepseek-reasoner`. GoodBoy talks to `https://api.deepseek.com` via the OpenAI-compatible Chat Completions endpoint; you only need a `DEEPSEEK_API_KEY` in `.env` to use them. DeepSeek thinking-mode reasoning is enabled automatically for the reasoning-capable models. See [`api-docs.deepseek.com`](https://api-docs.deepseek.com/) for the full DeepSeek API reference and current pricing.
 
 You can also drop any `.gguf` file directly into that folder (top level); it will show up in `/model` automatically—no rename required unless you want it to match a catalog download name.
 
@@ -237,8 +240,9 @@ Common options:
 GoodBoy reads configuration from `.env` (and also supports related exported env vars such as `SSL_CERT_FILE`).
 
 Key variables:
-- `OPENAI_API_KEY` – your OpenAI API key (optional when default model is `local:…`)
-- `OPENAI_MODEL` – default model id (OpenAI id or `local:…` for on-device inference)
+- `OPENAI_API_KEY` – your OpenAI API key (optional when default model is `local:…` or `deepseek-…`)
+- `DEEPSEEK_API_KEY` – your DeepSeek API key (required to use any `deepseek-…` model)
+- `OPENAI_MODEL` – default model id (OpenAI id, `deepseek-…`, or `local:…` for on-device inference)
 - `GOODBOY_MODELS_DIR` – directory for downloaded GGUF weights (default: `~/.goodboy/models`)
 - `GOODBOY_SHOW_COMMANDS` – when `true`, show shell/Python commands (no output); updated by `/commands`
 - `GOODBOY_REASONING_EFFORT` – default reasoning effort for reasoning models; updated by `/reasoning`

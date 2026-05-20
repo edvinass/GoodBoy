@@ -115,10 +115,18 @@ def is_local_model(model_id: str | None) -> bool:
     return _is_local(model_id)
 
 
+def is_deepseek_model(model_id: str | None) -> bool:
+    from agent.deepseek_llm import is_deepseek_model as _is_deepseek
+
+    return _is_deepseek(model_id)
+
+
 def get_selectable_models(*, api_key: str | None = None) -> list[str]:
-    """Return OpenAI cloud models (when configured) plus installed local models."""
+    """Return OpenAI cloud, DeepSeek (when configured), and installed local models."""
+    from agent.deepseek_llm import DEEPSEEK_MODEL_IDS
     from agent.local_llm import list_installed_models
 
+    cfg = get_settings()
     local = list_installed_models()
     cloud: list[str] = []
     if api_key:
@@ -126,17 +134,20 @@ def get_selectable_models(*, api_key: str | None = None) -> list[str]:
             cloud = get_curated_models(api_key=api_key)
         except click.ClickException:
             cloud = MODEL_CHOICES.copy()
-    elif get_settings().openai_api_key:
+    elif cfg.openai_api_key:
         cloud = get_curated_models()
+    deepseek: list[str] = (
+        list(DEEPSEEK_MODEL_IDS) if cfg.deepseek_api_key else []
+    )
     merged: list[str] = []
     seen: set[str] = set()
-    for model_id in local + cloud:
+    for model_id in local + cloud + deepseek:
         if model_id not in seen:
             seen.add(model_id)
             merged.append(model_id)
     if merged:
         return merged
-    if api_key or get_settings().openai_api_key:
+    if api_key or cfg.openai_api_key:
         return get_curated_models(api_key=api_key)
     return MODEL_CHOICES.copy()
 
@@ -149,6 +160,11 @@ def _model_choice(model_id: str) -> questionary.Choice:
 
         description = _local_label(model_id)
         label = f"[Local] {description}"
+    elif is_deepseek_model(model_id):
+        from agent.deepseek_llm import deepseek_model_label
+
+        description = deepseek_model_label(model_id)
+        label = format_model_select_label(model_id, f"[DeepSeek] {description}")
     else:
         description = MODEL_LABELS.get(model_id, model_id)
         label = format_model_select_label(model_id, description)
@@ -257,8 +273,8 @@ def _openai_client(
     return OpenAI(api_key=resolved_key, http_client=_build_http_client())
 
 
-def format_api_connection_error(exc: BaseException) -> str:
-    """User-facing hint when TLS/proxy blocks the OpenAI API."""
+def format_api_connection_error(exc: BaseException, *, provider: str = "OpenAI") -> str:
+    """User-facing hint when TLS/proxy blocks the model provider's API."""
     parts: list[str] = []
     cause: BaseException | None = exc
     while cause is not None:
@@ -267,7 +283,7 @@ def format_api_connection_error(exc: BaseException) -> str:
     text = " ".join(parts).lower()
     if "certificate_verify_failed" in text or "self-signed certificate" in text:
         return (
-            "Could not reach OpenAI: TLS certificate verification failed "
+            f"Could not reach {provider}: TLS certificate verification failed "
             "(common behind corporate HTTPS proxies).\n\n"
             "Fix: save your organization's CA certificate to a .pem file, then add to .env:\n"
             "  GOODBOY_SSL_CA_BUNDLE=/path/to/corporate-ca.pem\n\n"
@@ -275,7 +291,7 @@ def format_api_connection_error(exc: BaseException) -> str:
             "  export SSL_CERT_FILE=/path/to/corporate-ca.pem\n\n"
             "Last resort only (insecure): GOODBOY_SSL_VERIFY=false"
         )
-    return f"Could not reach OpenAI: {exc}"
+    return f"Could not reach {provider}: {exc}"
 
 
 def get_client(*, api_key: str | None = None) -> OpenAI:
@@ -330,9 +346,23 @@ def complete(
     max_output_tokens: int | None = None,
     reasoning_effort: str | None = None,
 ) -> str:
-    """Call OpenAI Responses API and return assistant text."""
-    client = get_client()
+    """Call the configured provider and return assistant text."""
     resolved_model = model or get_settings().default_model
+
+    if is_deepseek_model(resolved_model):
+        from agent.deepseek_llm import complete_deepseek
+
+        return complete_deepseek(
+            prompt,
+            model=resolved_model,
+            instructions=instructions,
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_output_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+
+    client = get_client()
 
     kwargs: dict[str, Any] = {
         "model": resolved_model,
@@ -464,6 +494,18 @@ def complete_structured_with_id(
             input=input,
             instructions=instructions,
             json_schema=json_schema,
+            stream=stream,
+            on_text_delta=on_text_delta,
+        )
+    if is_deepseek_model(resolved_model):
+        from agent.deepseek_llm import complete_structured_deepseek
+
+        return complete_structured_deepseek(
+            model=resolved_model,
+            input=input,
+            instructions=instructions,
+            json_schema=json_schema,
+            reasoning_effort=reasoning_effort,
             stream=stream,
             on_text_delta=on_text_delta,
         )

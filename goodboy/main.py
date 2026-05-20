@@ -4,6 +4,10 @@ import click
 import questionary
 
 import settings
+from agent.deepseek_llm import (
+    DEEPSEEK_MODEL_IDS,
+    is_deepseek_model,
+)
 from agent.harness import run_harness
 from agent.local_llm import (
     default_catalog_spec,
@@ -15,7 +19,14 @@ from agent.local_llm import (
     resolve_model_path,
 )
 from llm import get_selectable_models, select_model_interactive
-from settings import OPENAI_API_KEY_VAR, OPENAI_MODEL_VAR, get_settings, is_configured, save_env
+from settings import (
+    DEEPSEEK_API_KEY_VAR,
+    OPENAI_API_KEY_VAR,
+    OPENAI_MODEL_VAR,
+    get_settings,
+    is_configured,
+    save_env,
+)
 
 
 def load_env() -> None:
@@ -28,9 +39,9 @@ def _mask_api_key(key: str) -> str:
     return f"{key[:7]}…{key[-4:]}"
 
 
-def _prompt_api_key() -> str:
+def _prompt_api_key(label: str = "OpenAI API key") -> str:
     key = questionary.password(
-        "OpenAI API key",
+        label,
         validate=lambda text: bool(text.strip()) or "API key is required",
         instruction="(input hidden)",
     ).ask()
@@ -44,8 +55,11 @@ def _prompt_setup_mode() -> str:
         "How do you want to use GoodBoy?",
         choices=[
             questionary.Choice("Cloud (OpenAI API)", value="cloud"),
+            questionary.Choice("DeepSeek (api.deepseek.com)", value="deepseek"),
             questionary.Choice("Local (on this machine, no API key)", value="local"),
-            questionary.Choice("Both (OpenAI + local models)", value="both"),
+            questionary.Choice(
+                "Multiple providers (OpenAI / DeepSeek / local)", value="multi"
+            ),
         ],
         use_indicator=True,
         use_arrow_keys=True,
@@ -81,77 +95,136 @@ def _download_local_model(model_id: str) -> None:
     download_model(model_id)
 
 
+def _prompt_provider_key(
+    label: str, existing: str | None, *, required: bool
+) -> str | None:
+    """Reuse or replace a provider key; return None when not used."""
+    if existing:
+        change = questionary.confirm(
+            f"{label} already saved ({_mask_api_key(existing)}). Change it?",
+            default=False,
+        ).ask()
+        if change is None:
+            raise click.ClickException("Setup cancelled.")
+        if change:
+            return _prompt_api_key(label)
+        return existing
+    if required:
+        return _prompt_api_key(label)
+    add = questionary.confirm(f"Configure {label} now?", default=False).ask()
+    if add is None:
+        raise click.ClickException("Setup cancelled.")
+    return _prompt_api_key(label) if add else None
+
+
 def run_setup() -> None:
     """Prompt for cloud/local configuration, download local weights, pick default model."""
     load_env()
     cfg = get_settings()
 
     mode = _prompt_setup_mode()
-    api_key = cfg.openai_api_key
+    openai_key = cfg.openai_api_key
+    deepseek_key = cfg.deepseek_api_key
 
-    if mode in ("cloud", "both"):
-        if api_key:
-            change = questionary.confirm(
-                f"API key already saved ({_mask_api_key(api_key)}). Change it?",
-                default=False,
-            ).ask()
-            if change is None:
-                raise click.ClickException("Setup cancelled.")
-            if change:
-                api_key = _prompt_api_key()
-        else:
-            api_key = _prompt_api_key()
-    else:
-        if api_key:
+    if mode == "cloud":
+        openai_key = _prompt_provider_key(
+            "OpenAI API key", openai_key, required=True
+        )
+    elif mode == "deepseek":
+        deepseek_key = _prompt_provider_key(
+            "DeepSeek API key", deepseek_key, required=True
+        )
+    elif mode == "multi":
+        openai_key = _prompt_provider_key(
+            "OpenAI API key", openai_key, required=False
+        )
+        deepseek_key = _prompt_provider_key(
+            "DeepSeek API key", deepseek_key, required=False
+        )
+    else:  # local-only
+        if openai_key:
             keep = questionary.confirm(
-                f"Keep saved API key ({_mask_api_key(api_key)}) for optional cloud use?",
+                f"Keep saved OpenAI key ({_mask_api_key(openai_key)}) for optional cloud use?",
                 default=True,
             ).ask()
             if keep is None:
                 raise click.ClickException("Setup cancelled.")
             if not keep:
-                api_key = None
-        else:
-            api_key = None
+                openai_key = None
+        if deepseek_key:
+            keep = questionary.confirm(
+                f"Keep saved DeepSeek key ({_mask_api_key(deepseek_key)}) for optional cloud use?",
+                default=True,
+            ).ask()
+            if keep is None:
+                raise click.ClickException("Setup cancelled.")
+            if not keep:
+                deepseek_key = None
 
-    if mode in ("local", "both"):
-        ensure_local_deps()
-        local_id = _select_local_catalog_model()
-        _download_local_model(local_id)
+    if mode in ("local", "multi"):
+        offer_local = (
+            mode == "local"
+            or questionary.confirm(
+                "Download a local GGUF model now?",
+                default=False,
+            ).ask()
+        )
+        if offer_local is None:
+            raise click.ClickException("Setup cancelled.")
+        if offer_local:
+            ensure_local_deps()
+            local_id = _select_local_catalog_model()
+            _download_local_model(local_id)
 
-    selectable = get_selectable_models(api_key=api_key)
+    # Persist credentials before listing selectable models so the DeepSeek and
+    # OpenAI clients can fetch their catalogs with the new keys.
+    pending_updates: dict[str, str] = {}
+    if openai_key:
+        pending_updates[OPENAI_API_KEY_VAR] = openai_key
+    elif mode in ("local", "deepseek") and cfg.openai_api_key:
+        pending_updates[OPENAI_API_KEY_VAR] = ""
+    if deepseek_key:
+        pending_updates[DEEPSEEK_API_KEY_VAR] = deepseek_key
+    elif mode in ("local", "cloud") and cfg.deepseek_api_key:
+        pending_updates[DEEPSEEK_API_KEY_VAR] = ""
+    if pending_updates:
+        save_env(pending_updates)
+
+    selectable = get_selectable_models(api_key=openai_key)
     if not selectable:
         raise click.ClickException(
-            "No models available. Configure OpenAI or install a local model."
+            "No models available. Configure OpenAI, DeepSeek, or install a local model."
         )
 
     default_for_picker = cfg.default_model
     if mode == "local" and list_installed_models():
         default_for_picker = list_installed_models()[0]
-    elif mode == "both" and list_installed_models() and not api_key:
+    elif mode == "deepseek":
+        default_for_picker = next(iter(DEEPSEEK_MODEL_IDS))
+    elif mode == "multi" and list_installed_models() and not openai_key and not deepseek_key:
         default_for_picker = list_installed_models()[0]
 
     model = select_model_interactive(
         models=selectable,
         default=default_for_picker,
-        api_key=api_key,
+        api_key=openai_key,
     )
 
-    updates: dict[str, str] = {OPENAI_MODEL_VAR: model}
-    if api_key:
-        updates[OPENAI_API_KEY_VAR] = api_key
-    elif mode == "local":
-        updates[OPENAI_API_KEY_VAR] = ""
-
-    save_env(updates)
+    save_env({OPENAI_MODEL_VAR: model})
 
     click.echo()
     click.echo(click.style("Setup complete.", fg="green", bold=True))
     _brown = 94
     click.echo(f"  Model: {click.style(model, fg=_brown)}")
-    if api_key:
-        click.echo(f"  API key: {click.style(_mask_api_key(api_key), fg=_brown)}")
-    elif is_local_model(model):
+    if openai_key:
+        click.echo(
+            f"  OpenAI key: {click.style(_mask_api_key(openai_key), fg=_brown)}"
+        )
+    if deepseek_key:
+        click.echo(
+            f"  DeepSeek key: {click.style(_mask_api_key(deepseek_key), fg=_brown)}"
+        )
+    if not openai_key and not deepseek_key and is_local_model(model):
         click.echo("  API key: (not set — using local model)")
     if list_installed_models():
         click.echo(
@@ -271,15 +344,25 @@ def status() -> None:
         click.echo(f"Provider: {click.style('local (in-process)', fg=_brown)}")
         if path:
             click.echo(f"Weights: {path}")
+    elif is_deepseek_model(model):
+        click.echo(f"Provider: {click.style('DeepSeek', fg=_brown)}")
     else:
         click.echo(f"Provider: {click.style('OpenAI', fg=_brown)}")
     installed = list_installed_models()
     if installed:
         click.echo(f"Installed local: {', '.join(installed)}")
     if cfg.openai_api_key:
-        click.echo(f"API key: {click.style(_mask_api_key(cfg.openai_api_key), fg=_brown)}")
+        click.echo(
+            f"OpenAI key: {click.style(_mask_api_key(cfg.openai_api_key), fg=_brown)}"
+        )
     else:
-        click.echo("API key: (not set)")
+        click.echo("OpenAI key: (not set)")
+    if cfg.deepseek_api_key:
+        click.echo(
+            f"DeepSeek key: {click.style(_mask_api_key(cfg.deepseek_api_key), fg=_brown)}"
+        )
+    else:
+        click.echo("DeepSeek key: (not set)")
     click.echo(f"Models dir: {cfg.models_dir}")
     click.echo("Run goodboy setup to change settings.")
 

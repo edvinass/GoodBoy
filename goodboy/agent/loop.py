@@ -69,6 +69,7 @@ from llm import (
     complete_structured_with_id,
     format_api_connection_error,
     get_selectable_models,
+    is_deepseek_model,
     is_local_model,
 )
 from settings import get_settings
@@ -142,11 +143,16 @@ class AgentLoop:
         # Custom llm_call hooks (tests, mocks) bypass response chaining; only
         # the production path through complete_structured_with_id can chain.
         self._llm_call = llm_call
-        self._chain_enabled = bool(
-            response_chain_enabled
-            if response_chain_enabled is not None
-            else cfg.response_chain_enabled
-        ) and llm_call is None and not is_local_model(self._default_model)
+        self._chain_enabled = (
+            bool(
+                response_chain_enabled
+                if response_chain_enabled is not None
+                else cfg.response_chain_enabled
+            )
+            and llm_call is None
+            and not is_local_model(self._default_model)
+            and not is_deepseek_model(self._default_model)
+        )
         self._last_response_id: str | None = None
         self._chain_watermark: ContextWatermark | None = None
         self._plan_mode = cfg.plan_mode
@@ -214,7 +220,7 @@ class AgentLoop:
         self._hosted_tools = ()
         self._reset_response_chain()
         self.recent_full_turns = self._window_for_model(model)
-        if is_local_model(model):
+        if is_local_model(model) or is_deepseek_model(model):
             self._chain_enabled = False
         elif self._llm_call is None:
             self._chain_enabled = get_settings().response_chain_enabled
@@ -301,6 +307,7 @@ class AgentLoop:
             call_model = self._default_model
             effort = self._default_reasoning
             local_call = is_local_model(call_model)
+            deepseek_call = is_deepseek_model(call_model)
             if local_call:
                 call_reasoning = None
             else:
@@ -314,9 +321,9 @@ class AgentLoop:
                 "model": call_model,
                 "reasoning_effort": call_reasoning,
             }
-            if self._hosted_tools and not local_call:
+            if self._hosted_tools and not local_call and not deepseek_call:
                 llm_kwargs["tools"] = list(self._hosted_tools)
-            if prev_id is not None and not local_call:
+            if prev_id is not None and not local_call and not deepseek_call:
                 llm_kwargs["previous_response_id"] = prev_id
 
             if session_log is not None:
@@ -926,6 +933,11 @@ class AgentLoop:
             if is_local_model(call_model):
                 return (
                     "switch_tools is not available with local models. "
+                    "Use run_shell with rg/grep for codebase search."
+                )
+            if is_deepseek_model(call_model):
+                return (
+                    "switch_tools is not available with DeepSeek models. "
                     "Use run_shell with rg/grep for codebase search."
                 )
 

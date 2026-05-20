@@ -18,7 +18,7 @@ from llm import MODEL_CHOICES
 
 def test_catalog_covers_all_model_choices():
     assert_catalog_covers_model_choices()
-    assert set(MODEL_CATALOG.keys()) == set(MODEL_CHOICES)
+    assert set(MODEL_CHOICES).issubset(MODEL_CATALOG.keys())
 
 
 def test_gpt_5_5_is_premium():

@@ -16,6 +16,7 @@ ENV_FILE = ROOT_DIR / ".env"
 
 OPENAI_API_KEY_VAR = "OPENAI_API_KEY"
 OPENAI_MODEL_VAR = "OPENAI_MODEL"
+DEEPSEEK_API_KEY_VAR = "DEEPSEEK_API_KEY"
 GOODBOY_MAX_TURNS_VAR = "GOODBOY_MAX_TURNS"
 GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
 GOODBOY_MAX_CLARIFICATIONS_VAR = "GOODBOY_MAX_CLARIFICATIONS"
@@ -108,6 +109,12 @@ def save_env(updates: dict[str, str]) -> None:
         clear_openai_client_cache()
     except ImportError:
         pass
+    try:
+        from agent.deepseek_llm import clear_deepseek_client_cache
+
+        clear_deepseek_client_cache()
+    except ImportError:
+        pass
 
 
 def _env_int(name: str, default: int) -> int:
@@ -141,6 +148,7 @@ def _env_float(name: str, default: float) -> float:
 class Settings:
     openai_api_key: str | None
     openai_model: str | None
+    deepseek_api_key: str | None = None
     max_turns: int = DEFAULT_MAX_TURNS
     tool_timeout_sec: float = DEFAULT_TOOL_TIMEOUT_SEC
     max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
@@ -180,9 +188,16 @@ class Settings:
             if models_dir_raw and models_dir_raw.strip()
             else DEFAULT_MODELS_DIR
         )
+        deepseek_key_raw = os.getenv(DEEPSEEK_API_KEY_VAR)
+        deepseek_api_key = (
+            deepseek_key_raw.strip()
+            if deepseek_key_raw and deepseek_key_raw.strip()
+            else None
+        )
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
+            deepseek_api_key=deepseek_api_key,
             max_turns=_env_int(GOODBOY_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
             tool_timeout_sec=_env_float(
                 GOODBOY_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
@@ -239,9 +254,11 @@ def get_settings() -> Settings:
 
 
 def is_configured(cfg: Settings | None = None) -> bool:
-    """True when OpenAI API key is set or the default model is an installed local model."""
+    """True when any provider key is set, or the default model is an installed local model."""
     resolved = cfg or get_settings()
     if resolved.openai_api_key:
+        return True
+    if resolved.deepseek_api_key:
         return True
     try:
         from agent.local_llm import has_installed_local_model
