@@ -1,5 +1,6 @@
 """Tests for structured file tools."""
 
+import shutil
 from pathlib import Path
 
 from agent.file_tools import apply_patch, read_file, str_replace
@@ -51,3 +52,21 @@ def test_apply_patch_unified_diff(tmp_path: Path):
     assert "gamma" in target.read_text(encoding="utf-8")
     assert "--- a/c.txt" in result.stdout
     assert "+gamma" in result.stdout
+
+
+def test_apply_patch_when_patch_unavailable(tmp_path: Path, monkeypatch):
+    """Cover the Python fallback when patch(1) is not installed."""
+    monkeypatch.setattr(shutil, "which", lambda cmd: None if cmd == "patch" else shutil.which(cmd))
+    target = tmp_path / "d.txt"
+    target.write_text("hello\n", encoding="utf-8")
+    patch = """--- a/d.txt
++++ b/d.txt
+@@ -1 +1 @@
+-hello
++world
+"""
+    result = apply_patch("d.txt", patch, workspace=tmp_path)
+    # Fallback succeeds, exit_code should be 0 with Python fallback message
+    assert result.exit_code == 0
+    assert "Patched (python fallback)" in result.stdout
+    assert target.read_text(encoding="utf-8") == "world\n"

@@ -143,11 +143,10 @@ def test_loop_plan_printed_on_create_and_each_completion(tmp_path: Path, capsys)
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     out = capsys.readouterr().out
     assert out.count("(plan)") == 3
-    assert "[1] recon" in out
-    assert "[2] edit file" in out
-    assert "0/2 steps done" in out
-    assert "1/2 steps done" in out
-    assert "2/2 steps done" in out
+    assert "1. recon" in out
+    assert "2. edit file" in out
+    assert '1/2 step "recon"' in out
+    assert '2/2 step "edit file"' in out
 
 
 def test_loop_plan_printed_when_bundled_with_shell(tmp_path: Path, capsys):
@@ -201,9 +200,9 @@ def test_loop_plan_printed_when_bundled_with_shell(tmp_path: Path, capsys):
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     out = capsys.readouterr().out
     assert out.count("(plan)") == 1
-    assert "[1] recon" in out
-    assert "[2] edit file" in out
-    assert "0/2 steps done" in out
+    assert "1. recon" in out
+    assert "2. edit file" in out
+    assert '1/2 step "recon"' in out
 
 
 def test_loop_plan_not_printed_on_in_progress_only(tmp_path: Path, capsys):
