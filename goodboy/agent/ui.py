@@ -61,7 +61,6 @@ from rich.tree import Tree
 from agent.banner import format_startup
 from agent.context import (
     active_plan_counts,
-    format_plan_progress_label,
     format_plan_step_progress,
     plan_status_mark,
 )
@@ -868,100 +867,41 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
-def _plan_mark_cell(item: PlanItem) -> Text:
+def _plan_row(item: PlanItem) -> Text:
     mark = plan_status_mark(item.status)
-    if item.status == PlanItemStatus.IN_PROGRESS:
-        return Text(mark, style=f"bold {_BRAND_STYLE}")
+    line = Text()
     if item.status == PlanItemStatus.DONE:
-        return Text(mark, style="success")
-    if item.status == PlanItemStatus.CANCELLED:
-        return Text(mark, style="muted")
-    return Text(mark, style="dim")
-
-
-def _plan_text_cell(item: PlanItem) -> Text:
-    if item.status == PlanItemStatus.DONE:
-        return Text(item.text, style="muted strike")
-    if item.status == PlanItemStatus.CANCELLED:
-        return Text(item.text, style="muted dim strike")
-    if item.status == PlanItemStatus.IN_PROGRESS:
-        return Text(item.text, style=f"bold {_BRAND_STYLE}")
-    return Text(item.text)
-
-
-def _plan_step_number_cell(step_num: int, item: PlanItem) -> Text:
-    if item.status == PlanItemStatus.IN_PROGRESS:
-        return Text(str(step_num), style=f"bold {_BRAND_STYLE}")
-    if item.status == PlanItemStatus.DONE:
-        return Text(str(step_num), style="muted")
-    return Text(str(step_num), style="dim")
-
-
-def _plan_list_table(
-    items: list[PlanItem],
-    *,
-    width: int,
-    include_step_numbers: bool,
-) -> Table:
-    table = Table(
-        show_header=False,
-        box=None,
-        pad_edge=False,
-        padding=(0, 0),
-        collapse_padding=True,
-        width=width,
-    )
-    if include_step_numbers:
-        table.add_column("step", width=4, justify="right", no_wrap=True)
-    table.add_column("mark", width=2, justify="center", no_wrap=True)
-    table.add_column("text", overflow="fold")
-    for step_num, item in enumerate(items, start=1):
-        row: list[RenderableType] = []
-        if include_step_numbers:
-            row.append(_plan_step_number_cell(step_num, item))
-        row.extend((_plan_mark_cell(item), _plan_text_cell(item)))
-        table.add_row(*row)
-    return table
-
-
-def _plan_list_body(items: list[PlanItem], *, width: int) -> RenderableType:
-    active = [
-        item for item in items if item.status != PlanItemStatus.CANCELLED
-    ]
-    cancelled = [
-        item for item in items if item.status == PlanItemStatus.CANCELLED
-    ]
-    if not active and not cancelled:
-        return Text("Planning", style="muted")
-    parts: list[RenderableType] = []
-    if active:
-        parts.append(
-            _plan_list_table(
-                active, width=width, include_step_numbers=True
-            )
-        )
-    if cancelled:
-        parts.append(Text("skipped", style="subtitle"))
-        parts.append(
-            _plan_list_table(
-                cancelled, width=width, include_step_numbers=False
-            )
-        )
-    if len(parts) == 1:
-        return parts[0]
-    return Group(*parts)
+        line.append(f" {mark} ", style="muted strike")
+        line.append(item.text, style="muted strike")
+    elif item.status == PlanItemStatus.CANCELLED:
+        line.append(f" {mark} ", style="muted strike")
+        line.append(item.text, style="muted dim strike")
+    elif item.status == PlanItemStatus.IN_PROGRESS:
+        line.append(f" {mark} ", style=f"bold {_BRAND_STYLE}")
+        line.append(item.text, style=f"bold {_BRAND_STYLE}")
+    else:
+        line.append(f" {mark} ", style="dim")
+        line.append(item.text)
+    return line
 
 
 def _render_plan_panel(items: list[PlanItem], *, width: int) -> Panel:
     done, total = active_plan_counts(items)
     agent_title = _role_panel_title("agent", subtitle="plan")
-    content_width = max(width - 6, 40)
+    subtitle: str | None = None
+    if total:
+        subtitle = f"[muted]{done}/{total} complete[/]"
+    body: RenderableType
+    if items:
+        body = Group(*[_plan_row(item) for item in items])
+    else:
+        body = Text("Planning", style="muted")
     return Panel(
-        _plan_list_body(items, width=content_width),
+        body,
         title=agent_title,
         title_align="left",
-        subtitle=format_plan_progress_label(done, total),
-        subtitle_align="right",
+        subtitle=subtitle,
+        subtitle_align="left",
         border_style=_BRAND_STYLE,
         box=ROUNDED,
         padding=(0, 1),
