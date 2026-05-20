@@ -258,6 +258,8 @@ const active = computed(
       </a>
       <span class="sep">·</span>
       <a :href="installUrl" target="_blank" rel="noopener noreferrer">install.sh</a>
+      <span class="sep">·</span>
+      <a href="/logs.html">log viewer</a>
     </footer>
   </div>
 </template>

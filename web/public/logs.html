@@ -1,0 +1,1426 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GoodBoy Session Log Viewer</title>
+  <style>
+    :root {
+      --bg: #1c1410;
+      --bg-soft: #241a14;
+      --surface: #2e221a;
+      --surface-2: #382a1f;
+      --border: #4a3729;
+      --border-soft: #3a2b20;
+      --text: #f3e6d3;
+      --muted: #b8a487;
+      --muted-dim: #8a7660;
+      --accent: #d4a373;
+      --accent-dim: #b08968;
+      --accent-strong: #e8b88a;
+      --user: #b5c89d;
+      --user-bg: #2a2418;
+      --user-border: #6a7d5a;
+      --agent: #e8b88a;
+      --agent-bg: #241811;
+      --agent-border: #b08968;
+      --thought: #b8a487;
+      --thought-border: #4a3729;
+      --activity: #b08968;
+      --shell: #e8b88a;
+      --shell-bg: #110a06;
+      --code-bg: #100905;
+      --ok: #9bb56a;
+      --err: #e06c5b;
+      --warn: #d4a373;
+      --plus: #9bb56a;
+      --minus: #e06c5b;
+      --font-sans: 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    *,
+    *::before,
+    *::after { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(212, 163, 115, 0.18), transparent),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(176, 137, 104, 0.10), transparent),
+        radial-gradient(ellipse 50% 35% at 0% 60%, rgba(232, 184, 138, 0.06), transparent);
+    }
+
+    a { color: var(--accent); }
+    a:hover { color: var(--accent-strong); }
+
+    /* ----- top bar (shown after a log is loaded) ----- */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.65rem 1rem;
+      background: rgba(28, 20, 16, 0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      color: var(--accent-strong);
+      font-size: 0.95rem;
+      letter-spacing: -0.01em;
+    }
+    .topbar .brand .dog { font-size: 1.1rem; }
+    .topbar .filename {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 32rem;
+    }
+    .topbar .spacer { flex: 1; }
+    .topbar .toggles {
+      display: inline-flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.65rem;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .toggle:hover { color: var(--text); border-color: var(--accent-dim); }
+    .toggle.on {
+      color: var(--bg);
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .btn {
+      padding: 0.4rem 0.85rem;
+      font-family: var(--font-sans);
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--accent-strong); }
+    .btn.ghost {
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+    }
+    .btn.ghost:hover {
+      color: var(--text);
+      border-color: var(--accent-dim);
+      background: var(--surface);
+    }
+
+    /* ----- drop zone ----- */
+    .drop-wrap {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 2rem;
+    }
+    .drop-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .drop-header .logo {
+      font-size: 2.5rem;
+      filter: drop-shadow(0 2px 6px rgba(212, 163, 115, 0.3));
+    }
+    .drop-header h1 {
+      margin: 0;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--accent-strong);
+    }
+    .drop-header .tagline {
+      margin: 0.25rem 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+    .dropzone {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 4rem 1.5rem;
+      text-align: center;
+      background: var(--surface);
+      border: 2px dashed var(--accent-dim);
+      border-radius: 12px;
+      color: var(--muted);
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      cursor: pointer;
+    }
+    .dropzone:hover,
+    .dropzone.over {
+      border-color: var(--accent);
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    .dropzone strong {
+      display: block;
+      color: var(--accent-strong);
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .dropzone .hint {
+      font-size: 0.85rem;
+      color: var(--muted-dim);
+    }
+    .dropzone input[type=file] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .drop-meta {
+      margin-top: 1.25rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+    .drop-meta code {
+      font-family: var(--font-mono);
+      font-size: 0.8em;
+      padding: 0.1em 0.35em;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    /* ----- session header ----- */
+    .view { max-width: 56rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+
+    .session-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .session-card h2 {
+      margin: 0 0 0.6rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent-strong);
+      letter-spacing: -0.01em;
+    }
+    .session-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      gap: 0.45rem 1rem;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      color: var(--muted);
+    }
+    .session-meta-grid .k { color: var(--muted-dim); }
+    .session-meta-grid .v { color: var(--text); word-break: break-all; }
+
+    .stats {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px dashed var(--border-soft);
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      color: var(--muted);
+    }
+    .stats .stat {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.3rem;
+    }
+    .stats .stat .num {
+      color: var(--accent-strong);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    /* ----- tasks ----- */
+    .task {
+      margin: 1.75rem 0 2.5rem;
+      padding: 0;
+    }
+    .task-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .task-header::before,
+    .task-header::after {
+      content: '';
+      flex: 1;
+      border-top: 1px dashed var(--border-soft);
+    }
+
+    /* ----- panels (chat bubbles) ----- */
+    .panel {
+      position: relative;
+      margin: 0.85rem 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem 0.7rem;
+      background: var(--bg-soft);
+    }
+    .panel-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      position: absolute;
+      top: -0.6rem;
+      left: 0.85rem;
+      padding: 0.05rem 0.55rem;
+      background: var(--bg);
+      color: var(--accent-strong);
+      font-size: 0.74rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .panel-title .ts {
+      color: var(--muted-dim);
+      font-family: var(--font-mono);
+      font-weight: 400;
+      font-size: 0.7rem;
+    }
+    .panel-title .turn {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-size: 0.7rem;
+    }
+
+    .panel.user {
+      background: var(--user-bg);
+      border-color: var(--user-border);
+    }
+    .panel.user .panel-title { color: var(--user); }
+
+    .panel.agent {
+      background: var(--agent-bg);
+      border-color: var(--agent-border);
+    }
+    .panel.agent .panel-title { color: var(--agent); }
+
+    .panel.thought {
+      background: var(--bg-soft);
+      border-color: var(--thought-border);
+    }
+    .panel.thought .panel-title { color: var(--thought); font-weight: 500; }
+    .panel.thought .body {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .panel.system {
+      background: var(--bg-soft);
+      border-color: var(--border-soft);
+    }
+    .panel.system .panel-title { color: var(--muted); }
+
+    .panel.error {
+      background: #2a1612;
+      border-color: var(--err);
+    }
+    .panel.error .panel-title { color: var(--err); }
+
+    .body {
+      color: var(--text);
+      font-size: 0.92rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .body p { margin: 0; }
+    .body p + p { margin-top: 0.4rem; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.05rem 0.45rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--bg);
+      background: var(--accent-dim);
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-left: 0.3rem;
+    }
+    .badge.ok { background: var(--ok); }
+    .badge.err { background: var(--err); color: #fff5ee; }
+    .badge.warn { background: var(--warn); }
+    .badge.muted { background: var(--border); color: var(--muted); }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.1rem 0.5rem;
+      margin: 0.25rem 0 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: 999px;
+    }
+    .status-chip::before {
+      content: '';
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 50%;
+      background: var(--accent-dim);
+    }
+
+    /* ----- action blocks inside agent panels ----- */
+    .action {
+      margin-top: 0.4rem;
+    }
+    .action + .action { margin-top: 0.55rem; }
+
+    .action-head {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+    .action-head .verb {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .action-head .path {
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    pre.code {
+      margin: 0;
+      padding: 0.65rem 0.85rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    pre.code.shell {
+      color: var(--shell);
+      background: var(--shell-bg);
+    }
+    pre.code.shell::before {
+      content: '$ ';
+      color: var(--accent-dim);
+    }
+
+    .diff {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.45rem;
+      margin-top: 0.4rem;
+    }
+    .diff > div {
+      background: var(--code-bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .diff .lab {
+      padding: 0.25rem 0.55rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border-soft);
+    }
+    .diff .old .lab { color: var(--minus); }
+    .diff .new .lab { color: var(--plus); }
+    .diff pre {
+      margin: 0;
+      padding: 0.55rem 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 24rem;
+      overflow-y: auto;
+    }
+
+    .patch-line { display: block; }
+    .patch-line.add { color: var(--plus); background: rgba(155,181,106,0.07); }
+    .patch-line.del { color: var(--minus); background: rgba(224,108,91,0.07); }
+    .patch-line.hunk { color: var(--accent); }
+    .patch-line.meta { color: var(--muted-dim); }
+
+    @media (max-width: 720px) {
+      .diff { grid-template-columns: 1fr; }
+    }
+
+    /* tool result */
+    .tool-result {
+      margin-top: 0.5rem;
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--code-bg);
+    }
+    .tool-result summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.4rem 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tool-result summary::-webkit-details-marker { display: none; }
+    .tool-result summary::before {
+      content: '▸';
+      color: var(--accent-dim);
+      transition: transform 0.15s;
+      display: inline-block;
+    }
+    .tool-result[open] summary::before { transform: rotate(90deg); }
+    .tool-result summary .lbl { color: var(--accent); font-weight: 600; }
+    .tool-result summary .meta { color: var(--muted-dim); margin-left: auto; }
+    .tool-result .pane {
+      padding: 0.55rem 0.7rem;
+      border-top: 1px solid var(--border-soft);
+    }
+    .tool-result .pane + .pane { border-top: 1px dashed var(--border-soft); }
+    .tool-result pre {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 30rem;
+      overflow-y: auto;
+    }
+    .tool-result .pane-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--muted-dim);
+      margin-bottom: 0.25rem;
+    }
+    .tool-result.err .lbl { color: var(--err); }
+
+    /* plan */
+    .plan-list {
+      margin: 0.25rem 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .plan-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      padding: 0.25rem 0;
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+    .plan-mark {
+      flex-shrink: 0;
+      width: 1.05rem;
+      height: 1.05rem;
+      margin-top: 0.13rem;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--bg);
+      background: var(--border);
+    }
+    .plan-mark.done { background: var(--ok); }
+    .plan-mark.in_progress { background: var(--accent); }
+    .plan-mark.pending { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+    .plan-mark.cancelled { background: var(--muted-dim); }
+    .plan-text { color: var(--text); }
+    .plan-item.done .plan-text { color: var(--muted); text-decoration: line-through; }
+    .plan-item.cancelled .plan-text { color: var(--muted-dim); text-decoration: line-through; }
+
+    /* memory */
+    .memory-list {
+      margin: 0.2rem 0 0;
+      padding: 0 0 0 1.1rem;
+      color: var(--text);
+      font-size: 0.88rem;
+    }
+    .memory-list li { margin: 0.15rem 0; }
+
+    /* status badges in section title bars */
+    .turn-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: -0.35rem;
+      margin-bottom: 0.45rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted-dim);
+    }
+
+    /* llm raw / instructions */
+    .raw-block {
+      margin-top: 0.5rem;
+    }
+    .raw-block summary {
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      padding: 0.2rem 0;
+    }
+    .raw-block pre {
+      margin-top: 0.3rem;
+      padding: 0.55rem 0.7rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: var(--muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 24rem;
+      overflow-y: auto;
+    }
+
+    .global-drop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      pointer-events: none;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(28, 20, 16, 0.85);
+      backdrop-filter: blur(6px);
+    }
+    .global-drop.show { display: flex; }
+    .global-drop .box {
+      padding: 2rem 3rem;
+      border: 2px dashed var(--accent);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--accent-strong);
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+
+    .footer {
+      max-width: 56rem;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+      text-align: center;
+    }
+    .footer a { text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* hide elements by class */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <!-- Global drop overlay (when dragging anywhere on the page) -->
+  <div id="global-drop" class="global-drop">
+    <div class="box">Drop session log to view</div>
+  </div>
+
+  <!-- Topbar shown after a log loads -->
+  <div id="topbar" class="topbar hidden">
+    <span class="brand"><span class="dog">🐕</span> Session Log</span>
+    <span id="filename" class="filename"></span>
+    <span class="spacer"></span>
+    <div class="toggles">
+      <span id="t-thoughts" class="toggle on" data-toggle="thoughts">thoughts</span>
+      <span id="t-status" class="toggle on" data-toggle="status">status</span>
+      <span id="t-timestamps" class="toggle" data-toggle="timestamps">timestamps</span>
+      <span id="t-llm" class="toggle" data-toggle="llm">llm raw</span>
+      <span id="t-results-open" class="toggle" data-toggle="resultsOpen">expand outputs</span>
+    </div>
+    <button id="load-another" class="btn ghost">Load another</button>
+  </div>
+
+  <!-- Initial drop zone view -->
+  <section id="drop-view" class="drop-wrap">
+    <div class="drop-header">
+      <div class="logo" aria-hidden="true">🐕</div>
+      <div>
+        <h1>Session Log Viewer</h1>
+        <p class="tagline">Drop a GoodBoy <code style="font-family:var(--font-mono);font-size:0.9em">.jsonl</code> session log to read the full chat flow.</p>
+      </div>
+    </div>
+
+    <label class="dropzone" id="dropzone">
+      <strong>Drop a session log here</strong>
+      <span>or click to choose a file</span>
+      <span class="hint">Looks for <code style="font-family:var(--font-mono);font-size:0.85em">~/.goodboy/logs/session-*.jsonl</code></span>
+      <input type="file" id="file-input" accept=".jsonl,.json,.log,application/json,application/x-ndjson,text/plain" />
+    </label>
+
+    <p class="drop-meta">
+      Everything runs locally in your browser. Logs never leave your machine.
+    </p>
+  </section>
+
+  <!-- Rendered session view -->
+  <main id="view" class="view hidden"></main>
+
+  <footer class="footer">
+    <a href="/">← GoodBoy home</a>
+  </footer>
+
+  <script>
+  (() => {
+    const dropZone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const dropView = document.getElementById('drop-view');
+    const view = document.getElementById('view');
+    const topbar = document.getElementById('topbar');
+    const filenameEl = document.getElementById('filename');
+    const globalDrop = document.getElementById('global-drop');
+    const loadAnotherBtn = document.getElementById('load-another');
+
+    const state = {
+      thoughts: true,
+      status: true,
+      timestamps: false,
+      llm: false,
+      resultsOpen: false,
+      loaded: false,
+    };
+
+    /* ---------- File loading ---------- */
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) loadFile(f);
+    });
+
+    ['dragenter', 'dragover'].forEach(t => {
+      window.addEventListener(t, (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        globalDrop.classList.add('show');
+      });
+    });
+    ['dragleave', 'drop'].forEach(t => {
+      window.addEventListener(t, (e) => {
+        if (t === 'dragleave' && e.relatedTarget) return;
+        globalDrop.classList.remove('show');
+      });
+    });
+    window.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) loadFile(f);
+    });
+
+    function hasFiles(e) {
+      return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    }
+
+    loadAnotherBtn.addEventListener('click', () => {
+      dropView.classList.remove('hidden');
+      view.classList.add('hidden');
+      topbar.classList.add('hidden');
+      view.innerHTML = '';
+      fileInput.value = '';
+      state.loaded = false;
+    });
+
+    /* ---------- Toggles ---------- */
+    document.querySelectorAll('.toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggle;
+        state[key] = !state[key];
+        btn.classList.toggle('on', state[key]);
+        applyToggles();
+      });
+    });
+
+    function applyToggles() {
+      view.classList.toggle('hide-thoughts', !state.thoughts);
+      view.classList.toggle('hide-status', !state.status);
+      view.classList.toggle('hide-timestamps', !state.timestamps);
+      view.classList.toggle('hide-llm', !state.llm);
+      view.querySelectorAll('.tool-result').forEach(d => {
+        d.open = !!state.resultsOpen;
+      });
+    }
+
+    // inline style additions for toggle classes
+    const style = document.createElement('style');
+    style.textContent = `
+      .hide-thoughts .panel.thought { display: none; }
+      .hide-status .status-chip { display: none; }
+      .hide-timestamps .panel-title .ts { display: none; }
+      .hide-llm .llm-raw { display: none; }
+    `;
+    document.head.appendChild(style);
+
+    async function loadFile(file) {
+      filenameEl.textContent = file.name;
+      let text;
+      try {
+        text = await file.text();
+      } catch (err) {
+        renderError('Could not read file: ' + err.message);
+        return;
+      }
+      render(text, file.name);
+    }
+
+    /* ---------- Parsing ---------- */
+    function parseJsonl(text) {
+      const events = [];
+      const parseErrors = [];
+      const lines = text.split(/\r?\n/);
+      lines.forEach((line, idx) => {
+        const t = line.trim();
+        if (!t) return;
+        try {
+          events.push(JSON.parse(t));
+        } catch (e) {
+          parseErrors.push({ line: idx + 1, text: t.slice(0, 200), error: e.message });
+        }
+      });
+      return { events, parseErrors };
+    }
+
+    function buildSession(events) {
+      const session = {
+        start: null,
+        tasks: [],
+        parseErrors: [],
+        events,
+      };
+      let currentTask = null;
+      let currentTurn = null;
+      let pendingUserInput = null;
+
+      const turnFor = (taskObj, turnNum, ev) => {
+        let t = taskObj.turns.find(x => x.turn === turnNum);
+        if (!t) {
+          t = { turn: turnNum, request: null, response: null, step: null, parseError: null, toolResult: null, firstTs: ev.ts };
+          taskObj.turns.push(t);
+        }
+        return t;
+      };
+
+      for (const e of events) {
+        switch (e.event) {
+          case 'session_start':
+            session.start = e; break;
+          case 'parse_error':
+            session.parseErrors.push(e);
+            if (currentTask && currentTurn) currentTurn.parseError = e;
+            break;
+          case 'user_input':
+            pendingUserInput = e;
+            if (currentTask && !currentTask.userInputBeforeStart) {
+              // attach as standalone user message inside task if it arrives mid-task
+            }
+            break;
+          case 'task_start':
+            currentTask = {
+              start: e,
+              end: null,
+              userInput: pendingUserInput || { ts: e.ts, text: e.task },
+              turns: [],
+            };
+            pendingUserInput = null;
+            session.tasks.push(currentTask);
+            currentTurn = null;
+            break;
+          case 'llm_request':
+            if (!currentTask) {
+              currentTask = { start: { ts: e.ts, task: '(unknown task)' }, end: null, userInput: null, turns: [] };
+              session.tasks.push(currentTask);
+            }
+            currentTurn = turnFor(currentTask, e.turn, e);
+            currentTurn.request = e;
+            break;
+          case 'llm_response':
+            if (currentTask) {
+              currentTurn = turnFor(currentTask, e.turn, e);
+              currentTurn.response = e;
+            }
+            break;
+          case 'agent_step':
+            if (currentTask) {
+              currentTurn = turnFor(currentTask, e.turn, e);
+              currentTurn.step = e.step;
+              currentTurn.stepTs = e.ts;
+            }
+            break;
+          case 'tool_result':
+            if (currentTask) {
+              currentTurn = turnFor(currentTask, e.turn, e);
+              currentTurn.toolResult = e.result;
+              currentTurn.toolResultTs = e.ts;
+            }
+            break;
+          case 'task_end':
+            if (currentTask) currentTask.end = e;
+            currentTask = null;
+            currentTurn = null;
+            break;
+        }
+      }
+      return session;
+    }
+
+    /* ---------- Rendering ---------- */
+    function render(text, filename) {
+      const { events, parseErrors } = parseJsonl(text);
+      if (events.length === 0) {
+        renderError(`No JSON lines found in ${filename}.${parseErrors.length ? ' ' + parseErrors.length + ' parse errors.' : ''}`);
+        return;
+      }
+      const session = buildSession(events);
+      session.parseErrors.push(...parseErrors);
+
+      view.innerHTML = '';
+      view.appendChild(renderSessionHeader(session, filename));
+
+      session.tasks.forEach((task, i) => {
+        view.appendChild(renderTask(task, i + 1));
+      });
+
+      if (session.parseErrors.length) {
+        view.appendChild(renderParseErrors(session.parseErrors));
+      }
+
+      dropView.classList.add('hidden');
+      view.classList.remove('hidden');
+      topbar.classList.remove('hidden');
+      state.loaded = true;
+      applyToggles();
+      window.scrollTo({ top: 0 });
+    }
+
+    function renderError(msg) {
+      view.innerHTML = '';
+      const panel = el('div', 'panel error');
+      panel.appendChild(el('span', 'panel-title', 'Error'));
+      const body = el('div', 'body');
+      body.textContent = msg;
+      panel.appendChild(body);
+      view.appendChild(panel);
+      dropView.classList.add('hidden');
+      view.classList.remove('hidden');
+      topbar.classList.remove('hidden');
+    }
+
+    function renderSessionHeader(session, filename) {
+      const card = el('div', 'session-card');
+      card.appendChild(el('h2', null, 'Session'));
+      const grid = el('div', 'session-meta-grid');
+      const s = session.start || {};
+      const firstTs = s.ts || (session.tasks[0] && session.tasks[0].start && session.tasks[0].start.ts);
+      const lastEvent = session.events[session.events.length - 1];
+      const lastTs = lastEvent && lastEvent.ts;
+      const meta = [
+        ['file', filename],
+        ['workspace', s.workspace || '—'],
+        ['cwd', s.cwd || '—'],
+        ['started', firstTs ? formatTs(firstTs) : '—'],
+        ['ended', lastTs ? formatTs(lastTs) : '—'],
+        ['duration', firstTs && lastTs ? formatDuration(firstTs, lastTs) : '—'],
+      ];
+      meta.forEach(([k, v]) => {
+        const row = el('div');
+        row.appendChild(elText('span', 'k', k + ' '));
+        row.appendChild(elText('span', 'v', v));
+        grid.appendChild(row);
+      });
+      card.appendChild(grid);
+
+      // Stats
+      const stats = el('div', 'stats');
+      stats.appendChild(stat(session.tasks.length, 'tasks'));
+      const totalTurns = session.tasks.reduce((acc, t) => acc + t.turns.length, 0);
+      stats.appendChild(stat(totalTurns, 'turns'));
+      const actions = {};
+      session.tasks.forEach(t => t.turns.forEach(tn => {
+        if (tn.step && tn.step.action) actions[tn.step.action] = (actions[tn.step.action] || 0) + 1;
+      }));
+      Object.entries(actions).forEach(([k, v]) => {
+        stats.appendChild(stat(v, k));
+      });
+      card.appendChild(stats);
+
+      return card;
+    }
+
+    function stat(n, label) {
+      const s = el('span', 'stat');
+      s.appendChild(elText('span', 'num', String(n)));
+      s.appendChild(elText('span', 'lbl', label));
+      return s;
+    }
+
+    function renderTask(task, idx) {
+      const wrap = el('section', 'task');
+      const head = el('div', 'task-header');
+      const taskText = task.start && task.start.task ? task.start.task : '(task)';
+      const outcome = task.end && task.end.outcome ? task.end.outcome : 'running';
+      head.appendChild(document.createTextNode(`Task ${idx}`));
+      const badge = el('span', 'badge ' + outcomeBadgeClass(outcome));
+      badge.textContent = outcome.replace(/_/g, ' ');
+      head.appendChild(badge);
+      wrap.appendChild(head);
+
+      // user prompt
+      if (task.userInput) {
+        wrap.appendChild(renderUserPanel(task.userInput));
+      }
+
+      // turns
+      task.turns.forEach(turn => {
+        wrap.appendChild(renderTurn(turn));
+      });
+
+      // task end summary (if message is different from last assistant message)
+      if (task.end && task.end.message) {
+        const lastTurn = task.turns[task.turns.length - 1];
+        const lastMsg = lastTurn && lastTurn.step && lastTurn.step.message;
+        if (lastMsg !== task.end.message) {
+          // already covered by task_complete agent_step usually; skip duplicate
+        }
+      }
+      return wrap;
+    }
+
+    function outcomeBadgeClass(outcome) {
+      if (outcome === 'task_complete') return 'ok';
+      if (outcome === 'failed') return 'err';
+      if (outcome === 'need_user_input') return 'warn';
+      if (outcome === 'running') return 'muted';
+      return '';
+    }
+
+    function renderUserPanel(ui) {
+      const p = el('div', 'panel user');
+      const title = el('span', 'panel-title');
+      title.appendChild(document.createTextNode('You'));
+      title.appendChild(elText('span', 'ts', formatTs(ui.ts)));
+      p.appendChild(title);
+      const body = el('div', 'body');
+      body.textContent = ui.text || '';
+      p.appendChild(body);
+      return p;
+    }
+
+    function renderTurn(turn) {
+      const frag = document.createDocumentFragment();
+      const step = turn.step || {};
+      const action = step.action || (turn.parseError ? 'parse_error' : 'pending');
+
+      // Status chip
+      if (step.status) {
+        const chip = el('div', 'status-chip');
+        chip.textContent = step.status;
+        frag.appendChild(chip);
+      }
+
+      // Thought panel
+      if (step.thought) {
+        const tp = el('div', 'panel thought');
+        const title = el('span', 'panel-title');
+        title.appendChild(document.createTextNode('thought'));
+        title.appendChild(elText('span', 'turn', '· turn ' + turn.turn));
+        title.appendChild(elText('span', 'ts', formatTs(turn.stepTs || (turn.request && turn.request.ts))));
+        tp.appendChild(title);
+        const body = el('div', 'body');
+        body.textContent = step.thought;
+        tp.appendChild(body);
+        frag.appendChild(tp);
+      }
+
+      // Main action panel
+      const isAssistantMessage = ['task_complete', 'need_user_input', 'failed'].includes(action);
+      const isPlanOrMemory = ['update_plan', 'remember', 'switch_tools'].includes(action);
+
+      let panelClass = 'panel agent';
+      let panelTitle = 'GoodBoy';
+      if (action === 'failed') { panelClass = 'panel error'; panelTitle = 'GoodBoy · failed'; }
+      else if (action === 'need_user_input') { panelClass = 'panel agent'; panelTitle = 'GoodBoy · asks'; }
+      else if (action === 'task_complete') { panelTitle = 'GoodBoy'; }
+      else if (isPlanOrMemory) { panelClass = 'panel system'; panelTitle = action.replace('_', ' '); }
+      else { panelClass = 'panel agent'; panelTitle = 'GoodBoy · ' + action.replace('_', ' '); }
+
+      const panel = el('div', panelClass);
+      const title = el('span', 'panel-title');
+      title.appendChild(document.createTextNode(panelTitle));
+      title.appendChild(elText('span', 'turn', '· turn ' + turn.turn));
+      title.appendChild(elText('span', 'ts', formatTs(turn.stepTs || (turn.request && turn.request.ts))));
+      panel.appendChild(title);
+
+      const body = el('div', 'body');
+      renderAction(body, step, turn);
+      panel.appendChild(body);
+      frag.appendChild(panel);
+
+      // LLM request/response raw (hidden behind toggle)
+      const llmBlock = renderLlmRaw(turn);
+      if (llmBlock) frag.appendChild(llmBlock);
+
+      return frag;
+    }
+
+    function renderAction(container, step, turn) {
+      const action = step.action;
+
+      if (step.message && ['task_complete', 'need_user_input', 'failed'].includes(action)) {
+        const p = el('p');
+        p.textContent = step.message;
+        container.appendChild(p);
+      }
+
+      switch (action) {
+        case 'run_shell':
+          appendActionHead(container, 'run_shell');
+          if (step.command) {
+            const pre = el('pre', 'code shell');
+            pre.textContent = step.command;
+            container.appendChild(pre);
+          }
+          break;
+        case 'run_python':
+          appendActionHead(container, 'run_python');
+          if (step.code) {
+            const pre = el('pre', 'code');
+            pre.textContent = step.code;
+            container.appendChild(pre);
+          }
+          break;
+        case 'read_file': {
+          const head = el('div', 'action-head');
+          head.appendChild(elText('span', 'verb', 'read'));
+          head.appendChild(elText('span', 'path', step.path || ''));
+          if (step.start_line || step.end_line) {
+            const range = `:${step.start_line || ''}${step.end_line ? '-' + step.end_line : ''}`;
+            head.appendChild(elText('span', 'path', range));
+          }
+          container.appendChild(head);
+          break;
+        }
+        case 'str_replace': {
+          const head = el('div', 'action-head');
+          head.appendChild(elText('span', 'verb', 'edit'));
+          head.appendChild(elText('span', 'path', step.path || ''));
+          container.appendChild(head);
+          if (step.old_string != null || step.new_string != null) {
+            const diff = el('div', 'diff');
+            const oldBox = el('div', 'old');
+            oldBox.appendChild(elText('div', 'lab', '− old'));
+            const oldPre = el('pre'); oldPre.textContent = step.old_string || ''; oldBox.appendChild(oldPre);
+            const newBox = el('div', 'new');
+            newBox.appendChild(elText('div', 'lab', '+ new'));
+            const newPre = el('pre'); newPre.textContent = step.new_string || ''; newBox.appendChild(newPre);
+            diff.appendChild(oldBox);
+            diff.appendChild(newBox);
+            container.appendChild(diff);
+          }
+          break;
+        }
+        case 'apply_patch': {
+          const head = el('div', 'action-head');
+          head.appendChild(elText('span', 'verb', 'patch'));
+          head.appendChild(elText('span', 'path', step.path || ''));
+          container.appendChild(head);
+          if (step.patch) {
+            container.appendChild(renderPatch(step.patch));
+          }
+          break;
+        }
+        case 'update_plan': {
+          if (Array.isArray(step.plan_items) && step.plan_items.length) {
+            const ul = el('ul', 'plan-list');
+            step.plan_items.forEach(it => {
+              const li = el('li', 'plan-item ' + (it.status || 'pending'));
+              const mark = el('span', 'plan-mark ' + (it.status || 'pending'));
+              mark.textContent = planMarkChar(it.status);
+              li.appendChild(mark);
+              li.appendChild(elText('span', 'plan-text', it.text || ''));
+              ul.appendChild(li);
+            });
+            container.appendChild(ul);
+          } else {
+            container.appendChild(elText('p', null, '(empty plan)'));
+          }
+          break;
+        }
+        case 'remember': {
+          if (Array.isArray(step.memory) && step.memory.length) {
+            const ul = el('ul', 'memory-list');
+            step.memory.forEach(m => {
+              ul.appendChild(elText('li', null, m));
+            });
+            container.appendChild(ul);
+          }
+          break;
+        }
+        case 'switch_tools': {
+          const head = el('div', 'action-head');
+          head.appendChild(elText('span', 'verb', 'switch_tools'));
+          head.appendChild(elText('span', 'path', (step.tools || []).join(', ')));
+          container.appendChild(head);
+          break;
+        }
+        case 'task_complete':
+        case 'need_user_input':
+        case 'failed':
+          // already handled by message above; nothing else to add
+          break;
+        default:
+          if (action) {
+            appendActionHead(container, action);
+          }
+      }
+
+      // Tool result (attached to most actions)
+      if (turn.toolResult) {
+        container.appendChild(renderToolResult(turn.toolResult, turn.toolResultTs));
+      }
+    }
+
+    function appendActionHead(container, verb) {
+      const head = el('div', 'action-head');
+      head.appendChild(elText('span', 'verb', verb));
+      container.appendChild(head);
+    }
+
+    function planMarkChar(status) {
+      switch (status) {
+        case 'done': return '✓';
+        case 'in_progress': return '▸';
+        case 'cancelled': return '✕';
+        default: return '·';
+      }
+    }
+
+    function renderPatch(patch) {
+      const pre = el('pre', 'code');
+      const lines = String(patch).split(/\r?\n/);
+      lines.forEach(line => {
+        const span = document.createElement('span');
+        span.className = 'patch-line';
+        if (line.startsWith('+++') || line.startsWith('---')) {
+          span.classList.add('meta');
+        } else if (line.startsWith('@@')) {
+          span.classList.add('hunk');
+        } else if (line.startsWith('+')) {
+          span.classList.add('add');
+        } else if (line.startsWith('-')) {
+          span.classList.add('del');
+        }
+        span.textContent = line + '\n';
+        pre.appendChild(span);
+      });
+      return pre;
+    }
+
+    function renderToolResult(result, ts) {
+      const ok = (result.exit_code === 0);
+      const det = el('details', 'tool-result' + (ok ? '' : ' err'));
+      const sum = el('summary');
+      const lbl = el('span', 'lbl');
+      lbl.textContent = 'result';
+      sum.appendChild(lbl);
+      const exit = el('span');
+      exit.textContent = 'exit ' + (result.exit_code != null ? result.exit_code : '?');
+      sum.appendChild(exit);
+      if (result.timed_out) {
+        const t = el('span', 'badge err');
+        t.textContent = 'timeout';
+        sum.appendChild(t);
+      }
+      if (result.executed && result.executed !== '') {
+        const ex = el('span', 'meta');
+        ex.textContent = truncate(result.executed, 120);
+        sum.appendChild(ex);
+      }
+      det.appendChild(sum);
+
+      if (result.stdout && String(result.stdout).length) {
+        const pane = el('div', 'pane');
+        pane.appendChild(elText('div', 'pane-label', 'stdout'));
+        const pre = el('pre');
+        pre.textContent = stripAnsi(String(result.stdout));
+        pane.appendChild(pre);
+        det.appendChild(pane);
+      }
+      if (result.stderr && String(result.stderr).length) {
+        const pane = el('div', 'pane');
+        pane.appendChild(elText('div', 'pane-label', 'stderr'));
+        const pre = el('pre');
+        pre.textContent = stripAnsi(String(result.stderr));
+        pane.appendChild(pre);
+        det.appendChild(pane);
+      }
+      return det;
+    }
+
+    function renderLlmRaw(turn) {
+      if (!turn.request && !turn.response) return null;
+      const wrap = el('div', 'llm-raw');
+      const det = el('details', 'raw-block');
+      const sum = el('summary');
+      sum.textContent = 'llm raw · turn ' + turn.turn + (turn.request && turn.request.model ? ' · ' + turn.request.model : '');
+      det.appendChild(sum);
+
+      if (turn.request) {
+        if (turn.request.input) {
+          const pre = el('pre');
+          pre.textContent = '── input ──\n' + turn.request.input;
+          det.appendChild(pre);
+        }
+        if (turn.request.instructions) {
+          const pre = el('pre');
+          pre.textContent = '── instructions ──\n' + turn.request.instructions;
+          det.appendChild(pre);
+        }
+      }
+      if (turn.response && turn.response.raw) {
+        const pre = el('pre');
+        pre.textContent = '── response ──\n' + turn.response.raw;
+        det.appendChild(pre);
+      }
+      wrap.appendChild(det);
+      return wrap;
+    }
+
+    function renderParseErrors(errs) {
+      const p = el('div', 'panel error');
+      const title = el('span', 'panel-title');
+      title.appendChild(document.createTextNode('Parse errors (' + errs.length + ')'));
+      p.appendChild(title);
+      const body = el('div', 'body');
+      errs.slice(0, 20).forEach(e => {
+        const line = el('p');
+        line.textContent = (e.line != null ? 'line ' + e.line + ': ' : '') + (e.error || '') + ' — ' + (e.text || '');
+        body.appendChild(line);
+      });
+      if (errs.length > 20) {
+        body.appendChild(elText('p', null, '… and ' + (errs.length - 20) + ' more.'));
+      }
+      p.appendChild(body);
+      return p;
+    }
+
+    /* ---------- Helpers ---------- */
+    function el(tag, cls, text) {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    }
+    function elText(tag, cls, text) {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      n.textContent = text;
+      return n;
+    }
+    function truncate(s, n) {
+      if (s.length <= n) return s;
+      return s.slice(0, n) + '…';
+    }
+    function formatTs(ts) {
+      if (!ts) return '';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return ts;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    function formatDuration(a, b) {
+      const start = new Date(a).getTime();
+      const end = new Date(b).getTime();
+      if (isNaN(start) || isNaN(end)) return '';
+      const ms = end - start;
+      if (ms < 1000) return ms + ' ms';
+      const s = Math.floor(ms / 1000);
+      if (s < 60) return s + 's';
+      const m = Math.floor(s / 60);
+      const rs = s % 60;
+      if (m < 60) return m + 'm ' + rs + 's';
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      return h + 'h ' + rm + 'm';
+    }
+    function stripAnsi(s) {
+      // Remove common ANSI CSI escapes so output renders cleanly.
+      return s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+    }
+  })();
+  </script>
+</body>
+</html>
