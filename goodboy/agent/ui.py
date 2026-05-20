@@ -242,14 +242,34 @@ def _append_wrapped_content(
         text.append(segment, style=style)
 
 
+def _diff_display_line_width(diff: str) -> int:
+    """Minimum width for line numbers based on the largest line in the diff."""
+    max_line = 1
+    for raw_line in diff.splitlines():
+        hunk = _HUNK_HEADER_RE.match(raw_line)
+        if not hunk:
+            continue
+        old_start = int(hunk.group("old_start"))
+        old_count = int(hunk.group("old_count") or 1)
+        new_start = int(hunk.group("new_start"))
+        new_count = int(hunk.group("new_count") or 1)
+        max_line = max(
+            max_line,
+            old_start + max(old_count, 1) - 1,
+            new_start + max(new_count, 1) - 1,
+        )
+    return max(len(str(max_line)), 3)
+
+
 def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
     """Turn a unified diff into a readable before/after view with line numbers."""
     text = Text()
     old_line = 0
     new_line = 0
     in_hunk = False
-    line_prefix = "      "
-    body_indent = line_prefix + "      "
+    line_width = _diff_display_line_width(diff)
+    marker_width = 2
+    body_indent = " " * (line_width + marker_width)
 
     for raw_line in diff.splitlines():
         if raw_line.startswith("... ["):
@@ -278,7 +298,6 @@ def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
                 new_start,
                 new_count,
             )
-            text.append(line_prefix, style="")
             text.append(label, style="dim italic")
             text.append("\n")
             continue
@@ -292,8 +311,7 @@ def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
         if raw_line.startswith("-") and not raw_line.startswith("---"):
             if text.plain and text.plain[-1] != "\n":
                 text.append("\n")
-            text.append(line_prefix, style="")
-            text.append(f"{old_line:>4}  ", style="dim")
+            text.append(f"{old_line:<{line_width}}", style="dim")
             text.append("- ", style="bold red")
             _append_wrapped_content(
                 text,
@@ -309,8 +327,7 @@ def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
         if raw_line.startswith("+") and not raw_line.startswith("+++"):
             if text.plain and text.plain[-1] != "\n":
                 text.append("\n")
-            text.append(line_prefix, style="")
-            text.append(f"{new_line:>4}  ", style="dim")
+            text.append(f"{new_line:<{line_width}}", style="dim")
             text.append("+ ", style="bold green")
             _append_wrapped_content(
                 text,
@@ -326,8 +343,7 @@ def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
         content = raw_line[1:] if raw_line.startswith(" ") else raw_line
         if text.plain and text.plain[-1] != "\n":
             text.append("\n")
-        text.append(line_prefix, style="")
-        text.append(f"{new_line:>4}  ", style="dim")
+        text.append(f"{new_line:<{line_width}}", style="dim")
         text.append("  ", style="")
         _append_wrapped_content(
             text,
