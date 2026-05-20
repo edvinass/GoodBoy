@@ -220,7 +220,8 @@ goodboy [OPTIONS]
 ```
 
 Common options:
-- `-f` / `--show-thoughts`: show model thoughts on each step
+- `-f` / `--show-thoughts`: show model thoughts on each step (enabled by default)
+- `--hide-thoughts`: hide model thoughts on each step
 - `-v` / `--verbose`: show thoughts, tool/model switches, and task status lines
 - `-m` / `--show-model`: print the model used on each agent response
 - `-c` / `--show-commands`: print shell/Python commands the agent runs (not their output)

@@ -176,9 +176,17 @@ def ensure_configured() -> None:
 @click.group(invoke_without_command=True)
 @click.option(
     "-f",
+    "--show-thoughts",
     "show_thoughts",
-    is_flag=True,
-    help="Show model thoughts on each step.",
+    flag_value=True,
+    default=True,
+    help="Show model thoughts on each step (enabled by default).",
+)
+@click.option(
+    "--hide-thoughts",
+    "show_thoughts",
+    flag_value=False,
+    help="Hide model thoughts on each step.",
 )
 @click.option(
     "-v",

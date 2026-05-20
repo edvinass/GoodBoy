@@ -519,7 +519,7 @@ def test_default_print_agent_step_surfaces_switch_tools_notice(capsys):
     captured = capsys.readouterr()
     assert "web_search" in captured.err
     assert "Hosted tools enabled" in captured.err
-    assert "Need search" not in captured.out + captured.err
+    assert "Need search" in captured.out + captured.err
 
     ui.print_agent_step(
         AgentStep(
@@ -531,7 +531,8 @@ def test_default_print_agent_step_surfaces_switch_tools_notice(capsys):
     )
     captured = capsys.readouterr()
     assert "London: cloudy" in captured.out
-    assert "thought" not in captured.out
+    assert "thought" in captured.out.lower()
+    assert "Done" in captured.out
     assert "Enable hosted" not in captured.out
 
 
@@ -585,7 +586,7 @@ def test_print_agent_step_need_user_input(capsys):
     )
     ui.print_agent_step(step)
     out = capsys.readouterr().out
-    assert "Need detail" not in out
+    assert "Need detail" in out
     assert "Which file?" in out
 
 

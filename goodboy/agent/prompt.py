@@ -159,7 +159,7 @@ Never combine switch_tools with model or reasoning_effort in the same JSON objec
 def format_user_visibility_section(
     *,
     debug: bool,
-    show_thoughts: bool = False,
+    show_thoughts: bool = True,
     show_commands: bool = False,
 ) -> str:
     """Explain what the user can see in the terminal for this session."""
@@ -172,7 +172,7 @@ Command visibility (`goodboy -c` or `/commands`) is **on**. The user sees run_sh
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message` (formatted readably). Never claim output was printed unless the message contains what they asked for."""
     if show_thoughts:
         return """## User visibility (this session — thoughts visible)
-Thought visibility (`goodboy -f`) is **on**. The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed. They do **not** see run_shell commands, run_python code, or tool stdout/stderr — that appears in your prior-turn context only.
+Thought visibility is **on** by default (`goodboy -f` also enables it; `--hide-thoughts` disables it). The user sees your optional `thought` on each step and your `message` on need_user_input, task_complete, or failed. They do **not** see run_shell commands, run_python code, or tool stdout/stderr — that appears in your prior-turn context only.
 When the user asks to show/print/display/list/report info, put the actual content in task_complete `message`. Never claim output was printed unless the message contains what they asked for."""
     return """## User visibility (this session — default)
 Debug mode is **off** (default). While waiting on the model, the user sees your **`status`** line on the loading indicator. After file harness steps they may see short activity lines (e.g. reading a file, writing a file) and unified diffs for edits (`str_replace`, `apply_patch`); successful shell/Python runs are not repeated in the chat history. They do **not** see run_shell commands, run_python code, general tool stdout/stderr, or your `thought` field — only your `message` on need_user_input, task_complete, or failed. Full commands and tool output appear in your prior-turn context only; use `goodboy -c` or `goodboy -d` if the user wants those in the terminal.
@@ -230,7 +230,7 @@ def build_stable_system_prompt(
 def build_session_prompt_suffix(
     *,
     debug: bool = False,
-    show_thoughts: bool = False,
+    show_thoughts: bool = True,
     show_commands: bool = False,
 ) -> str:
     """Per-session suffix appended after the stable system prompt."""
@@ -246,7 +246,7 @@ def build_system_prompt(
     allowed_models: list[str],
     tools: tuple | None = None,
     debug: bool = False,
-    show_thoughts: bool = False,
+    show_thoughts: bool = True,
     show_commands: bool = False,
     auto_model_switch: bool = False,
 ) -> str:

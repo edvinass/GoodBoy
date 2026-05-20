@@ -50,7 +50,7 @@ class AgentHarness:
     def __init__(
         self,
         *,
-        show_thoughts: bool = False,
+        show_thoughts: bool = True,
         verbose: bool = False,
         show_model: bool = False,
         show_commands: bool = False,
@@ -496,7 +496,7 @@ class AgentHarness:
 
 def run_harness(
     *,
-    show_thoughts: bool = False,
+    show_thoughts: bool = True,
     verbose: bool = False,
     show_model: bool = False,
     show_commands: bool = False,
