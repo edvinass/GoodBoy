@@ -10,12 +10,14 @@ from agent.local_llm import (
     _effective_max_tokens,
     _fit_messages_to_context,
     complete_structured_local,
+    context_full_events,
     download_model,
     ensure_local_deps,
     get_catalog_spec,
     has_installed_local_model,
     is_local_model,
     list_installed_models,
+    reset_context_full_notice,
     resolve_local_model,
 )
 from llm import complete_structured_with_id, get_selectable_models, is_local_model as llm_is_local
@@ -158,6 +160,7 @@ def test_effective_max_tokens_caps_completion_budget():
 
 def test_fit_messages_truncates_oversized_user_content():
     llama = MagicMock()
+    reset_context_full_notice()
 
     def _fake_count(_llama, messages):
         user = next(m["content"] for m in messages if m["role"] == "user")
@@ -174,6 +177,59 @@ def test_fit_messages_truncates_oversized_user_content():
     user = next(m["content"] for m in fitted if m["role"] == "user")
     assert len(user) < 40000
     assert "elided" in user
+    assert context_full_events() == 1
+
+
+def test_context_full_notice_emits_once_until_reset(capsys):
+    """Multiple truncations within one task surface a single warning."""
+    llama = MagicMock()
+    reset_context_full_notice()
+
+    def _fake_count(_llama, messages):
+        user = next(m["content"] for m in messages if m["role"] == "user")
+        return len(user) // 4
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "x" * 40000},
+    ]
+    with patch("agent.local_llm._count_chat_tokens", side_effect=_fake_count):
+        for _ in range(5):
+            _fit_messages_to_context(
+                llama, messages, max_tokens=2048, n_ctx=8192
+            )
+
+    captured = capsys.readouterr()
+    assert captured.err.count("Local model context is tight") == 1
+    assert context_full_events() == 5
+
+    reset_context_full_notice()
+    assert context_full_events() == 0
+
+    with patch("agent.local_llm._count_chat_tokens", side_effect=_fake_count):
+        _fit_messages_to_context(
+            llama, messages, max_tokens=2048, n_ctx=8192
+        )
+    captured = capsys.readouterr()
+    assert captured.err.count("Local model context is tight") == 1
+
+
+def test_context_full_notice_not_emitted_when_fits(capsys):
+    llama = MagicMock()
+    reset_context_full_notice()
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "small"},
+    ]
+    with patch("agent.local_llm._count_chat_tokens", return_value=10):
+        _fit_messages_to_context(
+            llama, messages, max_tokens=2048, n_ctx=8192
+        )
+
+    captured = capsys.readouterr()
+    assert "Local model context is tight" not in captured.err
+    assert context_full_events() == 0
 
 
 def test_fit_messages_raises_when_still_too_large():

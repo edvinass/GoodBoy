@@ -2,8 +2,10 @@
 
 from settings import (
     DEFAULT_CONTEXT_RECENT_FULL_TURNS,
+    DEFAULT_LOCAL_RECENT_FULL_TURNS,
     GOODBOY_AUTO_MODEL_SWITCH_VAR,
     GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR,
+    GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR,
     GOODBOY_REASONING_EFFORT_VAR,
     GOODBOY_RESPONSE_CHAIN_VAR,
     GOODBOY_SHOW_COMMANDS_VAR,
@@ -83,3 +85,43 @@ def test_settings_recent_full_turns_floor_at_one(monkeypatch, tmp_path):
     get_settings.cache_clear()
     assert Settings.from_env().context_recent_full_turns == 1
     get_settings.cache_clear()
+
+
+def test_settings_local_recent_full_turns_default(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    monkeypatch.delenv(GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR, raising=False)
+    get_settings.cache_clear()
+    assert (
+        Settings.from_env().local_recent_full_turns
+        == DEFAULT_LOCAL_RECENT_FULL_TURNS
+    )
+    get_settings.cache_clear()
+
+
+def test_settings_local_recent_full_turns_from_env(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"{GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR}=6\n", encoding="utf-8"
+    )
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    get_settings.cache_clear()
+    assert Settings.from_env().local_recent_full_turns == 6
+    get_settings.cache_clear()
+
+
+def test_settings_local_recent_full_turns_floor_at_one(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"{GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR}=0\n", encoding="utf-8"
+    )
+    monkeypatch.setattr("settings.ENV_FILE", env_file)
+    get_settings.cache_clear()
+    assert Settings.from_env().local_recent_full_turns == 1
+    get_settings.cache_clear()
+
+
+def test_settings_local_default_smaller_than_cloud_default():
+    """Local window must be tighter than the cloud window by design."""
+    assert DEFAULT_LOCAL_RECENT_FULL_TURNS < DEFAULT_CONTEXT_RECENT_FULL_TURNS

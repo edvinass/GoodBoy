@@ -54,6 +54,97 @@ def test_local_llm_call_omits_reasoning_and_tools(tmp_path):
     assert "previous_response_id" not in call
 
 
+def test_local_session_uses_small_recent_full_turns(tmp_path, monkeypatch):
+    """Local models default to a tighter prompt window to fit 8k contexts."""
+    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    from settings import DEFAULT_LOCAL_RECENT_FULL_TURNS, get_settings
+
+    get_settings.cache_clear()
+    loop = AgentLoop(
+        workspace=tmp_path,
+        model="local:qwen2.5-coder-7b-q4",
+        allowed_models=_ALLOWED_LOCAL(),
+        llm_call=_llm_ok,
+    )
+    assert loop.recent_full_turns == DEFAULT_LOCAL_RECENT_FULL_TURNS
+
+
+def test_cloud_session_keeps_default_recent_full_turns(tmp_path, monkeypatch):
+    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    from settings import DEFAULT_CONTEXT_RECENT_FULL_TURNS, get_settings
+
+    get_settings.cache_clear()
+    loop = AgentLoop(
+        workspace=tmp_path,
+        model="gpt-5.4-nano",
+        allowed_models=["gpt-5.4-nano"],
+        llm_call=_llm_ok,
+    )
+    assert loop.recent_full_turns == DEFAULT_CONTEXT_RECENT_FULL_TURNS
+
+
+def test_set_session_model_resizes_window(tmp_path, monkeypatch):
+    """Switching between cloud and local models adjusts the prompt window."""
+    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    from settings import (
+        DEFAULT_CONTEXT_RECENT_FULL_TURNS,
+        DEFAULT_LOCAL_RECENT_FULL_TURNS,
+        get_settings,
+    )
+
+    get_settings.cache_clear()
+    loop = AgentLoop(
+        workspace=tmp_path,
+        model="gpt-5.4-nano",
+        allowed_models=["gpt-5.4-nano", "local:qwen2.5-coder-7b-q4"],
+        llm_call=_llm_ok,
+    )
+    assert loop.recent_full_turns == DEFAULT_CONTEXT_RECENT_FULL_TURNS
+
+    loop.set_session_model("local:qwen2.5-coder-7b-q4")
+    assert loop.recent_full_turns == DEFAULT_LOCAL_RECENT_FULL_TURNS
+
+    loop.set_session_model("gpt-5.4-nano")
+    assert loop.recent_full_turns == DEFAULT_CONTEXT_RECENT_FULL_TURNS
+
+
+def test_explicit_recent_full_turns_overrides_local_default(tmp_path):
+    """An explicit recent_full_turns kwarg wins over model-aware defaults."""
+    loop = AgentLoop(
+        workspace=tmp_path,
+        model="local:qwen2.5-coder-7b-q4",
+        allowed_models=_ALLOWED_LOCAL(),
+        llm_call=_llm_ok,
+        recent_full_turns=7,
+    )
+    assert loop.recent_full_turns == 7
+
+
+def test_loop_run_resets_local_context_notice(tmp_path, monkeypatch):
+    """Each task re-arms the one-shot context-full warning."""
+    monkeypatch.setenv("OPENAI_MODEL", "local:qwen2.5-coder-7b-q4")
+    from settings import get_settings
+
+    get_settings.cache_clear()
+    import agent.local_llm as local_llm
+
+    local_llm._truncation_state["events"] = 4
+    local_llm._truncation_state["warned_at"] = 1
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        model="local:qwen2.5-coder-7b-q4",
+        allowed_models=_ALLOWED_LOCAL(),
+        llm_call=_llm_ok,
+    )
+    loop.run("anything")
+    assert local_llm.context_full_events() == 0
+    assert local_llm._truncation_state["warned_at"] == 0
+
+
 def test_switch_tools_rejected_on_local_model(tmp_path):
     loop = AgentLoop(
         workspace=tmp_path,
