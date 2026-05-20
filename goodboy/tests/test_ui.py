@@ -25,6 +25,7 @@ from agent.ui import (
     _accept_active_completion,
     _configure_prompt_toolkit,
     _clear_user_input,
+    _format_unified_diff_for_display,
     _is_cmd_d_data,
     _is_shift_enter_data,
     _input_window_line_count,
@@ -389,6 +390,31 @@ def test_consecutive_activity_lines_no_extra_blank(capsys):
     assert "◦ read a.py\n\n◦" not in out
 
 
+def test_format_unified_diff_for_display_hides_headers_and_shows_lines():
+    diff = """--- a/foo.py
++++ b/foo.py
+@@ -1,2 +1,2 @@
+ alpha
+-beta
++gamma
+"""
+    rendered = _format_unified_diff_for_display(diff, width=80)
+    plain = rendered.plain
+    assert "--- a/foo.py" not in plain
+    assert "+++ b/foo.py" not in plain
+    assert "@@" not in plain
+    assert "lines 1–2" in plain
+    assert "alpha" in plain
+    assert "- beta" in plain
+    assert "+ gamma" in plain
+
+
+def test_format_unified_diff_for_display_shows_truncation_note():
+    diff = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n... [3 more lines]"
+    rendered = _format_unified_diff_for_display(diff, width=80)
+    assert "... [3 more lines]" in rendered.plain
+
+
 def test_print_harness_activity_shows_file_diff(capsys):
     ui = ConversationUI()
     step = AgentStep(
@@ -406,8 +432,9 @@ def test_print_harness_activity_shows_file_diff(capsys):
     ui.print_harness_activity(step, result)
     out = capsys.readouterr().out
     assert "wrote foo.py" in out
-    assert "-a" in out
-    assert "+b" in out
+    assert "changes · foo.py" in out
+    assert "- a" in out
+    assert "+ b" in out
 
 
 def test_print_harness_activity_skips_file_diff_in_debug(capsys):

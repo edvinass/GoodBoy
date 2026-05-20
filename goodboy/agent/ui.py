@@ -108,6 +108,11 @@ _USER_INPUT_MAX_LINES = 16
 
 _MAX_ACTIVITY_DIFF_LINES = 40
 
+_HUNK_HEADER_RE = re.compile(
+    r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? "
+    r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@"
+)
+
 _resize_poller_installed = False
 
 
@@ -198,6 +203,144 @@ def _truncate_diff_lines(diff: str, *, max_lines: int = _MAX_ACTIVITY_DIFF_LINES
     kept = lines[:max_lines]
     omitted = len(lines) - max_lines
     return "\n".join(kept) + f"\n... [{omitted} more lines]"
+
+
+def _format_diff_line_range(start: int, count: int) -> str:
+    if count <= 1:
+        return str(start)
+    return f"{start}–{start + count - 1}"
+
+
+def _format_diff_hunk_label(
+    old_start: int,
+    old_count: int,
+    new_start: int,
+    new_count: int,
+) -> str:
+    old_range = _format_diff_line_range(old_start, old_count)
+    new_range = _format_diff_line_range(new_start, new_count)
+    if old_range == new_range:
+        return f"lines {new_range}"
+    return f"lines {old_range} → {new_range}"
+
+
+def _append_wrapped_content(
+    text: Text,
+    content: str,
+    *,
+    style: str,
+    width: int,
+    indent: str,
+) -> None:
+    """Append diff body text, wrapping long lines under the same indent."""
+    usable = max(width - len(indent), 20)
+    segments = _wrap_long_lines(content, width=usable).splitlines() or [""]
+    for index, segment in enumerate(segments):
+        if index:
+            text.append("\n")
+            text.append(indent, style="")
+        text.append(segment, style=style)
+
+
+def _format_unified_diff_for_display(diff: str, *, width: int) -> Text:
+    """Turn a unified diff into a readable before/after view with line numbers."""
+    text = Text()
+    old_line = 0
+    new_line = 0
+    in_hunk = False
+    line_prefix = "      "
+    body_indent = line_prefix + "      "
+
+    for raw_line in diff.splitlines():
+        if raw_line.startswith("... ["):
+            if text.plain:
+                text.append("\n")
+            text.append(raw_line, style="dim italic")
+            continue
+
+        if raw_line.startswith("--- ") or raw_line.startswith("+++ "):
+            continue
+
+        hunk = _HUNK_HEADER_RE.match(raw_line)
+        if hunk:
+            if in_hunk and text.plain:
+                text.append("\n")
+            old_start = int(hunk.group("old_start"))
+            old_count = int(hunk.group("old_count") or 1)
+            new_start = int(hunk.group("new_start"))
+            new_count = int(hunk.group("new_count") or 1)
+            old_line = old_start
+            new_line = new_start
+            in_hunk = True
+            label = _format_diff_hunk_label(
+                old_start,
+                old_count,
+                new_start,
+                new_count,
+            )
+            text.append(line_prefix, style="")
+            text.append(label, style="dim italic")
+            text.append("\n")
+            continue
+
+        if raw_line.startswith("\\ No newline"):
+            text.append(body_indent, style="")
+            text.append(raw_line.strip(), style="dim italic")
+            text.append("\n")
+            continue
+
+        if raw_line.startswith("-") and not raw_line.startswith("---"):
+            if text.plain and text.plain[-1] != "\n":
+                text.append("\n")
+            text.append(line_prefix, style="")
+            text.append(f"{old_line:>4}  ", style="dim")
+            text.append("- ", style="bold red")
+            _append_wrapped_content(
+                text,
+                raw_line[1:],
+                style="red",
+                width=width,
+                indent=body_indent,
+            )
+            text.append("\n")
+            old_line += 1
+            continue
+
+        if raw_line.startswith("+") and not raw_line.startswith("+++"):
+            if text.plain and text.plain[-1] != "\n":
+                text.append("\n")
+            text.append(line_prefix, style="")
+            text.append(f"{new_line:>4}  ", style="dim")
+            text.append("+ ", style="bold green")
+            _append_wrapped_content(
+                text,
+                raw_line[1:],
+                style="green",
+                width=width,
+                indent=body_indent,
+            )
+            text.append("\n")
+            new_line += 1
+            continue
+
+        content = raw_line[1:] if raw_line.startswith(" ") else raw_line
+        if text.plain and text.plain[-1] != "\n":
+            text.append("\n")
+        text.append(line_prefix, style="")
+        text.append(f"{new_line:>4}  ", style="dim")
+        text.append("  ", style="")
+        _append_wrapped_content(
+            text,
+            content,
+            style="dim",
+            width=width,
+            indent=body_indent,
+        )
+        text.append("\n")
+        old_line += 1
+        new_line += 1
+
+    return text
 
 
 def _extract_unified_diff(stdout: str) -> str | None:
@@ -1262,8 +1405,8 @@ class ConversationUI:
             panel_width = self._panel_text_width()
             path = data.get("path", "file")
             yield self._panel(
-                _syntax(data["diff"], "diff", width=panel_width),
-                title=_role_panel_title("agent", subtitle=f"diff · {path}"),
+                _format_unified_diff_for_display(data["diff"], width=panel_width),
+                title=_role_panel_title("agent", subtitle=f"changes · {path}"),
                 border_style="dim",
                 padding=(0, 1),
             )

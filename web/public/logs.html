@@ -501,10 +501,12 @@
     }
 
     .patch-line { display: block; }
+    .patch-line.ctx { color: var(--muted-dim); }
     .patch-line.add { color: var(--plus); background: rgba(155,181,106,0.07); }
     .patch-line.del { color: var(--minus); background: rgba(224,108,91,0.07); }
-    .patch-line.hunk { color: var(--accent); }
-    .patch-line.meta { color: var(--muted-dim); }
+    .patch-line.hunk { color: var(--accent); font-style: italic; }
+    .patch-line.note { color: var(--muted-dim); font-style: italic; }
+    .patch-line .ln { color: var(--muted-dim); user-select: none; }
 
     @media (max-width: 720px) {
       .diff { grid-template-columns: 1fr; }
@@ -1270,21 +1272,92 @@
 
     function renderPatch(patch) {
       const pre = el('pre', 'code');
-      const lines = String(patch).split(/\r?\n/);
-      lines.forEach(line => {
+      const hunkRe = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+      let oldLine = 0;
+      let newLine = 0;
+      let inHunk = false;
+
+      function lineRange(start, count) {
+        const n = count == null || count === '' ? 1 : Number(count);
+        return n <= 1 ? String(start) : `${start}–${start + n - 1}`;
+      }
+
+      function appendLine(className, text) {
         const span = document.createElement('span');
-        span.className = 'patch-line';
-        if (line.startsWith('+++') || line.startsWith('---')) {
-          span.classList.add('meta');
-        } else if (line.startsWith('@@')) {
-          span.classList.add('hunk');
-        } else if (line.startsWith('+')) {
-          span.classList.add('add');
-        } else if (line.startsWith('-')) {
-          span.classList.add('del');
-        }
-        span.textContent = line + '\n';
+        span.className = 'patch-line' + (className ? ' ' + className : '');
+        span.textContent = text + '\n';
         pre.appendChild(span);
+      }
+
+      String(patch).split(/\r?\n/).forEach(line => {
+        if (line.startsWith('--- ') || line.startsWith('+++ ')) return;
+        if (line.startsWith('... [')) {
+          appendLine('note', '      ' + line);
+          return;
+        }
+
+        const hunk = line.match(hunkRe);
+        if (hunk) {
+          if (inHunk) appendLine('', '');
+          oldLine = Number(hunk[1]);
+          newLine = Number(hunk[3]);
+          const oldCount = hunk[2] == null || hunk[2] === '' ? 1 : Number(hunk[2]);
+          const newCount = hunk[4] == null || hunk[4] === '' ? 1 : Number(hunk[4]);
+          const oldRange = lineRange(oldLine, oldCount);
+          const newRange = lineRange(newLine, newCount);
+          const label = oldRange === newRange
+            ? `lines ${newRange}`
+            : `lines ${oldRange} → ${newRange}`;
+          appendLine('hunk', '      ' + label);
+          inHunk = true;
+          return;
+        }
+
+        if (line.startsWith('\\ No newline')) {
+          appendLine('note', '            ' + line.trim());
+          return;
+        }
+
+        if (line.startsWith('-') && !line.startsWith('---')) {
+          const span = document.createElement('span');
+          span.className = 'patch-line del';
+          span.appendChild(document.createTextNode('      '));
+          const ln = document.createElement('span');
+          ln.className = 'ln';
+          ln.textContent = String(oldLine).padStart(4, ' ') + '  - ';
+          span.appendChild(ln);
+          span.appendChild(document.createTextNode(line.slice(1) + '\n'));
+          pre.appendChild(span);
+          oldLine += 1;
+          return;
+        }
+
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          const span = document.createElement('span');
+          span.className = 'patch-line add';
+          span.appendChild(document.createTextNode('      '));
+          const ln = document.createElement('span');
+          ln.className = 'ln';
+          ln.textContent = String(newLine).padStart(4, ' ') + '  + ';
+          span.appendChild(ln);
+          span.appendChild(document.createTextNode(line.slice(1) + '\n'));
+          pre.appendChild(span);
+          newLine += 1;
+          return;
+        }
+
+        const content = line.startsWith(' ') ? line.slice(1) : line;
+        const span = document.createElement('span');
+        span.className = 'patch-line ctx';
+        span.appendChild(document.createTextNode('      '));
+        const ln = document.createElement('span');
+        ln.className = 'ln';
+        ln.textContent = String(newLine).padStart(4, ' ') + '    ';
+        span.appendChild(ln);
+        span.appendChild(document.createTextNode(content + '\n'));
+        pre.appendChild(span);
+        oldLine += 1;
+        newLine += 1;
       });
       return pre;
     }
