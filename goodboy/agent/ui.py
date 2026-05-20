@@ -59,11 +59,7 @@ from rich.theme import Theme
 from rich.tree import Tree
 
 from agent.banner import format_startup
-from agent.context import (
-    active_plan_counts,
-    format_plan_step_progress,
-    plan_status_mark,
-)
+from agent.context import format_plan_items, format_plan_step_progress
 from agent.mentions import (
     active_mention_query,
     expand_file_mentions,
@@ -77,7 +73,7 @@ from agent.repl_commands import (
 )
 from agent.workspace import resolve_workspace
 from settings import get_settings
-from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
+from agent.types import AgentAction, AgentStep, PlanItem, ToolResult
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(139,69,19)"
@@ -100,7 +96,6 @@ _SUBTITLE_ICONS = {
     "shell": ("$", "shell"),
     "python": ("›", "python"),
     "output": ("↳", "output"),
-    "plan": ("☰", "plan"),
 }
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
@@ -867,48 +862,6 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
-def _plan_row(item: PlanItem) -> Text:
-    mark = plan_status_mark(item.status)
-    line = Text()
-    if item.status == PlanItemStatus.DONE:
-        line.append(f" {mark} ", style="muted strike")
-        line.append(item.text, style="muted strike")
-    elif item.status == PlanItemStatus.CANCELLED:
-        line.append(f" {mark} ", style="muted strike")
-        line.append(item.text, style="muted dim strike")
-    elif item.status == PlanItemStatus.IN_PROGRESS:
-        line.append(f" {mark} ", style=f"bold {_BRAND_STYLE}")
-        line.append(item.text, style=f"bold {_BRAND_STYLE}")
-    else:
-        line.append(f" {mark} ", style="dim")
-        line.append(item.text)
-    return line
-
-
-def _render_plan_panel(items: list[PlanItem], *, width: int) -> Panel:
-    done, total = active_plan_counts(items)
-    agent_title = _role_panel_title("agent", subtitle="plan")
-    subtitle: str | None = None
-    if total:
-        subtitle = f"[muted]{done}/{total} complete[/]"
-    body: RenderableType
-    if items:
-        body = Group(*[_plan_row(item) for item in items])
-    else:
-        body = Text("Planning", style="muted")
-    return Panel(
-        body,
-        title=agent_title,
-        title_align="left",
-        subtitle=subtitle,
-        subtitle_align="left",
-        border_style=_BRAND_STYLE,
-        box=ROUNDED,
-        padding=(0, 1),
-        width=width,
-    )
-
-
 def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
     if role == "user":
         return Text.from_markup("[user]👤 You[/]")
@@ -1254,13 +1207,6 @@ class ConversationUI:
                 subtitle=data.get("subtitle"),
                 width=self._fresh_terminal_width(),
             )
-            return
-        if kind == "plan":
-            yield ""
-            items = [
-                PlanItem.model_validate(raw) for raw in data.get("items", [])
-            ]
-            yield _render_plan_panel(items, width=self._fresh_terminal_width())
             return
         if kind == "routing":
             yield ""
@@ -1637,10 +1583,8 @@ class ConversationUI:
 
     def print_plan(self, items: list[PlanItem]) -> None:
         """Show the durable task plan in the GoodBoy panel."""
-        self._record(
-            "plan",
-            items=[item.model_dump(mode="json") for item in items],
-        )
+        body = format_plan_items(items) if items else "Planning"
+        self.print_agent(body, subtitle="plan")
 
     def print_llm_request(
         self,
