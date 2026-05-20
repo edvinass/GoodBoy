@@ -37,7 +37,7 @@ from agent.ui import (
 
 def test_user_input_placeholder_and_footer_are_separate():
     assert _USER_INPUT_PLACEHOLDER == "Ask anything"
-    assert _USER_INPUT_FOOTER == "@ - files, / - commands, ? - help, Cmd+D - clear"
+    assert _USER_INPUT_FOOTER == "@ files · / commands · ? help · Cmd+D clear"
     assert _user_input_placeholder() == [("class:placeholder", "Ask anything")]
 
 
@@ -50,13 +50,22 @@ def test_input_window_line_count_grows_with_buffer_lines():
     assert _input_window_line_count(buffer) == _USER_INPUT_MAX_LINES
 
 
-def test_input_frame_fragments_use_dim_style_classes():
-    from agent.ui import _input_border_fragments, _input_footer_fragments
+def test_input_frame_fragments_use_styled_classes():
+    from agent.ui import (
+        _input_top_fragments,
+        _input_bottom_fragments,
+        _input_footer_fragments,
+    )
 
-    assert _input_border_fragments()[0][0] == "class:input-border"
-    assert _input_footer_fragments() == [
-        ("class:input-footer", "@ - files, / - commands, ? - help, Cmd+D - clear")
-    ]
+    top = _input_top_fragments()
+    bottom = _input_bottom_fragments()
+    assert top[0][0] == "class:input-border"
+    assert top[0][1].startswith("╭") and top[0][1].endswith("╮")
+    assert bottom[0][0] == "class:input-border"
+    assert bottom[0][1].startswith("╰") and bottom[0][1].endswith("╯")
+    footer = _input_footer_fragments()
+    assert footer[0][0] == "class:input-footer"
+    assert "@ files · / commands · ? help · Cmd+D clear" in footer[0][1]
 
 
 def test_format_pasted_text_label():

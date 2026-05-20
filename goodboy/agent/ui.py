@@ -35,11 +35,16 @@ from prompt_toolkit.layout import (
     FloatContainer,
     HSplit,
     Layout,
+    VSplit,
     Window,
 )
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.menus import CompletionsMenu
-from prompt_toolkit.layout.processors import AfterInput, ConditionalProcessor
+from prompt_toolkit.layout.processors import (
+    AfterInput,
+    BeforeInput,
+    ConditionalProcessor,
+)
 from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style, merge_styles
 from questionary.constants import DEFAULT_STYLE
@@ -96,7 +101,8 @@ _SUBTITLE_ICONS = {
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything"
-_USER_INPUT_FOOTER = "@ - files, / - commands, ? - help, Cmd+D - clear"
+_USER_INPUT_FOOTER = "@ files · / commands · ? help · Cmd+D clear"
+_USER_INPUT_PROMPT = "❯ "
 _USER_INPUT_MENU_RESERVE = 8
 _USER_INPUT_MAX_LINES = 16
 
@@ -555,6 +561,16 @@ def _input_horizontal_rule() -> str:
     return "─" * _terminal_columns()
 
 
+def _input_top_rule() -> str:
+    cols = max(_terminal_columns(), 4)
+    return "╭" + "─" * (cols - 2) + "╮"
+
+
+def _input_bottom_rule() -> str:
+    cols = max(_terminal_columns(), 4)
+    return "╰" + "─" * (cols - 2) + "╯"
+
+
 def _user_input_placeholder() -> AnyFormattedText:
     return [("class:placeholder", _USER_INPUT_PLACEHOLDER)]
 
@@ -563,8 +579,16 @@ def _input_border_fragments() -> AnyFormattedText:
     return [("class:input-border", _input_horizontal_rule())]
 
 
+def _input_top_fragments() -> AnyFormattedText:
+    return [("class:input-border", _input_top_rule())]
+
+
+def _input_bottom_fragments() -> AnyFormattedText:
+    return [("class:input-border", _input_bottom_rule())]
+
+
 def _input_footer_fragments() -> AnyFormattedText:
-    return [("class:input-footer", _USER_INPUT_FOOTER)]
+    return [("class:input-footer", "  " + _USER_INPUT_FOOTER)]
 
 
 def _run_framed_user_prompt(
@@ -572,12 +596,13 @@ def _run_framed_user_prompt(
     *,
     style: Style,
 ) -> str | None:
-    """Prompt with top/bottom rules and footer in the layout (works without CPR)."""
+    """Prompt with rounded frame, side bars, and footer (works without CPR)."""
     show_placeholder = Condition(lambda: buffer.text == "")
 
     input_control = BufferControl(
         buffer=buffer,
         input_processors=[
+            BeforeInput(_USER_INPUT_PROMPT, style="class:prompt"),
             ConditionalProcessor(
                 AfterInput(_user_input_placeholder),
                 show_placeholder,
@@ -603,8 +628,29 @@ def _run_framed_user_prompt(
             dont_extend_height=True,
         )
 
-    top_window = _frame_row(_input_border_fragments)
-    bottom_window = _frame_row(_input_border_fragments)
+    def _bar_fragments(side: str) -> AnyFormattedText:
+        glyph = "│ " if side == "left" else " │"
+        lines = _input_window_line_count(buffer)
+        return [("class:input-border", "\n".join([glyph] * lines))]
+
+    left_bar = Window(
+        FormattedTextControl(lambda: _bar_fragments("left")),
+        width=Dimension.exact(2),
+        height=lambda: _input_window_height(buffer),
+        dont_extend_width=True,
+        wrap_lines=False,
+    )
+    right_bar = Window(
+        FormattedTextControl(lambda: _bar_fragments("right")),
+        width=Dimension.exact(2),
+        height=lambda: _input_window_height(buffer),
+        dont_extend_width=True,
+        wrap_lines=False,
+    )
+    input_row = VSplit([left_bar, input_window, right_bar])
+
+    top_window = _frame_row(_input_top_fragments)
+    bottom_window = _frame_row(_input_bottom_fragments)
     footer_window = _frame_row(_input_footer_fragments)
 
     completions_open = Condition(lambda: buffer.complete_state is not None)
@@ -620,7 +666,7 @@ def _run_framed_user_prompt(
     footer_row = ConditionalContainer(footer_window, filter=frame_footer_visible)
 
     input_frame = HSplit(
-        [top_window, input_window, menu_spacer, bottom_row, footer_row]
+        [top_window, input_row, menu_spacer, bottom_row, footer_row]
     )
 
     root_container = FloatContainer(
@@ -679,9 +725,10 @@ def _prompt_user_line(
             Style.from_dict(
                 {
                     "": "#ffffff",
-                    "placeholder": "dim",
-                    "input-border": "dim",
-                    "input-footer": "dim",
+                    "placeholder": "#7f7f7f italic",
+                    "input-border": "#8b4513",
+                    "input-footer": "#7f7f7f",
+                    "prompt": "bold #cd853f",
                     "mention.choice": "ansibrightblue",
                     "completion-menu": "bg:#1e1e1e",
                     "completion-menu.completion": "",
