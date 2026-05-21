@@ -46,7 +46,6 @@ from agent.stream_status import extract_streaming_status
 from agent.ui import (
     ConversationUI,
     ThinkingUpdater,
-    activity_label,
     progress_label_for_step,
     tool_activity,
 )
@@ -66,7 +65,6 @@ from llm import (
     REASONING_EFFORT,
     ResponseChainBroken,
     UserAbort,
-    complete_structured,
     complete_structured_with_id,
     format_api_connection_error,
     get_selectable_models,

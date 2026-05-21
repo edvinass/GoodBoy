@@ -305,8 +305,9 @@ def _package_root() -> Path:
 
 def _local_deps_available() -> bool:
     try:
-        import llama_cpp  # noqa: F401
-        import huggingface_hub  # noqa: F401
+        import importlib
+        importlib.import_module('llama_cpp')
+        importlib.import_module('huggingface_hub')
     except ImportError:
         return False
     return True
