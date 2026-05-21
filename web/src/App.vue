@@ -224,7 +224,7 @@ const active = computed(
                 <span class="term-panel-title">
                   <span class="term-panel-emoji">🐶</span> GoodBoy<template
                     v-if="turn.subtitle"
-                  ><span class="term-panel-sub-dot">[·]</span><span
+                  >  <span
                     class="term-panel-sub"
                   >({{ turn.subtitle }})</span></template>
                 </span>
