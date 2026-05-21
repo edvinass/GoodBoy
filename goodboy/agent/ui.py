@@ -1420,7 +1420,7 @@ class ConversationUI:
                 _wrap_long_lines(data["text"], width=panel_width),
                 title=_role_panel_title("agent", subtitle="thought"),
                 border_style=_BRAND_STYLE,
-                padding=(0, 1),
+                                                padding=(0, 1),
             )
             return
         if kind == "status":
@@ -1428,9 +1428,10 @@ class ConversationUI:
             yield data["markup"]
             return
         if kind == "activity":
-            style = "error" if data.get("failed") else "muted"
-            yield f"[{style}]◦ {data['text']}[/]"
+            style = "muted" if data.get("failed") else "muted"
+            yield f"[{style}]\u25e6 {data['text']}[/]"
             return
+            
         if kind == "file_diff":
             yield ""
             panel_width = self._panel_text_width()
@@ -1467,7 +1468,7 @@ class ConversationUI:
         if data.get("timed_out"):
             meta_rows.append(("status", "[warning]timed out[/]"))
         elif data.get("exit_code") is not None:
-            style = "success" if data["exit_code"] == 0 else "warning"
+            style = "success" if data["exit_code"] == 0 else "muted"
             meta_rows.append(("exit code", f"[{style}]{data['exit_code']}[/]"))
         terminal_width = self._fresh_terminal_width()
         panel_width = self._panel_text_width()
@@ -1493,14 +1494,16 @@ class ConversationUI:
                 )
             )
         if stderr.strip():
+            stderr_style = "default" if data.get("exit_code", 0) == 0 else "muted"
+            stderr_border = "default" if data.get("exit_code", 0) == 0 else "dim"
             parts.append(
                 self._panel(
                     Text(
                         _wrap_long_lines(stderr.rstrip(), width=panel_width),
-                        style="error",
+                        style=stderr_style,
                     ),
                     title="[muted]stderr[/]",
-                    border_style="red",
+                    border_style=stderr_border,
                     padding=(0, 1),
                     width=terminal_width,
                 )
