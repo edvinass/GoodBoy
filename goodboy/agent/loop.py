@@ -43,7 +43,7 @@ from agent.task_policy import (
 )
 from agent.tools import run_python, run_shell
 from llm import TokenUsage
-from agent.stream_status import extract_streaming_preview
+from agent.stream_status import extract_streaming_status
 from agent.ui import (
     ConversationUI,
     ThinkingUpdater,
@@ -961,9 +961,9 @@ class AgentLoop:
                 if show_stream:
                     self._ui.write_model_stream_delta(delta)
                     return
-                preview = extract_streaming_preview("".join(buffer))
-                if preview and thinking_holder:
-                    thinking_holder[0].update(preview)
+                status = extract_streaming_status("".join(buffer))
+                if status and thinking_holder:
+                    thinking_holder[0].update(status)
 
             # Rich's Live spinner (used by `thinking`) and direct stderr writes
             # from streaming both move the shared terminal cursor. Running both
