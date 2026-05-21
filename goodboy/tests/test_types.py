@@ -141,6 +141,43 @@ def test_parse_concatenated_json_objects_uses_first_only():
     assert step.command == "pwd"
 
 
+def test_str_replace_allows_empty_new_string():
+    step = AgentStep.model_validate(
+        {
+            "action": "str_replace",
+            "path": "foo.sh",
+            "old_string": "remove me",
+            "new_string": "",
+        }
+    )
+    assert step.new_string == ""
+
+
+def test_str_replace_repairs_missing_new_string():
+    step = AgentStep.model_validate(
+        {
+            "action": "str_replace",
+            "path": "foo.sh",
+            "old_string": "remove me",
+        }
+    )
+    assert step.new_string == ""
+
+
+def test_parse_str_replace_empty_new_string_from_json():
+    raw = json.dumps(
+        {
+            "action": "str_replace",
+            "path": "scripts/release-web-tar.sh",
+            "old_string": "if [[ -n \"$VERSION\" ]]; then\nfi\n",
+            "new_string": "",
+        }
+    )
+    step = parse_agent_step(raw)
+    assert step.action == AgentAction.STR_REPLACE
+    assert step.new_string == ""
+
+
 def test_parse_all_agent_steps_returns_every_object():
     from agent.types import parse_all_agent_steps
 

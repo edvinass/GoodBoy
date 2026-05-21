@@ -69,7 +69,6 @@ class AgentStep(BaseModel):
         "path",
         "patch",
         "old_string",
-        "new_string",
         "message",
         mode="before",
     )
@@ -78,6 +77,16 @@ class AgentStep(BaseModel):
         if isinstance(value, str):
             return value.strip() or None
         return value
+
+    @field_validator("new_string", mode="before")
+    @classmethod
+    def _preserve_new_string(cls, value: Any) -> Any:
+        # str_replace allows empty new_string (deletion); do not strip to None.
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        return str(value)
 
     @field_validator("tools", mode="before")
     @classmethod
@@ -124,7 +133,7 @@ class AgentStep(BaseModel):
             if self.old_string is None or self.old_string == "":
                 raise ValueError("str_replace requires non-empty 'old_string'")
             if self.new_string is None:
-                raise ValueError("str_replace requires 'new_string' (may be empty)")
+                self.new_string = ""
         elif self.action in _SWITCH_TOOLS_ACTIONS:
             if not self.tools:
                 raise ValueError("switch_tools requires non-empty 'tools' list")

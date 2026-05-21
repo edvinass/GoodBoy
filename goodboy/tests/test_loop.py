@@ -318,6 +318,44 @@ def test_loop_invalid_json_twice_fails(tmp_path: Path):
     assert "invalid JSON" in result.message
 
 
+def test_loop_str_replace_empty_new_string_continues(tmp_path: Path):
+    """Deletion edits with new_string: \"\" must parse, not abort with invalid JSON."""
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return json.dumps(
+                {
+                    "action": "str_replace",
+                    "path": "noop.txt",
+                    "old_string": "never matches",
+                    "new_string": "",
+                }
+            )
+        return json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE,
+                message="done",
+            ).model_dump(mode="json")
+        )
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("remove a block from release.sh")
+    assert result.outcome != LoopOutcome.FAILED or "invalid JSON" not in (
+        result.message or ""
+    )
+    assert not any(
+        "str_replace requires 'new_string'" in err
+        for err in result.context.parse_errors
+    )
+
+
 def test_loop_ask_user_continues_in_one_run(tmp_path: Path):
     replies = iter(["main"])
 
