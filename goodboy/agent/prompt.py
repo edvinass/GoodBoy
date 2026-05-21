@@ -26,7 +26,7 @@ After any successful file edit, run verification (pytest, npm test, etc.) with e
 
 _CODING_METHODOLOGY = """## Coding methodology
 
-- **Explore first**: list dirs, search with `rg` / `grep`, read files (`cat`/`sed`/`head`), check git history before editing.
+- **Explore first**: list_files, search_code, read_file, git log/status, then edit.
 - **Match the repo**: follow existing naming, patterns, imports, and test layout.
 - **Small safe edits**: focused diffs, verified per step with tests/linters when available.
 - **Prefer structured file tools** — `read_file`, `str_replace`, `apply_patch` for edits; fall back to shell when needed.
@@ -39,13 +39,17 @@ _AVAILABLE_TOOLS = """## Available tools (harness)
 One JSON object per turn → one action runs.
 
 - **read_file**: read a workspace file (`path`, optional `start_line`/`end_line`). Prefer over `cat` for edits you will make next.
+- **search_code**: find matches (`pattern`; optional `path`, `glob`, `case_insensitive`, `max_results`). Prefer over `run_shell` + `rg`.
+- **list_files**: list paths (`path` default `.`; optional `glob`, `max_depth`, `max_results`). Prefer over `find`/`ls`.
+- **git**: read-only repo state (`git_op`: status|diff|log; optional `path`, `staged` for diff, `max_results` for log).
 - **str_replace**: replace one unique `old_string` with `new_string` in `path`. Include enough context that the match is unique.
 - **apply_patch**: apply a unified diff in `patch` to `path`. Use for multi-line changes.
-- **run_shell**: navigate/search, git, tests/builds/linters, installs, any project CLI. On non-zero exit, diagnose — don't blindly retry.
+- **delete_file** / **move_file**: remove or rename a file (`path`; `dest_path` for move). Prefer over shell `rm`/`mv`.
+- **run_shell**: tests/builds/linters, installs, and CLIs not covered above. On non-zero exit, diagnose — don't blindly retry.
 - **run_python**: structured parsing or transforms when shell is awkward.
 - **update_plan**: set durable `plan_items` (`id`, `text`, `status`: pending|in_progress|done|cancelled). Shown every turn in **Active plan**. Complex tasks need a plan before `str_replace`/`apply_patch`.
 - **remember**: append durable facts to **Working memory** via `memory` (1–5 short strings). Use for test commands, module map, decisions — not ephemeral notes.
-- **switch_tools**: enable hosted OpenAI tools (live web, etc.) — NOT for local file search. Use run_shell + `rg` for the codebase."""
+- **switch_tools**: enable hosted OpenAI tools (live web, etc.) — NOT for local file search. Use search_code for the codebase."""
 
 _COMPLEX_TASKS = """## Complex tasks (refactor, migrate, multi-file, architecture)
 
@@ -83,11 +87,12 @@ _HARNESS_RULES = """## Harness rules (strict)
 
 ## Routing fields (each turn)
 
-- **action** (required): run_shell | run_python | read_file | str_replace | apply_patch | update_plan | remember | switch_tools | need_user_input | task_complete | failed.
+- **action** (required): run_shell | run_python | read_file | search_code | list_files | git | str_replace | apply_patch | delete_file | move_file | update_plan | remember | switch_tools | need_user_input | task_complete | failed.
 - **status** (required on every turn except task_complete/failed): short user-facing progress line (5–72 chars), present participle, no trailing ellipsis. Emit **first** in JSON so the UI can show it while the rest streams. Examples: "Inspecting project structure", "Searching for relevant files", "Implementing authentication flow", "Running tests".
 - **tools**: required for switch_tools (hosted tool IDs for next call).
 - **plan_items**: required for update_plan (`id`, `text`, `status`).
 - **memory**: required for remember (list of strings).
+- **pattern**, **glob**, **case_insensitive**, **max_results**, **max_depth**, **git_op**, **staged**, **dest_path**: as required by action.
 - **thought**, **command**, **code**, **path**, **patch**, **old_string**, **new_string**, **start_line**, **end_line**, **message**: as required by action.
 
 Session **model** and **reasoning_effort** are fixed for this run (user sets them with `/model` and `/reasoning`)."""

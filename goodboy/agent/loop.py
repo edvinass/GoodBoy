@@ -30,7 +30,8 @@ from agent.models import (
     model_supports_openai_tool,
     resolve_reasoning_effort,
 )
-from agent.file_tools import apply_patch, read_file, str_replace
+from agent.explore_tools import list_files, run_git, search_code
+from agent.file_tools import apply_patch, delete_file, move_file, read_file, str_replace
 from agent.prompt import build_session_prompt_suffix, build_stable_system_prompt
 from agent.registry import get_tool, is_harness_tool, is_valid_action
 from agent.task_policy import (
@@ -859,6 +860,39 @@ class AgentLoop:
                 workspace=ws,
                 start_line=step.start_line,
                 end_line=step.end_line,
+            )
+        if step.action == AgentAction.SEARCH_CODE:
+            return search_code(
+                step.pattern or "",
+                workspace=ws,
+                path=step.path,
+                glob=step.glob,
+                case_insensitive=bool(step.case_insensitive),
+                max_results=step.max_results or 80,
+            )
+        if step.action == AgentAction.LIST_FILES:
+            return list_files(
+                workspace=ws,
+                path=step.path,
+                glob=step.glob,
+                max_depth=step.max_depth,
+                max_results=step.max_results or 200,
+            )
+        if step.action == AgentAction.GIT:
+            return run_git(
+                step.git_op or "",
+                workspace=ws,
+                path=step.path,
+                staged=bool(step.staged),
+                max_results=step.max_results,
+            )
+        if step.action == AgentAction.DELETE_FILE:
+            return delete_file(step.path or "", workspace=ws)
+        if step.action == AgentAction.MOVE_FILE:
+            return move_file(
+                step.path or "",
+                step.dest_path or "",
+                workspace=ws,
             )
         if step.action == AgentAction.STR_REPLACE:
             return str_replace(

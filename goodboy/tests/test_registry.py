@@ -15,6 +15,11 @@ def test_default_tools_include_shell_and_python():
     actions = {t.action for t in DEFAULT_TOOLS}
     assert AgentAction.RUN_SHELL in actions
     assert AgentAction.RUN_PYTHON in actions
+    assert AgentAction.SEARCH_CODE in actions
+    assert AgentAction.LIST_FILES in actions
+    assert AgentAction.GIT in actions
+    assert AgentAction.DELETE_FILE in actions
+    assert AgentAction.MOVE_FILE in actions
 
 
 def test_format_tools_section_lists_tools():

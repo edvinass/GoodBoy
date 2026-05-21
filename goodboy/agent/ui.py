@@ -176,6 +176,21 @@ def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> st
         if name:
             return f"reading {name}" if phase == "progress" else f"read {name}"
         return "reading file" if phase == "progress" else "read file"
+    if step.action == AgentAction.SEARCH_CODE:
+        return "searching codebase" if phase == "progress" else "searched codebase"
+    if step.action == AgentAction.LIST_FILES:
+        return "listing files" if phase == "progress" else "listed files"
+    if step.action == AgentAction.GIT:
+        op = (step.git_op or "git").strip()
+        return f"running git {op}" if phase == "progress" else f"ran git {op}"
+    if step.action == AgentAction.DELETE_FILE:
+        if name:
+            return f"deleting {name}" if phase == "progress" else f"deleted {name}"
+        return "deleting file" if phase == "progress" else "deleted file"
+    if step.action == AgentAction.MOVE_FILE:
+        if name:
+            return f"moving {name}" if phase == "progress" else f"moved {name}"
+        return "moving file" if phase == "progress" else "moved file"
     if step.action in (AgentAction.STR_REPLACE, AgentAction.APPLY_PATCH):
         if name:
             return f"writing {name}" if phase == "progress" else f"wrote {name}"

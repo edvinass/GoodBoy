@@ -257,6 +257,73 @@ def apply_patch(
     )
 
 
+def delete_file(path: str, *, workspace: Path) -> ToolResult:
+    """Delete a single file under the workspace."""
+    executed = f"delete_file {path}"
+    try:
+        target = _resolve_path(workspace, path)
+    except ValueError as exc:
+        return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
+
+    if not target.exists():
+        return ToolResult(executed=executed, stderr=f"Not found: {path}", exit_code=1)
+    if target.is_dir():
+        return ToolResult(
+            executed=executed,
+            stderr=f"Refusing to delete directory: {path}",
+            exit_code=1,
+        )
+
+    try:
+        target.unlink()
+    except OSError as exc:
+        return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
+
+    return ToolResult(executed=executed, stdout=f"Deleted {path}", exit_code=0)
+
+
+def move_file(
+    path: str,
+    dest_path: str,
+    *,
+    workspace: Path,
+) -> ToolResult:
+    """Move or rename a file within the workspace."""
+    executed = f"move_file {path} -> {dest_path}"
+    try:
+        source = _resolve_path(workspace, path)
+        dest = _resolve_path(workspace, dest_path)
+    except ValueError as exc:
+        return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
+
+    if not source.exists():
+        return ToolResult(executed=executed, stderr=f"Not found: {path}", exit_code=1)
+    if source.is_dir():
+        return ToolResult(
+            executed=executed,
+            stderr=f"Refusing to move directory: {path}",
+            exit_code=1,
+        )
+    if dest.exists():
+        return ToolResult(
+            executed=executed,
+            stderr=f"Destination already exists: {dest_path}",
+            exit_code=1,
+        )
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        source.rename(dest)
+    except OSError as exc:
+        return ToolResult(executed=executed, stderr=str(exc), exit_code=1)
+
+    return ToolResult(
+        executed=executed,
+        stdout=f"Moved {path} -> {dest_path}",
+        exit_code=0,
+    )
+
+
 def _apply_patch_python(
     target: Path,
     patch_text: str,

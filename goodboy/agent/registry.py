@@ -12,8 +12,13 @@ HARNESS_ACTIONS = frozenset(
         AgentAction.RUN_SHELL,
         AgentAction.RUN_PYTHON,
         AgentAction.READ_FILE,
+        AgentAction.SEARCH_CODE,
+        AgentAction.LIST_FILES,
+        AgentAction.GIT,
         AgentAction.APPLY_PATCH,
         AgentAction.STR_REPLACE,
+        AgentAction.DELETE_FILE,
+        AgentAction.MOVE_FILE,
     }
 )
 ROUTING_ACTIONS = frozenset(
@@ -78,7 +83,40 @@ DEFAULT_TOOLS: tuple[ToolSpec, ...] = (
         name="read_file",
         description="Read a workspace file with optional line range (numbered output).",
         when_to_use="Inspect source before editing; read specific functions or config sections.",
-        avoid_when="You only need a quick grep — use run_shell + rg.",
+        avoid_when="You only need match locations — use search_code.",
+    ),
+    ToolSpec(
+        action=AgentAction.SEARCH_CODE,
+        name="search_code",
+        description=(
+            "Search the codebase with ripgrep; returns path:line:content rows "
+            "(capped, structured output)."
+        ),
+        when_to_use=(
+            "Find symbols, strings, imports, or usages across the repo. "
+            "Set pattern (required); optional path, glob, case_insensitive, max_results."
+        ),
+        avoid_when="You already know the file path — use read_file.",
+    ),
+    ToolSpec(
+        action=AgentAction.LIST_FILES,
+        name="list_files",
+        description="List files under a workspace path with optional glob and depth limits.",
+        when_to_use=(
+            "Discover layout, find configs, or enumerate files matching a glob. "
+            "Optional path (default .), glob, max_depth, max_results."
+        ),
+        avoid_when="You need file contents — use read_file.",
+    ),
+    ToolSpec(
+        action=AgentAction.GIT,
+        name="git",
+        description="Read-only git: status, diff, or oneline log (bounded output).",
+        when_to_use=(
+            "Check branch/status, review diffs (git_op diff; staged true for index), "
+            "or recent commits (git_op log; max_results for count)."
+        ),
+        avoid_when="Git needs write operations — use run_shell.",
     ),
     ToolSpec(
         action=AgentAction.STR_REPLACE,
@@ -93,6 +131,20 @@ DEFAULT_TOOLS: tuple[ToolSpec, ...] = (
         description="Apply a unified diff patch to a workspace file via patch(1).",
         when_to_use="Multi-line edits, refactors, or changes best expressed as a unified diff.",
         avoid_when="A one-line str_replace is enough.",
+    ),
+    ToolSpec(
+        action=AgentAction.DELETE_FILE,
+        name="delete_file",
+        description="Delete a single file under the workspace (not directories).",
+        when_to_use="Remove a file the user asked to delete or that is obsolete after a refactor.",
+        avoid_when="Removing a directory tree — use run_shell.",
+    ),
+    ToolSpec(
+        action=AgentAction.MOVE_FILE,
+        name="move_file",
+        description="Move or rename a file within the workspace (path → dest_path).",
+        when_to_use="Rename modules or relocate a file without rewriting contents.",
+        avoid_when="Many files move — use run_shell git mv or a script.",
     ),
 )
 

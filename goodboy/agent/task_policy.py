@@ -29,7 +29,12 @@ _VERIFY_CMD = re.compile(
 )
 
 _EDIT_ACTIONS = frozenset(
-    {AgentAction.STR_REPLACE, AgentAction.APPLY_PATCH}
+    {
+        AgentAction.STR_REPLACE,
+        AgentAction.APPLY_PATCH,
+        AgentAction.DELETE_FILE,
+        AgentAction.MOVE_FILE,
+    }
 )
 
 
@@ -68,8 +73,8 @@ def plan_blocks_edit(
         return None
     return (
         "This task requires a plan before file edits. Use update_plan with "
-        "plan_items (at least 2 items for complex tasks), then str_replace or "
-        "apply_patch."
+        "plan_items (at least 2 items for complex tasks), then str_replace, "
+        "apply_patch, delete_file, or move_file."
     )
 
 

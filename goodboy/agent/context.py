@@ -361,6 +361,14 @@ class SessionContext(BaseModel):
 
         if step.path:
             lines.append(f"Path: {step.path}")
+        if step.dest_path:
+            lines.append(f"Dest: {step.dest_path}")
+        if step.pattern:
+            lines.append(f"Pattern: {_preview_line(step.pattern)}")
+        if step.glob:
+            lines.append(f"Glob: {step.glob}")
+        if step.git_op:
+            lines.append(f"Git op: {step.git_op}")
         if step.start_line is not None or step.end_line is not None:
             lines.append(
                 f"Lines: {step.start_line or 1}-{step.end_line or 'end'}"

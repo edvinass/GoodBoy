@@ -27,8 +27,13 @@ class AgentAction(str, Enum):
     RUN_SHELL = "run_shell"
     RUN_PYTHON = "run_python"
     READ_FILE = "read_file"
+    SEARCH_CODE = "search_code"
+    LIST_FILES = "list_files"
+    GIT = "git"
     APPLY_PATCH = "apply_patch"
     STR_REPLACE = "str_replace"
+    DELETE_FILE = "delete_file"
+    MOVE_FILE = "move_file"
     SWITCH_TOOLS = "switch_tools"
     SWITCH_API = "switch_api"  # deprecated alias for switch_tools
     UPDATE_PLAN = "update_plan"
@@ -52,6 +57,14 @@ class AgentStep(BaseModel):
     command: str | None = None
     code: str | None = None
     path: str | None = None
+    dest_path: str | None = None
+    pattern: str | None = None
+    glob: str | None = None
+    case_insensitive: bool | None = None
+    max_results: int | None = None
+    max_depth: int | None = None
+    git_op: str | None = None
+    staged: bool | None = None
     patch: str | None = None
     old_string: str | None = None
     new_string: str | None = None
@@ -70,6 +83,10 @@ class AgentStep(BaseModel):
         "patch",
         "old_string",
         "message",
+        "pattern",
+        "glob",
+        "git_op",
+        "dest_path",
         mode="before",
     )
     @classmethod
@@ -122,6 +139,26 @@ class AgentStep(BaseModel):
         elif self.action == AgentAction.READ_FILE:
             if not self.path:
                 raise ValueError("read_file requires non-empty 'path'")
+        elif self.action == AgentAction.SEARCH_CODE:
+            if not self.pattern:
+                raise ValueError("search_code requires non-empty 'pattern'")
+        elif self.action == AgentAction.LIST_FILES:
+            pass
+        elif self.action == AgentAction.GIT:
+            if not self.git_op:
+                raise ValueError("git requires non-empty 'git_op' (status, diff, or log)")
+            op = self.git_op.strip().lower()
+            if op not in ("status", "diff", "log"):
+                raise ValueError("git_op must be status, diff, or log")
+            self.git_op = op
+        elif self.action == AgentAction.DELETE_FILE:
+            if not self.path:
+                raise ValueError("delete_file requires non-empty 'path'")
+        elif self.action == AgentAction.MOVE_FILE:
+            if not self.path:
+                raise ValueError("move_file requires non-empty 'path'")
+            if not self.dest_path:
+                raise ValueError("move_file requires non-empty 'dest_path'")
         elif self.action == AgentAction.APPLY_PATCH:
             if not self.path:
                 raise ValueError("apply_patch requires non-empty 'path'")
@@ -166,6 +203,31 @@ class AgentStep(BaseModel):
             raise ValueError("plan_items is only allowed with update_plan")
         if self.memory is not None and self.action != AgentAction.REMEMBER:
             raise ValueError("memory is only allowed with remember")
+        if self.pattern is not None and self.action != AgentAction.SEARCH_CODE:
+            raise ValueError("pattern is only allowed with search_code")
+        if self.glob is not None and self.action not in (
+            AgentAction.SEARCH_CODE,
+            AgentAction.LIST_FILES,
+        ):
+            raise ValueError("glob is only allowed with search_code or list_files")
+        if self.case_insensitive is not None and self.action != AgentAction.SEARCH_CODE:
+            raise ValueError("case_insensitive is only allowed with search_code")
+        if self.max_depth is not None and self.action != AgentAction.LIST_FILES:
+            raise ValueError("max_depth is only allowed with list_files")
+        if self.max_results is not None and self.action not in (
+            AgentAction.SEARCH_CODE,
+            AgentAction.LIST_FILES,
+            AgentAction.GIT,
+        ):
+            raise ValueError(
+                "max_results is only allowed with search_code, list_files, or git"
+            )
+        if self.git_op is not None and self.action != AgentAction.GIT:
+            raise ValueError("git_op is only allowed with git")
+        if self.staged is not None and self.action != AgentAction.GIT:
+            raise ValueError("staged is only allowed with git")
+        if self.dest_path is not None and self.action != AgentAction.MOVE_FILE:
+            raise ValueError("dest_path is only allowed with move_file")
         return self
 
 

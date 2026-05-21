@@ -178,6 +178,49 @@ def test_parse_str_replace_empty_new_string_from_json():
     assert step.new_string == ""
 
 
+def test_parse_search_code():
+    step = parse_agent_step(
+        json.dumps(
+            {
+                "action": "search_code",
+                "status": "Searching for auth handler",
+                "pattern": "authenticate",
+                "path": "src",
+                "glob": "*.py",
+            }
+        )
+    )
+    assert step.action == AgentAction.SEARCH_CODE
+    assert step.pattern == "authenticate"
+
+
+def test_parse_git_log():
+    step = parse_agent_step(
+        json.dumps({"action": "git", "git_op": "log", "max_results": 10})
+    )
+    assert step.action == AgentAction.GIT
+    assert step.git_op == "log"
+
+
+def test_git_requires_git_op():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate({"action": "git"})
+
+
+def test_pattern_only_on_search_code():
+    with pytest.raises(ValidationError, match="search_code"):
+        AgentStep.model_validate(
+            {"action": "run_shell", "command": "ls", "pattern": "foo"}
+        )
+
+
+def test_move_file_requires_dest_path():
+    with pytest.raises(ValidationError):
+        AgentStep.model_validate(
+            {"action": "move_file", "path": "a.txt"},
+        )
+
+
 def test_parse_all_agent_steps_returns_every_object():
     from agent.types import parse_all_agent_steps
 
