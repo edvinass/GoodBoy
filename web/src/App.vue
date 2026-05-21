@@ -244,7 +244,7 @@ const active = computed(
               <div class="term-input-placeholder">Ask anything</div>
               <div class="term-input-rule"></div>
               <div class="term-input-hint">
-                @ - files, / - commands, ? - help, Cmd+D - clear
+                @ - files, / - commands, ? - help, Escape - stop, Cmd+D - clear
               </div>
             </div>
           </div>

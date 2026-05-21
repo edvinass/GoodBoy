@@ -101,7 +101,7 @@ _SUBTITLE_ICONS = {
 _LS_SECTION = re.compile(r"^\./(.+):$")
 
 _USER_INPUT_PLACEHOLDER = "Ask anything"
-_USER_INPUT_FOOTER = "@ files · / commands · ? help · Cmd+D clear"
+_USER_INPUT_FOOTER = "@ files · / commands · ? help · Escape stop · Cmd+D clear"
 _USER_INPUT_PROMPT = "❯ "
 _USER_INPUT_MENU_RESERVE = 8
 _USER_INPUT_MAX_LINES = 16
