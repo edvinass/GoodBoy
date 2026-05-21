@@ -21,6 +21,16 @@ HARNESS_ACTIONS = frozenset(
         AgentAction.MOVE_FILE,
     }
 )
+# Read-only, side-effect-free actions safe to dispatch concurrently when the
+# model emits multiple JSON objects in a single response.
+BATCHABLE_READ_ACTIONS = frozenset(
+    {
+        AgentAction.READ_FILE,
+        AgentAction.SEARCH_CODE,
+        AgentAction.LIST_FILES,
+        AgentAction.GIT,
+    }
+)
 ROUTING_ACTIONS = frozenset(
     {
         AgentAction.SWITCH_TOOLS,
@@ -157,6 +167,11 @@ def get_tool(action: AgentAction) -> ToolSpec | None:
 
 def is_harness_tool(action: AgentAction) -> bool:
     return action in HARNESS_ACTIONS
+
+
+def is_batchable_read(action: AgentAction) -> bool:
+    """Whether this action can run alongside other reads in one parallel batch."""
+    return action in BATCHABLE_READ_ACTIONS
 
 
 def is_routing_action(action: AgentAction) -> bool:

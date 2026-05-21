@@ -36,7 +36,7 @@ _CODING_METHODOLOGY = """## Coding methodology
 
 _AVAILABLE_TOOLS = """## Available tools (harness)
 
-One JSON object per turn → one action runs.
+Most turns are one JSON object → one action runs. **Read-only batching:** to parallelise exploration you may emit 2+ JSON objects in a single response, all using `read_file`, `search_code`, `list_files`, or `git` (an `update_plan` object may be piggy-backed). The harness dispatches them concurrently and feeds every result back next turn — one LLM round-trip instead of N. Mixing a write or run action (`run_shell`, `run_python`, `str_replace`, `apply_patch`, `delete_file`, `move_file`, `switch_tools`, terminal actions) disables batching: only the first JSON object runs, the rest are ignored.
 
 - **read_file**: read a workspace file (`path`, optional `start_line`/`end_line`). Prefer over `cat` for edits you will make next.
 - **search_code**: find matches (`pattern`; optional `path`, `glob`, `case_insensitive`, `max_results`). Prefer over `run_shell` + `rg`.
@@ -77,7 +77,7 @@ Write `message` for terminal readability:
 
 _HARNESS_RULES = """## Harness rules (strict)
 
-1. One JSON object per turn. No markdown fences or prose outside JSON.
+1. One JSON object per turn for actions that mutate state or terminate the task. Read-only exploration (`read_file`, `search_code`, `list_files`, `git`) may emit 2+ JSON objects in one response to run in parallel; an `update_plan` object may be piggy-backed alongside any action. No markdown fences or prose outside JSON.
 2. Small verifiable steps; read tool output before task_complete.
 3. **need_user_input** only when required info is missing (which file, which API). Never use it for permission — if the user said proceed/yes/go ahead, continue.
 4. Never re-ask the same question after a user clarification.

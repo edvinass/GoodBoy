@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -33,7 +34,12 @@ from agent.models import (
 from agent.explore_tools import list_files, run_git, search_code
 from agent.file_tools import apply_patch, delete_file, move_file, read_file, str_replace
 from agent.prompt import build_session_prompt_suffix, build_stable_system_prompt
-from agent.registry import get_tool, is_harness_tool, is_valid_action
+from agent.registry import (
+    get_tool,
+    is_batchable_read,
+    is_harness_tool,
+    is_valid_action,
+)
 from agent.task_policy import (
     is_edit_action,
     is_verification_command,
@@ -57,7 +63,6 @@ from agent.types import (
     ToolResult,
     TurnRecord,
     _SWITCH_TOOLS_ACTIONS,
-    parse_agent_step,
     parse_all_agent_steps,
 )
 from openai import APIConnectionError
@@ -374,8 +379,11 @@ class AgentLoop:
 
             plan_print_baseline = list(ctx.plan_items)
             try:
-                step = parse_agent_step(raw)
-                for extra in parse_all_agent_steps(raw):
+                all_steps = parse_all_agent_steps(raw)
+                if not all_steps:
+                    raise ValueError("empty model response")
+                step = all_steps[0]
+                for extra in all_steps:
                     if (
                         extra.action == AgentAction.UPDATE_PLAN
                         and extra.plan_items
@@ -401,6 +409,97 @@ class AgentLoop:
                             context=ctx,
                         )
                     )
+                continue
+
+            # Parallel batch shape: 2+ read-only actions in one response.
+            # `update_plan` may be piggy-backed (its side-effects are already
+            # applied above); anything else (shell, edit, terminal, switch_tools)
+            # disables batching and we fall back to single-step dispatch.
+            batch_steps = [
+                s for s in all_steps if s.action != AgentAction.UPDATE_PLAN
+            ]
+            if (
+                len(batch_steps) >= 2
+                and all(is_batchable_read(s.action) for s in batch_steps)
+            ):
+                batch_err = next(
+                    (
+                        e
+                        for e in (
+                            self._validate_action(s, call_model)
+                            for s in batch_steps
+                        )
+                        if e is not None
+                    ),
+                    None,
+                )
+                if batch_err is not None:
+                    ctx.add_parse_error(batch_err)
+                    if session_log is not None:
+                        session_log.event(
+                            "parse_error", turn=turn, error=batch_err
+                        )
+                    consecutive_parse_failures += 1
+                    if consecutive_parse_failures >= 2:
+                        return finish(
+                            LoopResult(
+                                outcome=LoopOutcome.FAILED,
+                                message=batch_err,
+                                context=ctx,
+                            )
+                        )
+                    continue
+
+                consecutive_parse_failures = 0
+
+                if self._ui is not None:
+                    # Show routing/thought once for the shared LLM call; the
+                    # per-tool activity lines below cover the rest.
+                    self._ui.print_agent_step(
+                        batch_steps[0],
+                        model=call_model,
+                        reasoning=call_reasoning,
+                        hosted_tools=list(self._hosted_tools) or None,
+                    )
+
+                if session_log is not None:
+                    for s in batch_steps:
+                        session_log.log_agent_step(turn=turn, step=s)
+
+                spinner_plan = effective_plan_items(ctx, raw)
+                spinner_label = self._batch_progress_label(batch_steps)
+                if self._ui is not None:
+                    with tool_activity(
+                        self._ui, spinner_label, plan_items=spinner_plan
+                    ):
+                        batch_results = self._dispatch_batched_reads(batch_steps)
+                else:
+                    batch_results = self._dispatch_batched_reads(batch_steps)
+
+                for s, tr in zip(batch_steps, batch_results):
+                    if self._ui is not None:
+                        self._ui.print_harness_activity(s, tr)
+                        self._ui.print_tool_result(tr)
+                    if session_log is not None:
+                        session_log.log_tool_result(turn=turn, result=tr)
+                    ctx.add_turn(
+                        TurnRecord(
+                            turn=turn,
+                            step=s,
+                            tool_result=tr,
+                            call_model=call_model,
+                            call_reasoning_effort=call_reasoning,
+                        )
+                    )
+
+                if self._abort_requested():
+                    if session_log is not None:
+                        session_log.event("user_abort", turn=turn, phase="tool")
+                    return abort_now()
+
+                stopped = stop_after_current_step()
+                if stopped is not None:
+                    return stopped
                 continue
 
             action_err = self._validate_action(step, call_model)
@@ -835,6 +934,38 @@ class AgentLoop:
         if check is None:
             return None
         return check  # type: ignore[return-value]
+
+    @staticmethod
+    def _batch_progress_label(steps: list[AgentStep]) -> str:
+        """Spinner label for a parallel batch of read-only harness tools."""
+        if steps and steps[0].status:
+            return steps[0].status.strip().rstrip(".…")
+        kinds: dict[str, int] = {}
+        labels = {
+            AgentAction.READ_FILE: "read",
+            AgentAction.SEARCH_CODE: "search",
+            AgentAction.LIST_FILES: "list",
+            AgentAction.GIT: "git",
+        }
+        for s in steps:
+            kind = labels.get(s.action, s.action.value)
+            kinds[kind] = kinds.get(kind, 0) + 1
+        breakdown = ", ".join(f"{n} {k}" for k, n in kinds.items())
+        return f"running {len(steps)} parallel reads ({breakdown})"
+
+    def _dispatch_batched_reads(
+        self, steps: list[AgentStep]
+    ) -> list[ToolResult]:
+        """Run a parallel batch of read-only harness tools and preserve order."""
+        if not steps:
+            return []
+        if len(steps) == 1:
+            return [self._run_harness_tool(steps[0])]
+        workers = min(len(steps), 8)
+        with ThreadPoolExecutor(
+            max_workers=workers, thread_name_prefix="goodboy-batch"
+        ) as ex:
+            return list(ex.map(self._run_harness_tool, steps))
 
     def _run_harness_tool(self, step: AgentStep) -> ToolResult:
         ws = self.workspace

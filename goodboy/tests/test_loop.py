@@ -9,6 +9,7 @@ from agent.types import (
     AgentStep,
     PlanItem,
     PlanItemStatus,
+    ToolResult,
 )
 from agent.ui import ConversationUI
 
@@ -1056,3 +1057,249 @@ def test_remember_appends_working_memory(tmp_path: Path):
     assert result.outcome == LoopOutcome.TASK_COMPLETE
     assert "pytest" in result.context.working_memory[0]
     assert "Working memory" in result.context.to_prompt()
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: parallel batch dispatch for read-only harness tools
+# ---------------------------------------------------------------------------
+
+
+def _bundle_steps(*steps: AgentStep) -> str:
+    """Concatenate AgentStep JSON payloads (the on-the-wire batch shape)."""
+    return "".join(
+        json.dumps(s.model_dump(mode="json"), separators=(",", ":")) for s in steps
+    )
+
+
+def test_loop_batched_read_only_actions_run_in_one_turn(tmp_path: Path):
+    """Three read_files in one response → three turn records, one LLM call."""
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("bravo\n", encoding="utf-8")
+    (tmp_path / "c.txt").write_text("charlie\n", encoding="utf-8")
+
+    payloads = [
+        _bundle_steps(
+            AgentStep(action=AgentAction.READ_FILE, path="a.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="b.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="c.txt"),
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE, message="done"
+            ).model_dump(mode="json")
+        ),
+    ]
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        idx = calls["n"]
+        calls["n"] += 1
+        return payloads[idx]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("read three files in parallel")
+
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    # One batched LLM call + one task_complete call.
+    assert calls["n"] == 2
+    # Three batched read records + the terminal task_complete record.
+    assert len(result.context.turns) == 4
+    batched = result.context.turns[:3]
+    # Each batched record is tagged with the same LLM-call turn number.
+    assert {t.turn for t in batched} == {1}
+    assert [t.step.path for t in batched] == ["a.txt", "b.txt", "c.txt"]
+    assert "alpha" in batched[0].tool_result.stdout
+    assert "bravo" in batched[1].tool_result.stdout
+    assert "charlie" in batched[2].tool_result.stdout
+
+
+def test_loop_batched_reads_dispatch_concurrently(tmp_path: Path, monkeypatch):
+    """Wall-clock for N batched reads should be ~one tool's runtime, not N×."""
+    import time
+
+    sleep_for = 0.25
+    starts: list[float] = []
+
+    def slow_run_harness_tool(self, step: AgentStep) -> ToolResult:
+        starts.append(time.monotonic())
+        time.sleep(sleep_for)
+        return ToolResult(
+            executed=f"fake {step.path}",
+            stdout=f"ok {step.path}",
+            exit_code=0,
+        )
+
+    monkeypatch.setattr(AgentLoop, "_run_harness_tool", slow_run_harness_tool)
+
+    payloads = [
+        _bundle_steps(
+            AgentStep(action=AgentAction.READ_FILE, path="a.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="b.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="c.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="d.txt"),
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE, message="done"
+            ).model_dump(mode="json")
+        ),
+    ]
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        idx = calls["n"]
+        calls["n"] += 1
+        return payloads[idx]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+
+    t0 = time.monotonic()
+    result = loop.run("four parallel reads")
+    elapsed = time.monotonic() - t0
+
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(starts) == 4
+    # All four workers should be in flight together; allow generous slack for
+    # CI scheduling jitter (well under the serial bound 4 * sleep_for = 1.0s).
+    assert elapsed < 2.5 * sleep_for, (
+        f"Expected concurrent dispatch but loop took {elapsed:.3f}s"
+    )
+
+
+def test_loop_batched_reads_with_update_plan_piggyback(tmp_path: Path):
+    """Bundling an update_plan alongside batched reads applies the plan once."""
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+    (tmp_path / "b.txt").write_text("bravo\n", encoding="utf-8")
+
+    payloads = [
+        _bundle_steps(
+            AgentStep(action=AgentAction.READ_FILE, path="a.txt"),
+            AgentStep(action=AgentAction.READ_FILE, path="b.txt"),
+            AgentStep(
+                action=AgentAction.UPDATE_PLAN,
+                plan_items=[
+                    PlanItem(
+                        id="1", text="recon", status=PlanItemStatus.IN_PROGRESS
+                    ),
+                    PlanItem(
+                        id="2", text="implement", status=PlanItemStatus.PENDING
+                    ),
+                ],
+            ),
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE, message="done"
+            ).model_dump(mode="json")
+        ),
+    ]
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        idx = calls["n"]
+        calls["n"] += 1
+        return payloads[idx]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("parallel reads with plan")
+
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    # Two batched read records + task_complete (the bundled update_plan is a
+    # piggy-backed side-effect, not its own dispatched turn).
+    assert len(result.context.turns) == 3
+    assert [t.step.action for t in result.context.turns[:2]] == [
+        AgentAction.READ_FILE,
+        AgentAction.READ_FILE,
+    ]
+    assert [p.text for p in result.context.plan_items] == ["recon", "implement"]
+
+
+def test_loop_batch_falls_back_when_response_mixes_writes(tmp_path: Path):
+    """A read bundled with run_shell disables batching: only the first runs."""
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+
+    payloads = [
+        _bundle_steps(
+            AgentStep(action=AgentAction.READ_FILE, path="a.txt"),
+            AgentStep(action=AgentAction.RUN_SHELL, command="echo unwanted"),
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE, message="done"
+            ).model_dump(mode="json")
+        ),
+    ]
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        idx = calls["n"]
+        calls["n"] += 1
+        return payloads[idx]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("mixed bundle")
+
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    # Only the first action ran (single-step fallback); echo never executed.
+    assert len(result.context.turns) == 2
+    assert result.context.turns[0].step.action == AgentAction.READ_FILE
+    assert all(
+        t.step.action != AgentAction.RUN_SHELL for t in result.context.turns
+    )
+
+
+def test_loop_single_read_action_skips_batch_path(tmp_path: Path):
+    """A response with one read action keeps the existing single-step flow."""
+    (tmp_path / "a.txt").write_text("alpha\n", encoding="utf-8")
+
+    payloads = [
+        json.dumps(
+            AgentStep(
+                action=AgentAction.READ_FILE, path="a.txt"
+            ).model_dump(mode="json")
+        ),
+        json.dumps(
+            AgentStep(
+                action=AgentAction.TASK_COMPLETE, message="done"
+            ).model_dump(mode="json")
+        ),
+    ]
+    calls = {"n": 0}
+
+    def llm(**_kwargs):
+        idx = calls["n"]
+        calls["n"] += 1
+        return payloads[idx]
+
+    loop = AgentLoop(
+        workspace=tmp_path,
+        max_turns=5,
+        allowed_models=_ALLOWED,
+        llm_call=llm,
+    )
+    result = loop.run("single read")
+
+    assert result.outcome == LoopOutcome.TASK_COMPLETE
+    assert len(result.context.turns) == 2
+    assert result.context.turns[0].step.action == AgentAction.READ_FILE
+    assert "alpha" in result.context.turns[0].tool_result.stdout
