@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GoodBoy logo">
+  <title>GoodBoy</title>
+  <!-- Floppy ears, drawn first so the head sits on top -->
+  <path d="M22 18 C14 18 10 30 12 40 C14 44 22 42 22 36 Z" fill="#b08968"/>
+  <path d="M42 18 C50 18 54 30 52 40 C50 44 42 42 42 36 Z" fill="#b08968"/>
+
+  <!-- Head -->
+  <path d="M19 27 C19 18 25 14 32 14 C39 14 45 18 45 27 L45 36 C45 44 39 50 32 50 C25 50 19 44 19 36 Z" fill="#d4a373"/>
+
+  <!-- Muzzle -->
+  <ellipse cx="32" cy="41" rx="9.5" ry="6.5" fill="#e8b88a"/>
+
+  <!-- Eyes -->
+  <circle cx="25" cy="28" r="1.9" fill="#1c1410"/>
+  <circle cx="39" cy="28" r="1.9" fill="#1c1410"/>
+  <circle cx="25.65" cy="27.35" r="0.55" fill="#f3e6d3"/>
+  <circle cx="39.65" cy="27.35" r="0.55" fill="#f3e6d3"/>
+
+  <!-- Nose -->
+  <ellipse cx="32" cy="36.2" rx="2.6" ry="2" fill="#1c1410"/>
+
+  <!-- Mouth: short philtrum + gentle smile -->
+  <path d="M32 38.2 V40.4 M28 43 Q32 46 36 43"
+        stroke="#1c1410" stroke-width="1.4" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

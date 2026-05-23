@@ -137,7 +137,7 @@ const active = computed(
 <template>
   <div class="page">
     <header class="header">
-      <div class="logo" aria-hidden="true">🐕</div>
+      <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
       <div>
         <h1>GoodBoy</h1>
         <p class="tagline">Local autonomous agent harness for your machine</p>

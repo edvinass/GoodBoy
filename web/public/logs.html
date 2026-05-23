@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <title>GoodBoy Session Log Viewer</title>
   <style>
     :root {
@@ -83,7 +84,12 @@
       font-size: 0.95rem;
       letter-spacing: -0.01em;
     }
-    .topbar .brand .dog { font-size: 1.1rem; }
+    .topbar .brand .dog {
+      width: 1.25rem;
+      height: 1.25rem;
+      display: inline-block;
+      vertical-align: -0.2rem;
+    }
     .topbar .filename {
       color: var(--muted);
       font-family: var(--font-mono);
@@ -157,7 +163,9 @@
       margin-bottom: 2rem;
     }
     .drop-header .logo {
-      font-size: 2.5rem;
+      width: 2.75rem;
+      height: 2.75rem;
+      flex-shrink: 0;
       filter: drop-shadow(0 2px 6px rgba(212, 163, 115, 0.3));
     }
     .drop-header h1 {
@@ -696,7 +704,7 @@
 
   <!-- Topbar shown after a log loads -->
   <div id="topbar" class="topbar hidden">
-    <span class="brand"><span class="dog">🐕</span> Session Log</span>
+    <span class="brand"><img class="dog" src="/logo.svg" alt="" aria-hidden="true" /> Session Log</span>
     <span id="filename" class="filename"></span>
     <span class="spacer"></span>
     <div class="toggles">
@@ -712,7 +720,7 @@
   <!-- Initial drop zone view -->
   <section id="drop-view" class="drop-wrap">
     <div class="drop-header">
-      <div class="logo" aria-hidden="true">🐕</div>
+      <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
       <div>
         <h1>Session Log Viewer</h1>
         <p class="tagline">Drop a GoodBoy <code style="font-family:var(--font-mono);font-size:0.9em">.jsonl</code> session log to read the full chat flow.</p>
