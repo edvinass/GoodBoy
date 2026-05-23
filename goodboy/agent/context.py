@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -9,7 +10,25 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from agent.memory import load_project_memory
-from agent.types import AgentAction, PlanItem, PlanItemStatus, TurnRecord
+from agent.task_policy import is_verification_command
+from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult, TurnRecord
+
+_TERMINAL_ACTIONS = frozenset(
+    {
+        AgentAction.NEED_USER_INPUT,
+        AgentAction.TASK_COMPLETE,
+        AgentAction.FAILED,
+    }
+)
+
+_READ_FILE_ACTIONS = frozenset({AgentAction.READ_FILE})
+
+_EDIT_ACTIONS = frozenset(
+    {
+        AgentAction.STR_REPLACE,
+        AgentAction.APPLY_PATCH,
+    }
+)
 
 
 def _strikethrough(text: str) -> str:
@@ -98,6 +117,8 @@ def effective_plan_items(
 
 
 DEFAULT_RECENT_FULL_TURNS = 8
+_MAX_COMPLEX_WINDOW = 30
+_MIN_FULL_TURNS_UNDER_BUDGET = 2
 _SUMMARY_LINE_PREVIEW_CHARS = 200
 
 TurnRenderMode = Literal["full", "summary"]
@@ -114,6 +135,32 @@ class ContextWatermark:
     turns: int = 0
     parse_errors: int = 0
     user_replies: int = 0
+
+
+def effective_recent_full_turns(
+    base: int,
+    task: str,
+    *,
+    multiplier: float = 2.0,
+    cap: int = _MAX_COMPLEX_WINDOW,
+) -> int:
+    """Widen the full-turn window for complex tasks (keyword heuristic)."""
+    from agent.task_policy import is_complex_task
+
+    if not is_complex_task(task):
+        return base
+    return min(cap, max(1, int(base * multiplier)))
+
+
+def _estimated_tokens(text: str) -> int:
+    """Rough token count for budget checks (tiktoken when available)."""
+    try:
+        import tiktoken
+
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+    except Exception:
+        return max(1, len(text) // 4)
 
 
 def _first_nonempty_line(text: str) -> str | None:
@@ -137,6 +184,127 @@ def _preview_line(line: str, *, limit: int = _SUMMARY_LINE_PREVIEW_CHARS) -> str
     return line[:limit] + " ..."
 
 
+def _read_file_key(step: AgentStep) -> tuple[str, int | None, int | None]:
+    return (step.path or "", step.start_line, step.end_line)
+
+
+def _latest_read_index_by_key(turns: list[TurnRecord]) -> dict[tuple, int]:
+    """Map read_file (path, lines) → index of the latest turn with that key."""
+    latest: dict[tuple, int] = {}
+    for index, record in enumerate(turns):
+        if record.step.action in _READ_FILE_ACTIONS and record.step.path:
+            latest[_read_file_key(record.step)] = index
+    return latest
+
+
+def _sticky_turn_indices(turns: list[TurnRecord]) -> set[int]:
+    """Turn indices that stay in full mode even when outside the recent window."""
+    sticky: set[int] = set()
+
+    for index, record in enumerate(turns):
+        if record.step.action in _TERMINAL_ACTIONS:
+            sticky.add(index)
+
+    for index in range(len(turns) - 1, -1, -1):
+        tr = turns[index].tool_result
+        if tr is not None and (tr.exit_code not in (0, None) or tr.timed_out):
+            sticky.add(index)
+            break
+
+    for index in range(len(turns) - 1, -1, -1):
+        record = turns[index]
+        if (
+            record.step.action == AgentAction.RUN_SHELL
+            and record.step.command
+            and is_verification_command(record.step.command)
+        ):
+            tr = record.tool_result
+            if tr is not None and tr.exit_code == 0 and not tr.timed_out:
+                sticky.add(index)
+                break
+
+    known_ids: set[str] = set()
+    last_add_index: int | None = None
+    for index, record in enumerate(turns):
+        if record.step.action != AgentAction.UPDATE_PLAN or not record.step.plan_items:
+            continue
+        item_ids = {item.id for item in record.step.plan_items}
+        if item_ids - known_ids:
+            last_add_index = index
+        known_ids |= item_ids
+    if last_add_index is not None:
+        sticky.add(last_add_index)
+
+    return sticky
+
+
+def _prior_plan_ids_before_turn(turns: list[TurnRecord], turn_index: int) -> set[str]:
+    """Plan item ids known before ``turn_index`` (from earlier update_plan turns)."""
+    known: set[str] = set()
+    for index in range(turn_index):
+        record = turns[index]
+        if record.step.action == AgentAction.UPDATE_PLAN and record.step.plan_items:
+            known |= {item.id for item in record.step.plan_items}
+    return known
+
+
+def _tool_pass_fail(tr: ToolResult) -> str:
+    if tr.timed_out:
+        return "FAIL"
+    if tr.exit_code in (0, None):
+        return "PASS"
+    return "FAIL"
+
+
+def _parse_search_top_paths(stdout: str, *, limit: int = 3) -> list[str]:
+    """Extract path:line snippets from search_code stdout."""
+    hits: list[str] = []
+    seen: set[str] = set()
+    for line in stdout.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("("):
+            continue
+        match = re.match(r"^([^:]+:\d+)", stripped)
+        if match:
+            loc = match.group(1)
+            if loc not in seen:
+                seen.add(loc)
+                hits.append(loc)
+                if len(hits) >= limit:
+                    break
+    return hits
+
+
+def _count_list_entries(stdout: str) -> int:
+    count = 0
+    for line in stdout.splitlines():
+        if line.strip() and not line.strip().startswith("("):
+            count += 1
+    return count
+
+
+def _edit_line_delta(step: AgentStep) -> int | None:
+    if step.action == AgentAction.STR_REPLACE:
+        old_lines = (step.old_string or "").count("\n") + (
+            1 if step.old_string else 0
+        )
+        new_lines = (step.new_string or "").count("\n") + (
+            1 if step.new_string is not None and step.new_string != "" else 0
+        )
+        return new_lines - old_lines
+    if step.action == AgentAction.APPLY_PATCH and step.patch:
+        added = sum(1 for line in step.patch.splitlines() if line.startswith("+"))
+        removed = sum(1 for line in step.patch.splitlines() if line.startswith("-"))
+        return added - removed
+    return None
+
+
+def _format_read_range(step: AgentStep) -> str:
+    start = step.start_line or 1
+    end = step.end_line if step.end_line is not None else "end"
+    return f"{start}-{end}"
+
+
 class ConversationExchange(BaseModel):
     """One completed user message and the assistant's final reply."""
 
@@ -155,6 +323,7 @@ class SessionContext(BaseModel):
     parse_errors: list[str] = Field(default_factory=list)
     active_hosted_tools: list[str] = Field(default_factory=list)
     recent_full_turns: int = DEFAULT_RECENT_FULL_TURNS
+    token_budget: int | None = None
     plan_items: list[PlanItem] = Field(default_factory=list)
     working_memory: list[str] = Field(default_factory=list)
     last_edit_turn: int | None = None
@@ -205,14 +374,7 @@ class SessionContext(BaseModel):
         )
 
     def to_prompt_delta(self, since: ContextWatermark) -> str:
-        """Render only items appended since ``since`` for stateful chained calls.
-
-        Used together with the OpenAI Responses API's ``previous_response_id``
-        so the model already has the prior transcript on the server side and
-        we only need to send what's new (latest tool result, new parse errors,
-        new user reply). All new turns are rendered in `full` mode because
-        they are the most recent context the model needs.
-        """
+        """Render only items appended since ``since`` for stateful chained calls."""
         sections: list[str] = []
         new_turns = self.turns[since.turns:]
         new_errors = self.parse_errors[since.parse_errors:]
@@ -226,10 +388,24 @@ class SessionContext(BaseModel):
             )
             return pinned + body if pinned else body
 
+        latest_read = _latest_read_index_by_key(self.turns)
+
         if new_turns:
             sections.append("## New turn output")
             for record in new_turns:
-                sections.append(self._format_turn(record, mode="full"))
+                index = self.turns.index(record)
+                superseded = _superseded_read_hint(
+                    record, index, latest_read, self.turns
+                )
+                sections.append(
+                    self._format_turn(
+                        record,
+                        mode="full",
+                        turn_index=index,
+                        all_turns=self.turns,
+                        superseded_by_turn=superseded,
+                    )
+                )
 
         if new_replies:
             sections.append(
@@ -251,13 +427,19 @@ class SessionContext(BaseModel):
         return pinned + body if pinned else body
 
     def to_prompt(self) -> str:
-        """Serialize context for the model's user message.
+        """Serialize context for the model's user message."""
+        full_count = max(1, self.recent_full_turns)
+        if self.token_budget is not None:
+            while True:
+                text = self._build_prompt(full_count)
+                if _estimated_tokens(text) <= self.token_budget:
+                    return text
+                if full_count <= _MIN_FULL_TURNS_UNDER_BUDGET:
+                    return text
+                full_count -= 1
+        return self._build_prompt(full_count)
 
-        Older turns are rendered in `summary` mode (command + exit code + a
-        first/last stdout line); the most recent ``recent_full_turns`` turns
-        keep their full stdout/stderr. The most recent turn is always rendered
-        in full regardless of the cap.
-        """
+    def _build_prompt(self, full_count: int) -> str:
         sections: list[str] = []
         pinned = self.format_pinned_sections()
         if pinned:
@@ -303,17 +485,32 @@ class SessionContext(BaseModel):
             )
 
         if self.turns:
-            full_count = max(1, self.recent_full_turns)
+            sticky = _sticky_turn_indices(self.turns)
+            latest_read = _latest_read_index_by_key(self.turns)
             split = max(0, len(self.turns) - full_count)
             older = self.turns[:split]
             recent = self.turns[split:]
 
             if older:
                 sections.append(
-                    "\n## Older turns (summarised — full stdout/stderr elided)"
+                    "\n## Older turns (summarised — outcomes only unless pinned)"
                 )
-                for record in older:
-                    sections.append(self._format_turn(record, mode="summary"))
+                for index, record in enumerate(older):
+                    mode: TurnRenderMode = (
+                        "full" if index in sticky else "summary"
+                    )
+                    superseded = _superseded_read_hint(
+                        record, index, latest_read, self.turns
+                    )
+                    sections.append(
+                        self._format_turn(
+                            record,
+                            mode=mode,
+                            turn_index=index,
+                            all_turns=self.turns,
+                            superseded_by_turn=superseded,
+                        )
+                    )
 
             if recent:
                 header = (
@@ -322,8 +519,19 @@ class SessionContext(BaseModel):
                     else "\n## Prior turns"
                 )
                 sections.append(header)
-                for record in recent:
-                    sections.append(self._format_turn(record, mode="full"))
+                for index, record in enumerate(recent, start=split):
+                    superseded = _superseded_read_hint(
+                        record, index, latest_read, self.turns
+                    )
+                    sections.append(
+                        self._format_turn(
+                            record,
+                            mode="full",
+                            turn_index=index,
+                            all_turns=self.turns,
+                            superseded_by_turn=superseded,
+                        )
+                    )
 
         if self.user_replies:
             sections.append(
@@ -344,7 +552,132 @@ class SessionContext(BaseModel):
         return "\n".join(sections)
 
     @staticmethod
-    def _format_turn(record: TurnRecord, *, mode: TurnRenderMode = "full") -> str:
+    def _format_turn(
+        record: TurnRecord,
+        *,
+        mode: TurnRenderMode = "full",
+        turn_index: int | None = None,
+        all_turns: list[TurnRecord] | None = None,
+        superseded_by_turn: int | None = None,
+    ) -> str:
+        """Render one turn for the model transcript."""
+        if mode == "summary":
+            return SessionContext._format_turn_summary(
+                record,
+                turn_index=turn_index,
+                all_turns=all_turns,
+                superseded_by_turn=superseded_by_turn,
+            )
+        return SessionContext._format_turn_full(
+            record,
+            superseded_by_turn=superseded_by_turn,
+        )
+
+    @staticmethod
+    def _format_turn_summary(
+        record: TurnRecord,
+        *,
+        turn_index: int | None,
+        all_turns: list[TurnRecord] | None,
+        superseded_by_turn: int | None = None,
+    ) -> str:
+        step = record.step
+        lines = [f"\n### Turn {record.turn}"]
+        outcome: str | None = None
+
+        if step.action in _TERMINAL_ACTIONS:
+            if step.message:
+                lines.append(f"Outcome: {step.message}")
+            return "\n".join(lines)
+
+        if step.action in _READ_FILE_ACTIONS and step.path:
+            outcome = f"Read {step.path}:{_format_read_range(step)}"
+            if superseded_by_turn is not None:
+                outcome += f" (superseded by turn {superseded_by_turn})"
+        elif step.action == AgentAction.SEARCH_CODE:
+            scope = step.path or step.glob or "."
+            pattern = _preview_line(step.pattern or "", limit=80)
+            tr = record.tool_result
+            if tr and tr.stdout:
+                hits = _parse_search_top_paths(tr.stdout)
+                n = _count_list_entries(tr.stdout)
+                top = ", ".join(hits) if hits else "none"
+                outcome = f'Searched "{pattern}" in {scope}: {n} hits, top: {top}'
+            else:
+                outcome = f'Searched "{pattern}" in {scope}'
+        elif step.action == AgentAction.LIST_FILES:
+            scope = step.path or "."
+            glob_part = f" ({step.glob})" if step.glob else ""
+            tr = record.tool_result
+            n = _count_list_entries(tr.stdout) if tr and tr.stdout else 0
+            outcome = f"Listed {scope}{glob_part}: {n} entries"
+        elif step.action == AgentAction.RUN_SHELL and step.command:
+            tr = record.tool_result
+            code = tr.exit_code if tr else None
+            status = _tool_pass_fail(tr) if tr else "?"
+            outcome = f"Shell: {step.command} → exit {code} ({status})"
+            if tr and status == "FAIL" and tr.stderr:
+                err = _first_nonempty_line(tr.stderr)
+                if err:
+                    lines.append(f"  stderr: {_preview_line(err)}")
+        elif step.action == AgentAction.RUN_PYTHON:
+            tr = record.tool_result
+            first = _first_nonempty_line(step.code or "") or "(python)"
+            code = tr.exit_code if tr else None
+            status = _tool_pass_fail(tr) if tr else "?"
+            outcome = f"Python: {_preview_line(first, limit=80)} → exit {code} ({status})"
+            if tr and status == "FAIL" and tr.stderr:
+                err = _first_nonempty_line(tr.stderr)
+                if err:
+                    lines.append(f"  stderr: {_preview_line(err)}")
+        elif step.action in _EDIT_ACTIONS and step.path:
+            delta = _edit_line_delta(step)
+            delta_s = f"{delta:+d} lines" if delta is not None else "edited"
+            tr = record.tool_result
+            code = tr.exit_code if tr else None
+            outcome = f"Edited {step.path}: {delta_s} (exit {code})"
+        elif step.action == AgentAction.UPDATE_PLAN and step.plan_items:
+            done = sum(
+                1 for p in step.plan_items if p.status == PlanItemStatus.DONE
+            )
+            outcome = f"Plan: {len(step.plan_items)} items, {done} done"
+            if turn_index is not None and all_turns is not None:
+                prior = _prior_plan_ids_before_turn(all_turns, turn_index)
+                new_items = [
+                    p for p in step.plan_items if p.id not in prior
+                ]
+                for item in new_items[:5]:
+                    lines.append(f"  + {item.id}: {item.text}")
+        elif step.action == AgentAction.REMEMBER and step.memory:
+            parts = [_preview_line(m, limit=120) for m in step.memory[:5]]
+            outcome = "Remembered: " + "; ".join(parts)
+        elif step.action == AgentAction.GIT:
+            tr = record.tool_result
+            op = step.git_op or "git"
+            code = tr.exit_code if tr else None
+            outcome = f"Git {op} → exit {code}"
+        elif record.tool_result is not None:
+            tr = record.tool_result
+            outcome = (
+                f"{step.action.value} → exit {tr.exit_code} "
+                f"({_tool_pass_fail(tr)})"
+            )
+
+        if outcome:
+            lines.append(outcome)
+        elif step.thought:
+            lines.append(f"Thought: {_preview_line(step.thought)}")
+        elif step.message:
+            lines.append(f"Message: {step.message}")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_turn_full(
+        record: TurnRecord,
+        *,
+        superseded_by_turn: int | None = None,
+    ) -> str:
         step = record.step
         lines = [f"\n### Turn {record.turn}"]
         if record.call_model:
@@ -376,16 +709,9 @@ class SessionContext(BaseModel):
         if step.command:
             lines.append(f"Command: {step.command}")
         if step.code:
-            if mode == "summary":
-                first = _first_nonempty_line(step.code) or ""
-                lines.append(f"Code (first line): {_preview_line(first)}")
-            else:
-                lines.append(f"Code:\n```python\n{step.code}\n```")
-        if step.patch and mode == "full":
+            lines.append(f"Code:\n```python\n{step.code}\n```")
+        if step.patch:
             lines.append(f"Patch:\n```diff\n{step.patch}\n```")
-        elif step.patch and mode == "summary":
-            first = _first_nonempty_line(step.patch) or ""
-            lines.append(f"Patch (first line): {_preview_line(first)}")
         if step.old_string is not None:
             preview = _preview_line(step.old_string.replace("\n", "\\n"))
             lines.append(f"Old: {preview}")
@@ -393,8 +719,6 @@ class SessionContext(BaseModel):
             preview = _preview_line(step.new_string.replace("\n", "\\n"))
             lines.append(f"New: {preview}")
         if step.message:
-            # Routing/terminal turns carry their entire signal in `message`;
-            # keep it whole even when summarising.
             lines.append(f"Message: {step.message}")
         if step.action == AgentAction.UPDATE_PLAN and step.plan_items:
             lines.append(f"Plan items: {len(step.plan_items)}")
@@ -407,28 +731,29 @@ class SessionContext(BaseModel):
             lines.append(f"Executed: {tr.executed}")
             lines.append(f"Exit code: {tr.exit_code}")
             lines.append(f"Timed out: {tr.timed_out}")
-            if mode == "full":
-                if tr.stdout:
-                    lines.append(f"Stdout:\n{tr.stdout}")
-                if tr.stderr:
-                    lines.append(f"Stderr:\n{tr.stderr}")
-            else:
-                first_out = _first_nonempty_line(tr.stdout) if tr.stdout else None
-                last_out = _last_nonempty_line(tr.stdout) if tr.stdout else None
-                if first_out:
-                    lines.append(
-                        f"Stdout (first line): {_preview_line(first_out)}"
-                    )
-                if last_out and last_out != first_out:
-                    lines.append(
-                        f"Stdout (last line): {_preview_line(last_out)}"
-                    )
-                failed = tr.exit_code not in (0, None) or tr.timed_out
-                if failed and tr.stderr:
-                    first_err = _first_nonempty_line(tr.stderr)
-                    if first_err:
-                        lines.append(
-                            f"Stderr (first line): {_preview_line(first_err)}"
-                        )
+            if superseded_by_turn is not None and step.action in _READ_FILE_ACTIONS:
+                lines.append(
+                    f"Read {step.path}:{_format_read_range(step)} "
+                    f"(superseded by turn {superseded_by_turn})"
+                )
+            elif tr.stdout:
+                lines.append(f"Stdout:\n{tr.stdout}")
+            if tr.stderr:
+                lines.append(f"Stderr:\n{tr.stderr}")
 
         return "\n".join(lines)
+
+
+def _superseded_read_hint(
+    record: TurnRecord,
+    index: int,
+    latest_read: dict[tuple, int],
+    turns: list[TurnRecord],
+) -> int | None:
+    if record.step.action not in _READ_FILE_ACTIONS or not record.step.path:
+        return None
+    key = _read_file_key(record.step)
+    latest_index = latest_read.get(key)
+    if latest_index is None or latest_index == index:
+        return None
+    return turns[latest_index].turn

@@ -25,6 +25,7 @@ from agent.context import (
     ContextWatermark,
     SessionContext,
     effective_plan_items,
+    effective_recent_full_turns,
     should_print_plan_progress,
 )
 from agent.models import (
@@ -163,6 +164,8 @@ class AgentLoop:
         self._plan_mode = cfg.plan_mode
         self._working_memory_max = cfg.working_memory_max
         self._verify_before_complete = cfg.verify_before_complete
+        self._context_token_budget = cfg.context_token_budget
+        self._complex_window_multiplier = cfg.complex_window_multiplier
         self._ui = ui
         self._stable_instructions = self._build_stable_instructions()
         self._session_suffix = self._build_session_suffix()
@@ -245,6 +248,17 @@ class AgentLoop:
             raise ValueError(f"Unknown reasoning effort: {effort}")
         self._default_reasoning = effort
 
+    def _effective_recent_full_turns(self, task: str) -> int:
+        """Model window size, widened for complex tasks when not overridden."""
+        base = self._window_for_model(self._default_model)
+        if self._explicit_recent_full_turns is not None:
+            return base
+        return effective_recent_full_turns(
+            base,
+            task,
+            multiplier=self._complex_window_multiplier,
+        )
+
     def run(
         self,
         task: str,
@@ -254,19 +268,25 @@ class AgentLoop:
         session_log: SessionLog | None = None,
         stop_requested: StopRequested | None = None,
     ) -> LoopResult:
+        window = self._effective_recent_full_turns(task)
         ctx = context or SessionContext(
             user_task=task,
             workspace=str(self.workspace),
-            recent_full_turns=self.recent_full_turns,
+            recent_full_turns=window,
+            token_budget=self._context_token_budget,
         )
         if ctx.workspace is None:
             ctx = ctx.model_copy(update={"workspace": str(self.workspace)})
-        # Honour the loop's window size even when callers (harness resume,
-        # tests) pass a pre-built context that still carries the model default.
-        if ctx.recent_full_turns != self.recent_full_turns:
-            ctx = ctx.model_copy(
-                update={"recent_full_turns": self.recent_full_turns}
-            )
+        updates: dict = {}
+        if ctx.recent_full_turns != window:
+            updates["recent_full_turns"] = window
+        if (
+            self._context_token_budget is not None
+            and ctx.token_budget != self._context_token_budget
+        ):
+            updates["token_budget"] = self._context_token_budget
+        if updates:
+            ctx = ctx.model_copy(update=updates)
         # Re-arm the local-model context-full warning so the next truncation
         # event in this task triggers exactly one notice (instead of one per
         # LLM call, which spammed the terminal).

@@ -33,6 +33,8 @@ GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
 GOODBOY_PLAN_MODE_VAR = "GOODBOY_PLAN_MODE"
 GOODBOY_WORKING_MEMORY_MAX_VAR = "GOODBOY_WORKING_MEMORY_MAX"
 GOODBOY_VERIFY_BEFORE_COMPLETE_VAR = "GOODBOY_VERIFY_BEFORE_COMPLETE"
+GOODBOY_CONTEXT_TOKEN_BUDGET_VAR = "GOODBOY_CONTEXT_TOKEN_BUDGET"
+GOODBOY_COMPLEX_WINDOW_MULTIPLIER_VAR = "GOODBOY_COMPLEX_WINDOW_MULTIPLIER"
 GOODBOY_MODELS_DIR_VAR = "GOODBOY_MODELS_DIR"
 DEFAULT_MODEL = "gpt-5.4-nano"
 DEFAULT_MODELS_DIR = Path.home() / ".goodboy" / "models"
@@ -43,6 +45,7 @@ DEFAULT_TOOL_TIMEOUT_SEC = 180.0
 DEFAULT_MAX_CLARIFICATIONS = 3
 DEFAULT_CONTEXT_RECENT_FULL_TURNS = 15
 DEFAULT_LOCAL_RECENT_FULL_TURNS = 3
+DEFAULT_COMPLEX_WINDOW_MULTIPLIER = 2.0
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
 
@@ -151,6 +154,16 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_optional_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return None
+
+
 @dataclass(frozen=True)
 class Settings:
     openai_api_key: str | None
@@ -172,6 +185,8 @@ class Settings:
     plan_mode: str = DEFAULT_PLAN_MODE
     working_memory_max: int = DEFAULT_WORKING_MEMORY_MAX
     verify_before_complete: bool = True
+    context_token_budget: int | None = None
+    complex_window_multiplier: float = DEFAULT_COMPLEX_WINDOW_MULTIPLIER
     models_dir: Path = DEFAULT_MODELS_DIR
 
     @classmethod
@@ -246,6 +261,13 @@ class Settings:
             ),
             verify_before_complete=_env_bool(
                 GOODBOY_VERIFY_BEFORE_COMPLETE_VAR, True
+            ),
+            context_token_budget=_env_optional_int(
+                GOODBOY_CONTEXT_TOKEN_BUDGET_VAR
+            ),
+            complex_window_multiplier=_env_float(
+                GOODBOY_COMPLEX_WINDOW_MULTIPLIER_VAR,
+                DEFAULT_COMPLEX_WINDOW_MULTIPLIER,
             ),
             models_dir=models_dir,
         )

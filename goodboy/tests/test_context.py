@@ -91,12 +91,10 @@ def test_older_turns_summarised_drops_full_stdout():
     # Sliding window header is present.
     assert "Older turns (summarised" in text
     assert "Recent turns (full output)" in text
-    # Old turn loses its noisy body but keeps command + a first/last preview.
+    # Old turn loses its noisy body but keeps an outcome one-liner.
     assert "noise\nnoise" not in text
     assert "Stdout:\n" not in text.split("Recent turns")[0]
-    assert "Command: ls" in text
-    assert "Stdout (first line): line-old-1" in text
-    assert "Stdout (last line): line-old-last" in text
+    assert "Shell: ls → exit 0 (PASS)" in text
     # Recent turns still rendered with full Stdout body.
     assert "Stdout:\na" in text
     assert "Stdout:\nb" in text
@@ -115,7 +113,7 @@ def test_recent_full_turns_window_keeps_last_n():
     # Earlier turns 1..3 are summarised — no full Stdout block.
     for i in (1, 2, 3):
         assert f"Stdout:\nout-{i}" not in text
-        assert f"Stdout (first line): out-{i}" in text
+        assert f"Shell: cmd{i} → exit 0 (PASS)" in text
 
 
 def test_summary_keeps_message_for_terminal_turns():
@@ -158,8 +156,9 @@ def test_summary_includes_first_stderr_on_failure():
 
     text = ctx.to_prompt()
     older_section = text.split("Recent turns")[0]
-    assert "Stderr (first line): ImportError: No module named foo" in older_section
-    assert "Traceback ..." not in older_section
+    # Failed turns are sticky — rendered in full mode with stderr body.
+    assert "ImportError: No module named foo" in older_section
+    assert "Command: python -m foo" in older_section
 
 
 def test_default_recent_full_turns_is_eight():
@@ -341,6 +340,107 @@ def test_format_plan_items_marks_status():
     assert skipped_line.startswith("[–] 3.")
     assert "\u0336" in skipped_line
     assert pending_line == "[ ] 4. later"
+
+
+def test_read_file_dedup_supersedes_older_reads():
+    body_v1 = "version-one\n" * 50
+    body_v2 = "version-two\n" * 50
+    ctx = SessionContext(user_task="t", recent_full_turns=1)
+    ctx.add_turn(
+        TurnRecord(
+            turn=1,
+            step=AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
+            tool_result=ToolResult(
+                executed="read_file foo.py",
+                stdout=body_v1,
+                exit_code=0,
+            ),
+        )
+    )
+    ctx.add_turn(_shell_turn(2, "echo x", "x\n"))
+    ctx.add_turn(
+        TurnRecord(
+            turn=3,
+            step=AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
+            tool_result=ToolResult(
+                executed="read_file foo.py",
+                stdout=body_v2,
+                exit_code=0,
+            ),
+        )
+    )
+
+    text = ctx.to_prompt()
+    assert "superseded by turn 3" in text
+    assert body_v1 not in text
+    assert body_v2 in text
+
+
+def test_sticky_failed_turn_keeps_full_output_when_old():
+    fail_out = "FAIL_MARKER\n" + ("x\n" * 500)
+    ctx = SessionContext(user_task="t", recent_full_turns=2)
+    ctx.add_turn(
+        TurnRecord(
+            turn=1,
+            step=AgentStep(action=AgentAction.RUN_SHELL, command="false"),
+            tool_result=ToolResult(
+                executed="false",
+                stdout=fail_out,
+                stderr="boom",
+                exit_code=1,
+            ),
+        )
+    )
+    for i in range(2, 22):
+        ctx.add_turn(_shell_turn(i, f"echo {i}", f"ok-{i}\n"))
+
+    text = ctx.to_prompt()
+    assert "FAIL_MARKER" in text
+    assert "Older turns (summarised" in text
+
+
+def test_token_budget_demotes_recent_turns():
+    from agent.context import _estimated_tokens
+
+    big = "Y" * 2000
+    ctx = SessionContext(user_task="t", recent_full_turns=10, token_budget=1500)
+    for i in range(1, 41):
+        ctx.add_turn(_shell_turn(i, f"cmd{i}", big))
+
+    text = ctx.to_prompt()
+    assert _estimated_tokens(text) <= 1500
+
+
+def test_effective_recent_full_turns_widens_complex_tasks():
+    from agent.context import effective_recent_full_turns
+    from settings import DEFAULT_CONTEXT_RECENT_FULL_TURNS
+
+    base = DEFAULT_CONTEXT_RECENT_FULL_TURNS
+    assert (
+        effective_recent_full_turns(base, "refactor the entire codebase")
+        == min(30, int(base * 2.0))
+    )
+    assert effective_recent_full_turns(base, "fix typo") == base
+
+
+def test_loop_applies_complex_window_for_complex_task(tmp_path, monkeypatch):
+    from agent.loop import AgentLoop
+    from settings import DEFAULT_CONTEXT_RECENT_FULL_TURNS
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5.4-nano")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "settings.ENV_FILE",
+        tmp_path / ".env",
+        raising=False,
+    )
+    get_settings = __import__("settings", fromlist=["get_settings"]).get_settings
+    get_settings.cache_clear()
+
+    loop = AgentLoop(workspace=tmp_path)
+    window = loop._effective_recent_full_turns("refactor the entire auth module")
+    assert window == min(30, int(DEFAULT_CONTEXT_RECENT_FULL_TURNS * 2.0))
 
 
 def test_pinned_plan_and_memory_in_prompt_and_delta():

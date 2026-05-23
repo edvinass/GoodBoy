@@ -254,6 +254,9 @@ Agent behavior:
 - `GOODBOY_PLAN_MODE` – `auto` (plan required for complex tasks), `always`, or `off` (default: `auto`)
 - `GOODBOY_VERIFY_BEFORE_COMPLETE` – block `task_complete` until tests pass after edits (default: `true`)
 - `GOODBOY_WORKING_MEMORY_MAX` – cap on durable memory lines (default: `30`)
+- `GOODBOY_CONTEXT_RECENT_FULL_TURNS` – how many recent agent turns keep full tool output in the prompt (default: `15`; local models use `GOODBOY_LOCAL_RECENT_FULL_TURNS`, default `3`)
+- `GOODBOY_CONTEXT_TOKEN_BUDGET` – optional max estimated tokens for the per-turn transcript; when set, older turns are compacted further until under budget
+- `GOODBOY_COMPLEX_WINDOW_MULTIPLIER` – multiply the recent-full window for complex tasks (keyword heuristic; default: `2.0`, capped at 30 turns)
 
 Project memory: add `AGENTS.md`, `.goodboy/memory.md`, or `GOODBOY.md` in the repo root with test commands and conventions (see [`examples/AGENTS.md`](examples/AGENTS.md)). GoodBoy injects the first file found into every task.
 

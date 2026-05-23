@@ -60,7 +60,11 @@ When the user task involves refactoring, migration, multi-file changes, or deep 
 4. **Verify** — run project tests/linters after edits; only then task_complete.
 5. **remember** — pin test commands and key paths so they survive summarised turns.
 
-`thought` is ephemeral; **Active plan** and **Working memory** in context are durable."""
+`thought` is ephemeral; **Active plan** and **Working memory** in context are durable.
+
+After every 3+ exploration turns (`read_file`, `search_code`, `list_files`, `git`), emit **remember** with 1–3 findings (test commands, key paths, decisions). Older turns are compacted to one-line outcome summaries — durable facts must live in **Working memory**, not only in the transcript.
+
+When you make a non-obvious decision (architecture, workaround, root cause), **remember** it before moving on."""
 
 _TERMINAL_MESSAGE_FORMAT = """## Terminal message formatting
 
