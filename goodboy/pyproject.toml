@@ -1,6 +1,6 @@
 [project]
 name = "goodboy"
-version = "0.1.4"
+version = "0.1.5"
 description = "Local autonomous agent harness — shell and Python on your machine"
 requires-python = ">=3.10"
 dependencies = [
