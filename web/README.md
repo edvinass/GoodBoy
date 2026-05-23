@@ -30,15 +30,15 @@ The install URL is always:
 https://<your-domain>/install.sh
 ```
 
-`public/goodboy.tar.gz` and `install.sh` (in this directory) are release artifacts committed for Railway — Railway only deploys `web/`, not the repo root. Edit the installer at the repo root, then run the release script. After changing the CLI or installer, refresh and redeploy:
+`public/goodboy.tar.gz` and `install.sh` (in this directory) are release artifacts committed for Railway — Railway only deploys `web/`, not the repo root. Edit the installer at the repo root, then run the release script when you want to cut a new bundle (it auto-bumps the patch version):
 
 ```bash
-./scripts/release-web-tar.sh
+npm run release            # or: ./scripts/release-web-tar.sh
 ```
 
 Optional versioned copy: `./scripts/release-web-tar.sh --version 0.1.0`
 
-`npm run build` in `web/` runs the same script when `../goodboy` exists.
+`npm run dev` and `npm run build` do **not** run the release script — `prebuild` only verifies that `public/goodboy.tar.gz` and `install.sh` exist so Railway builds fail loudly if the bundle is missing.
 
 ## Custom domain
 

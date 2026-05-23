@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "sh -c 'if [ -d ../goodboy ]; then ../scripts/release-web-tar.sh; elif [ -f public/goodboy.tar.gz ] && [ -f install.sh ]; then :; else echo \"error: run ../scripts/release-web-tar.sh from repo root\" >&2; exit 1; fi'",
-    "dev": "npm run prebuild && vite",
-    "build": "npm run prebuild && vite build",
+    "prebuild": "sh -c 'if [ -f public/goodboy.tar.gz ] && [ -f install.sh ]; then :; else echo \"error: missing public/goodboy.tar.gz or install.sh — run npm run release (or ../scripts/release-web-tar.sh)\" >&2; exit 1; fi'",
+    "release": "../scripts/release-web-tar.sh",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "node server.js"
   },
