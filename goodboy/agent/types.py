@@ -276,12 +276,21 @@ def _load_first_json_object(text: str) -> Any:
 
 
 def parse_all_agent_steps(raw: str) -> list[AgentStep]:
-    """Parse every JSON action object in a (possibly concatenated) response."""
+    """Parse every JSON action object in a (possibly concatenated or array) response."""
     import json
 
     text = _strip_markdown_json_fence(raw.strip())
     if not text:
         return []
+    # Accept a top-level JSON array of step objects.
+    if text.lstrip().startswith('['):
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            pass  # Fall through to concatenated-object parser
+        else:
+            if isinstance(data, list):
+                return [AgentStep.model_validate(item) for item in data]
     decoder = json.JSONDecoder()
     steps: list[AgentStep] = []
     pos = 0
