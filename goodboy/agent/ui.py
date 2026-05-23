@@ -514,7 +514,7 @@ class _UserInputCompleter(Completer):
                 yield Completion(
                     text=command.name,
                     start_position=start_position,
-                    display=[("class:mention.choice", f"+ /{command.name}")],
+                    display=_slash_completion_display(command.name),
                     display_meta=slash_command_display_meta(
                         command,
                         show_commands=self._show_commands,
@@ -534,8 +534,43 @@ class _UserInputCompleter(Completer):
             yield Completion(
                 text=path,
                 start_position=start_position,
-                display=[("class:mention.choice", f"+ {path}")],
+                display=_path_completion_display(path),
+                display_meta=_path_completion_meta(path),
             )
+
+
+def _slash_completion_display(name: str) -> list[tuple[str, str]]:
+    """Styled fragments for a slash-command menu row."""
+    return [
+        ("class:mention.icon", " › "),
+        ("class:mention.slash", "/"),
+        ("class:mention.command", name),
+    ]
+
+
+def _path_completion_display(path: str) -> list[tuple[str, str]]:
+    """Styled fragments for a file/directory mention menu row."""
+    if path.endswith("/"):
+        return [
+            ("class:mention.icon", " ▸ "),
+            ("class:mention.dir", path),
+        ]
+    parent, sep, basename = path.rpartition("/")
+    if not sep:
+        return [
+            ("class:mention.icon", " · "),
+            ("class:mention.file", basename),
+        ]
+    return [
+        ("class:mention.icon", " · "),
+        ("class:mention.dim", f"{parent}/"),
+        ("class:mention.file", basename),
+    ]
+
+
+def _path_completion_meta(path: str) -> str:
+    """Short kind label shown to the right of file/dir completions."""
+    return "directory" if path.endswith("/") else "file"
 
 
 def _accept_active_completion(buffer: Buffer) -> bool:
@@ -903,10 +938,31 @@ def _prompt_user_line(
                     "input-border": "#8b4513",
                     "input-footer": "#7f7f7f",
                     "prompt": "bold #cd853f",
-                    "mention.choice": "ansibrightblue",
-                    "completion-menu": "bg:#1e1e1e",
-                    "completion-menu.completion": "",
-                    "completion-menu.completion.current": "bg:ansiblue",
+                    # Completion menu surface: warm dark backdrop matching the
+                    # input frame, with brown accents instead of ansi blue.
+                    "completion-menu": "bg:#1f1611",
+                    "completion-menu.completion": "bg:#1f1611 #e6d7c3",
+                    "completion-menu.completion.current": "bg:#8b4513 #ffffff bold",
+                    "completion-menu.meta.completion": "bg:#1f1611 #8c7a65 italic",
+                    "completion-menu.meta.completion.current": "bg:#8b4513 #f5e9d8 italic",
+                    "completion-menu.scrollbar.background": "bg:#2a1f17",
+                    "completion-menu.scrollbar.button": "bg:#cd853f",
+                    # Per-fragment styles for slash commands and @ mentions.
+                    "mention.choice": "#cd853f",
+                    "mention.icon": "#8b4513",
+                    "mention.slash": "#cd853f",
+                    "mention.command": "bold #ffd9a8",
+                    "mention.dir": "bold #cd853f",
+                    "mention.file": "bold #ffd9a8",
+                    "mention.dim": "#8c7a65",
+                    # Highlighted row inherits its background; override fragment
+                    # colours so the brown selection stays legible.
+                    "completion-menu.completion.current mention.icon": "bg:#8b4513 #f5e9d8",
+                    "completion-menu.completion.current mention.slash": "bg:#8b4513 #f5e9d8 bold",
+                    "completion-menu.completion.current mention.command": "bg:#8b4513 #ffffff bold",
+                    "completion-menu.completion.current mention.dir": "bg:#8b4513 #ffffff bold",
+                    "completion-menu.completion.current mention.file": "bg:#8b4513 #ffffff bold",
+                    "completion-menu.completion.current mention.dim": "bg:#8b4513 #f5e9d8",
                 }
             ),
         ]
