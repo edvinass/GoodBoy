@@ -63,6 +63,7 @@ from agent.banner import (
     matrix_intro_enabled,
     measure_renderable_height,
     play_matrix_intro,
+    render_rain_snapshot,
 )
 from agent.context import format_plan_step_progress
 from agent.mentions import (
@@ -1700,9 +1701,29 @@ class ConversationUI:
             reasoning_effort=payload.get("reasoning_effort"),
         )
 
+    def _startup_rain_width(self, terminal_width: int) -> int:
+        """Width (cells) reserved for the right-side rain column."""
+        return max(14, min(terminal_width // 3, 36))
+
     def _build_startup_panel(self, data: dict[str, Any] | None = None) -> Panel:
+        markup = self._startup_markup(data)
+        banner_text = Text.from_markup(markup)
+        banner_height = banner_text.plain.count("\n") + 1
+        terminal_width = self._fresh_terminal_width()
+        # Panel borders take 2 cells, panel padding (0, 2) takes 4, table padding
+        # between cells uses 2. Reserve enough room for the banner text on the
+        # left and a rain column wide enough to read as a continuous downpour
+        # on the right.
+        rain_width = self._startup_rain_width(terminal_width)
+        rain = render_rain_snapshot(height=banner_height, width=rain_width)
+
+        grid = Table.grid(padding=(0, 1), expand=True)
+        grid.add_column(ratio=1, overflow="crop")
+        grid.add_column(width=rain_width, no_wrap=True, overflow="crop")
+        grid.add_row(banner_text, rain)
+
         return self._panel(
-            Text.from_markup(self._startup_markup(data)),
+            grid,
             border_style=_BRAND_STYLE,
             padding=(0, 2),
         )

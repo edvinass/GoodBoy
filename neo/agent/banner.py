@@ -24,10 +24,12 @@ MATRIX_GLYPHS = (
 )
 
 MATRIX_ASCII = r"""
-     .---.     .---.
-    /     \   /     \
-   |   o   | |   o   |
-    \_____/   \_____/
+███╗   ██╗ ███████╗  ██████╗ 
+████╗  ██║ ██╔════╝ ██╔═══██╗
+██╔██╗ ██║ █████╗   ██║   ██║
+██║╚██╗██║ ██╔══╝   ██║   ██║
+██║ ╚████║ ███████╗ ╚██████╔╝
+╚═╝  ╚═══╝ ╚══════╝  ╚═════╝ 
 """
 
 
@@ -189,3 +191,56 @@ def measure_renderable_height(
     if width is not None:
         options = options.update(width=width)
     return len(console.render_lines(renderable, options))
+
+
+def render_rain_snapshot(
+    *,
+    height: int,
+    width: int,
+    rng: random.Random | None = None,
+) -> Text:
+    """A still frame from an ongoing matrix rain (drops at random positions).
+
+    Each column is given a head row in the range ``[0, height + trail)`` so
+    some columns are still empty while others have already finished falling.
+    The result is sized exactly to ``height × width`` cells so it can sit in
+    a fixed-width panel column without wrapping.
+    """
+    if height <= 0 or width <= 0:
+        return Text("")
+    pick = (rng or random).choice
+    rand = (rng or random).random
+    randint = (rng or random).randint
+
+    # Pre-pick head rows for each column; some columns get a "no drop" sentinel
+    # to keep the snapshot from looking like a solid wall of glyphs.
+    heads: list[int | None] = []
+    for _ in range(width):
+        if rand() < 0.85:
+            heads.append(randint(0, height + _TRAIL_LENGTH))
+        else:
+            heads.append(None)
+
+    text = Text(no_wrap=True, overflow="crop")
+    for row in range(height):
+        for col in range(width):
+            head = heads[col]
+            if head is None:
+                text.append(" ")
+                continue
+            cell = head - row
+            if cell < 0:
+                text.append(" ")
+            elif cell == 0:
+                text.append(pick(MATRIX_GLYPHS), style=_TRAIL_HEAD)
+            elif cell <= 2:
+                text.append(pick(MATRIX_GLYPHS), style=_TRAIL_BRIGHT)
+            elif cell <= _TRAIL_LENGTH - 2:
+                text.append(pick(MATRIX_GLYPHS), style=_TRAIL_MID)
+            elif cell <= _TRAIL_LENGTH:
+                text.append(pick(MATRIX_GLYPHS), style=_TRAIL_DIM)
+            else:
+                text.append(" ")
+        if row < height - 1:
+            text.append("\n")
+    return text
