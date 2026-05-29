@@ -1,12 +1,93 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const copied = ref(false)
 const origin = ref('')
+const rainCanvas = ref(null)
+let rainCleanup = null
 
 onMounted(() => {
   origin.value = window.location.origin
+  rainCleanup = startMatrixRain(rainCanvas.value)
 })
+
+onBeforeUnmount(() => {
+  if (rainCleanup) rainCleanup()
+})
+
+function startMatrixRain(canvas) {
+  if (!canvas) return () => {}
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return () => {}
+
+  const glyphs =
+    'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789<>/\\|=+*-_:;.'
+  const fontSize = 16
+  let columns = 0
+  let drops = []
+  let dpr = 1
+  let rafId = 0
+  let lastFrame = 0
+  const frameInterval = 1000 / 24
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const { clientWidth, clientHeight } = canvas
+    canvas.width = clientWidth * dpr
+    canvas.height = clientHeight * dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.font = `${fontSize}px "IBM Plex Mono", ui-monospace, monospace`
+    columns = Math.max(1, Math.floor(clientWidth / fontSize))
+    drops = new Array(columns)
+      .fill(0)
+      .map(() => Math.random() * (clientHeight / fontSize))
+    ctx.fillStyle = 'rgba(5, 8, 5, 1)'
+    ctx.fillRect(0, 0, clientWidth, clientHeight)
+  }
+
+  function draw(now) {
+    rafId = requestAnimationFrame(draw)
+    if (now - lastFrame < frameInterval) return
+    lastFrame = now
+
+    const w = canvas.clientWidth
+    const h = canvas.clientHeight
+
+    ctx.fillStyle = 'rgba(5, 8, 5, 0.18)'
+    ctx.fillRect(0, 0, w, h)
+
+    for (let i = 0; i < drops.length; i++) {
+      const ch = glyphs.charAt(Math.floor(Math.random() * glyphs.length))
+      const x = i * fontSize
+      const y = drops[i] * fontSize
+
+      ctx.fillStyle = 'rgba(180, 255, 200, 0.95)'
+      ctx.fillText(ch, x, y)
+
+      ctx.fillStyle = 'rgba(0, 255, 65, 0.85)'
+      ctx.fillText(ch, x, y - fontSize)
+
+      if (y > h && Math.random() > 0.975) {
+        drops[i] = 0
+      }
+      drops[i] += 1
+    }
+  }
+
+  resize()
+  const ro = new ResizeObserver(resize)
+  ro.observe(canvas)
+
+  if (!reduceMotion) {
+    rafId = requestAnimationFrame(draw)
+  }
+
+  return () => {
+    cancelAnimationFrame(rafId)
+    ro.disconnect()
+  }
+}
 
 const installUrl = computed(() =>
   origin.value ? `${origin.value}/install.sh` : 'https://your-app.up.railway.app/install.sh',
@@ -136,10 +217,13 @@ const active = computed(
 <template>
   <div class="page">
     <header class="header">
-      <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
-      <div>
-        <h1>Neo</h1>
-        <p class="tagline">Local autonomous agent harness for your machine</p>
+      <canvas ref="rainCanvas" class="header-rain" aria-hidden="true"></canvas>
+      <div class="header-content">
+        <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
+        <div>
+          <h1>Neo</h1>
+          <p class="tagline">Local autonomous agent harness for your machine</p>
+        </div>
       </div>
     </header>
 

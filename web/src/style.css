@@ -46,17 +46,53 @@ body {
 }
 
 .header {
+  position: relative;
+  margin-bottom: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #020402;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(0, 255, 65, 0.08);
+  isolation: isolate;
+}
+
+.header-rain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+  opacity: 0.85;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(2, 4, 2, 0.9) 0%, rgba(2, 4, 2, 0.35) 35%, rgba(2, 4, 2, 0.35) 65%, rgba(2, 4, 2, 0.9) 100%),
+    linear-gradient(180deg, rgba(2, 4, 2, 0.25) 0%, rgba(2, 4, 2, 0.55) 100%);
+}
+
+.header-content {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 2.5rem;
+  padding: 1.75rem 1.5rem;
 }
 
 .logo {
   width: 2.75rem;
   height: 2.75rem;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 8px rgba(0, 255, 65, 0.35));
+  filter: drop-shadow(0 2px 8px rgba(0, 255, 65, 0.45));
 }
 
 .header h1 {
@@ -65,12 +101,20 @@ body {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--accent-strong);
+  text-shadow: 0 0 12px rgba(0, 255, 65, 0.45);
 }
 
 .tagline {
   margin: 0.25rem 0 0;
-  color: var(--muted);
+  color: var(--text);
   font-size: 1.05rem;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-rain {
+    display: none;
+  }
 }
 
 .install-card {
