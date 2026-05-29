@@ -58,7 +58,12 @@ from rich.text import Text
 from rich.theme import Theme
 from rich.tree import Tree
 
-from agent.banner import format_startup
+from agent.banner import (
+    format_startup,
+    matrix_intro_enabled,
+    measure_renderable_height,
+    play_matrix_intro,
+)
 from agent.context import format_plan_step_progress
 from agent.mentions import (
     active_mention_query,
@@ -1419,11 +1424,7 @@ class ConversationUI:
 
     def _iter_history_block(self, kind: str, data: dict[str, Any]) -> Iterator[RenderableType | str]:
         if kind == "startup":
-            yield self._panel(
-                Text.from_markup(self._startup_markup(data)),
-                border_style=_BRAND_STYLE,
-                padding=(0, 2),
-            )
+            yield self._build_startup_panel(data)
             return
         if kind == "header":
             yield ""
@@ -1699,6 +1700,40 @@ class ConversationUI:
             reasoning_effort=payload.get("reasoning_effort"),
         )
 
+    def _build_startup_panel(self, data: dict[str, Any] | None = None) -> Panel:
+        return self._panel(
+            Text.from_markup(self._startup_markup(data)),
+            border_style=_BRAND_STYLE,
+            padding=(0, 2),
+        )
+
+    def _play_startup_intro(self, data: dict[str, Any]) -> bool:
+        """Drop matrix glyphs into the banner's footprint before it appears.
+
+        Returns True when the animation ran (and the panel still needs to be
+        printed by the caller); False when the intro was skipped — typical
+        for non-TTY, dumb terminals, or ``NEO_NO_ANIMATION=1``.
+        """
+        if not self._is_interactive_tty() or not matrix_intro_enabled():
+            return False
+        panel = self._build_startup_panel(data)
+        width = self._fresh_terminal_width()
+        height = measure_renderable_height(self._console, panel, width=width)
+        if height <= 0:
+            return False
+        try:
+            play_matrix_intro(
+                self._console,
+                height=height,
+                width=width,
+            )
+        except Exception:
+            # Never let a rendering glitch in the intro stop the agent
+            # from starting; just fall through to the static banner.
+            return False
+        self._console.print(panel)
+        return True
+
     def refresh_startup_banner(self) -> None:
         """Update the startup panel after session routing toggles."""
         data = self._startup_data()
@@ -1730,7 +1765,13 @@ class ConversationUI:
         self.refresh_startup_banner()
 
     def print_startup(self) -> None:
-        self._record("startup", **self._startup_data())
+        data = self._startup_data()
+        if self._play_startup_intro(data):
+            # Animation already left the static panel on screen; keep history
+            # in sync so subsequent redraws (e.g. on resize) repaint it.
+            self._history.append(("startup", data))
+            return
+        self._record("startup", **data)
 
     def clear_session(self) -> None:
         """Clear the on-screen transcript and show the startup banner again."""
@@ -1740,7 +1781,11 @@ class ConversationUI:
         if self._is_interactive_tty():
             with self._display_lock:
                 self._console.clear()
-        self._record("startup", **self._startup_data())
+        data = self._startup_data()
+        if self._play_startup_intro(data):
+            self._history.append(("startup", data))
+            return
+        self._record("startup", **data)
 
     def print_task_complete(self) -> None:
         if not self.verbose:
