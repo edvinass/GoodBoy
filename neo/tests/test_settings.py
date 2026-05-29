@@ -3,11 +3,11 @@
 from settings import (
     DEFAULT_CONTEXT_RECENT_FULL_TURNS,
     DEFAULT_LOCAL_RECENT_FULL_TURNS,
-    GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR,
-    GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR,
-    GOODBOY_REASONING_EFFORT_VAR,
-    GOODBOY_RESPONSE_CHAIN_VAR,
-    GOODBOY_SHOW_COMMANDS_VAR,
+    NEO_CONTEXT_RECENT_FULL_TURNS_VAR,
+    NEO_LOCAL_RECENT_FULL_TURNS_VAR,
+    NEO_REASONING_EFFORT_VAR,
+    NEO_RESPONSE_CHAIN_VAR,
+    NEO_SHOW_COMMANDS_VAR,
     Settings,
     get_settings,
 )
@@ -17,7 +17,7 @@ def test_settings_response_chain_default_enabled(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
-    monkeypatch.delenv(GOODBOY_RESPONSE_CHAIN_VAR, raising=False)
+    monkeypatch.delenv(NEO_RESPONSE_CHAIN_VAR, raising=False)
     get_settings.cache_clear()
     assert Settings.from_env().response_chain_enabled is True
     get_settings.cache_clear()
@@ -25,7 +25,7 @@ def test_settings_response_chain_default_enabled(monkeypatch, tmp_path):
 
 def test_settings_show_commands_from_env(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
-    env_file.write_text(f"{GOODBOY_SHOW_COMMANDS_VAR}=true\n", encoding="utf-8")
+    env_file.write_text(f"{NEO_SHOW_COMMANDS_VAR}=true\n", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()
     assert Settings.from_env().show_commands is True
@@ -34,7 +34,7 @@ def test_settings_show_commands_from_env(monkeypatch, tmp_path):
 
 def test_settings_reasoning_effort_from_env(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
-    env_file.write_text(f"{GOODBOY_REASONING_EFFORT_VAR}=medium\n", encoding="utf-8")
+    env_file.write_text(f"{NEO_REASONING_EFFORT_VAR}=medium\n", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()
     assert Settings.from_env().default_reasoning_effort == "medium"
@@ -45,7 +45,7 @@ def test_settings_recent_full_turns_default(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
-    monkeypatch.delenv(GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR, raising=False)
+    monkeypatch.delenv(NEO_CONTEXT_RECENT_FULL_TURNS_VAR, raising=False)
     get_settings.cache_clear()
     assert (
         Settings.from_env().context_recent_full_turns
@@ -57,7 +57,7 @@ def test_settings_recent_full_turns_default(monkeypatch, tmp_path):
 def test_settings_recent_full_turns_from_env(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        f"{GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR}=5\n", encoding="utf-8"
+        f"{NEO_CONTEXT_RECENT_FULL_TURNS_VAR}=5\n", encoding="utf-8"
     )
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()
@@ -69,7 +69,7 @@ def test_settings_recent_full_turns_floor_at_one(monkeypatch, tmp_path):
     """Window must always include at least the current turn."""
     env_file = tmp_path / ".env"
     env_file.write_text(
-        f"{GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR}=0\n", encoding="utf-8"
+        f"{NEO_CONTEXT_RECENT_FULL_TURNS_VAR}=0\n", encoding="utf-8"
     )
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()
@@ -81,7 +81,7 @@ def test_settings_local_recent_full_turns_default(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
-    monkeypatch.delenv(GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR, raising=False)
+    monkeypatch.delenv(NEO_LOCAL_RECENT_FULL_TURNS_VAR, raising=False)
     get_settings.cache_clear()
     assert (
         Settings.from_env().local_recent_full_turns
@@ -93,7 +93,7 @@ def test_settings_local_recent_full_turns_default(monkeypatch, tmp_path):
 def test_settings_local_recent_full_turns_from_env(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        f"{GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR}=6\n", encoding="utf-8"
+        f"{NEO_LOCAL_RECENT_FULL_TURNS_VAR}=6\n", encoding="utf-8"
     )
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()
@@ -104,7 +104,7 @@ def test_settings_local_recent_full_turns_from_env(monkeypatch, tmp_path):
 def test_settings_local_recent_full_turns_floor_at_one(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
-        f"{GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR}=0\n", encoding="utf-8"
+        f"{NEO_LOCAL_RECENT_FULL_TURNS_VAR}=0\n", encoding="utf-8"
     )
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     get_settings.cache_clear()

@@ -44,7 +44,7 @@ const bannerLines = [
   '     /   (_____/',
   '    /_____/   U',
   '',
-  'GoodBoy v0.1.0',
+  'Neo v0.1.0',
   'Model gpt-5',
   'Reasoning medium',
   'Autonomous coding agent',
@@ -61,7 +61,7 @@ const conversations = [
         subtitle: 'thought',
         text: 'I should run the failing test first to see the actual error before guessing what changed.',
       },
-      { type: 'activity', text: 'ran pytest goodboy/tests/test_routing.py -x' },
+      { type: 'activity', text: 'ran pytest neo/tests/test_routing.py -x' },
       {
         role: 'agent',
         subtitle: 'thought',
@@ -73,7 +73,7 @@ const conversations = [
       },
       { role: 'user', text: 'Yes, please.' },
       { type: 'activity', text: 'wrote test_routing.py' },
-      { type: 'activity', text: 'ran pytest goodboy/tests/test_routing.py' },
+      { type: 'activity', text: 'ran pytest neo/tests/test_routing.py' },
       {
         role: 'agent',
         text: 'Done — 12/12 passing. Want me to run the full suite?',
@@ -97,7 +97,7 @@ const conversations = [
       },
       { role: 'user', text: 'Go for it.' },
       { type: 'activity', text: 'wrote llm.py' },
-      { type: 'activity', text: 'ran pytest goodboy/tests/test_llm.py' },
+      { type: 'activity', text: 'ran pytest neo/tests/test_llm.py' },
       {
         role: 'agent',
         text: 'Done — net 24 fewer lines, all 9 LLM tests still pass. Timings unchanged.',
@@ -108,8 +108,8 @@ const conversations = [
     id: 'explain',
     label: 'Explain',
     turns: [
-      { role: 'user', text: 'How does GoodBoy decide which model to use for a given turn?' },
-      { type: 'activity', text: 'read goodboy/agent/routing.py' },
+      { role: 'user', text: 'How does Neo decide which model to use for a given turn?' },
+      { type: 'activity', text: 'read neo/agent/routing.py' },
       {
         role: 'agent',
         subtitle: 'thought',
@@ -139,7 +139,7 @@ const active = computed(
     <header class="header">
       <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
       <div>
-        <h1>GoodBoy</h1>
+        <h1>Neo</h1>
         <p class="tagline">Local autonomous agent harness for your machine</p>
       </div>
     </header>
@@ -167,8 +167,8 @@ const active = computed(
       <section class="steps">
         <h3>After install</h3>
         <ol>
-          <li><code>goodboy</code> — first run configures API key and default model</li>
-          <li><code>cd your-project && goodboy</code> — run the agent in any repo</li>
+          <li><code>neo</code> — first run configures API key and default model</li>
+          <li><code>cd your-project && neo</code> — run the agent in any repo</li>
         </ol>
       </section>
 
@@ -195,7 +195,7 @@ const active = computed(
             <span class="term-dot term-dot-red" aria-hidden="true"></span>
             <span class="term-dot term-dot-yellow" aria-hidden="true"></span>
             <span class="term-dot term-dot-green" aria-hidden="true"></span>
-            <span class="term-chrome-title">goodboy — ~/repos/your-project</span>
+            <span class="term-chrome-title">neo — ~/repos/your-project</span>
           </div>
 
           <div class="term-body">
@@ -222,7 +222,7 @@ const active = computed(
                 :class="{ 'term-panel-thought': turn.subtitle === 'thought' }"
               >
                 <span class="term-panel-title">
-                  <span class="term-panel-emoji">🐶</span> GoodBoy<template
+                  <span class="term-panel-emoji">🐶</span> Neo<template
                     v-if="turn.subtitle"
                   >  <span
                     class="term-panel-sub"

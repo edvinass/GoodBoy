@@ -3,7 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const MARKER = 'GOODBOY_INSTALL_BASE_DEFAULT='
+const MARKER = 'NEO_INSTALL_BASE_DEFAULT='
 
 /** @param {string} installSh */
 export function injectInstallBase(installSh, base) {

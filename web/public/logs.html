@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-  <title>GoodBoy Session Log Viewer</title>
+  <title>Neo Session Log Viewer</title>
   <style>
     :root {
       --bg: #1c1410;
@@ -723,14 +723,14 @@
       <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
       <div>
         <h1>Session Log Viewer</h1>
-        <p class="tagline">Drop a GoodBoy <code style="font-family:var(--font-mono);font-size:0.9em">.jsonl</code> session log to read the full chat flow.</p>
+        <p class="tagline">Drop a Neo <code style="font-family:var(--font-mono);font-size:0.9em">.jsonl</code> session log to read the full chat flow.</p>
       </div>
     </div>
 
     <label class="dropzone" id="dropzone">
       <strong>Drop a session log here</strong>
       <span>or click to choose a file</span>
-      <span class="hint">Looks for <code style="font-family:var(--font-mono);font-size:0.85em">~/.goodboy/logs/session-*.jsonl</code></span>
+      <span class="hint">Looks for <code style="font-family:var(--font-mono);font-size:0.85em">~/.neo/logs/session-*.jsonl</code></span>
       <input type="file" id="file-input" accept=".jsonl,.json,.log,application/json,application/x-ndjson,text/plain" />
     </label>
 
@@ -743,7 +743,7 @@
   <main id="view" class="view hidden"></main>
 
   <footer class="footer">
-    <a href="/">← GoodBoy home</a>
+    <a href="/">← Neo home</a>
   </footer>
 
   <script>
@@ -1135,12 +1135,12 @@
           const isPlanOrMemory = ['update_plan', 'remember', 'switch_tools'].includes(action);
 
           let panelClass = 'panel agent';
-          let panelTitle = 'GoodBoy';
-          if (action === 'failed') { panelClass = 'panel error'; panelTitle = 'GoodBoy · failed'; }
-          else if (action === 'need_user_input') { panelClass = 'panel agent'; panelTitle = 'GoodBoy · asks'; }
-          else if (action === 'task_complete') { panelTitle = 'GoodBoy'; }
+          let panelTitle = 'Neo';
+          if (action === 'failed') { panelClass = 'panel error'; panelTitle = 'Neo · failed'; }
+          else if (action === 'need_user_input') { panelClass = 'panel agent'; panelTitle = 'Neo · asks'; }
+          else if (action === 'task_complete') { panelTitle = 'Neo'; }
           else if (isPlanOrMemory) { panelClass = 'panel system'; panelTitle = action.replace('_', ' '); }
-          else { panelClass = 'panel agent'; panelTitle = 'GoodBoy · ' + action.replace('_', ' '); }
+          else { panelClass = 'panel agent'; panelTitle = 'Neo · ' + action.replace('_', ' '); }
 
           const panel = el('div', panelClass);
           const title = el('span', 'panel-title');

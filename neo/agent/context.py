@@ -78,7 +78,7 @@ def should_print_plan_progress(
 
 
 def format_plan_step_progress(items: list[PlanItem]) -> str | None:
-    """One-line plan progress for the GoodBoy spinner (e.g. ``2/5 step "…"``)."""
+    """One-line plan progress for the Neo spinner (e.g. ``2/5 step "…"``)."""
     active = [item for item in items if item.status != PlanItemStatus.CANCELLED]
     if not active:
         return None

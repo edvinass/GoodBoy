@@ -114,7 +114,7 @@ def test_build_system_prompt_visibility_without_debug():
     assert "do **not** see run_shell commands" in prompt
     assert "do **not** see" in prompt and "tool stdout/stderr" in prompt
     assert "run_python code" in prompt
-    assert "goodboy -f" in prompt
+    assert "neo -f" in prompt
     assert "shell command or Python preview" not in prompt
 
 
@@ -124,7 +124,7 @@ def test_build_system_prompt_visibility_with_thoughts():
         debug=False,
         show_thoughts=True,
     )
-    assert "goodboy -f" in prompt
+    assert "neo -f" in prompt
     assert "optional `thought`" in prompt
 
 
@@ -133,14 +133,14 @@ def test_build_system_prompt_visibility_with_show_commands():
         allowed_models=["gpt-5.4-nano"],
         show_commands=True,
     )
-    assert "goodboy -c" in prompt
+    assert "neo -c" in prompt
     assert "run_shell commands" in prompt
     assert "do **not** see tool stdout/stderr" in prompt
 
 
 def test_build_system_prompt_visibility_with_debug():
     prompt = build_system_prompt(allowed_models=["gpt-5.4-nano"], debug=True)
-    assert "goodboy -d" in prompt
+    assert "neo -d" in prompt
     assert "run_shell commands" in prompt
     assert "stdout/stderr" in prompt
 

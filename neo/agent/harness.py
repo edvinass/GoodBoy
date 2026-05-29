@@ -1,4 +1,4 @@
-"""Interactive CLI harness for the GoodBoy agent."""
+"""Interactive CLI harness for the Neo agent."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ from llm import (
     select_reasoning_interactive,
 )
 from settings import (
-    GOODBOY_PLAN_MODE_VAR,
-    GOODBOY_REASONING_EFFORT_VAR,
-    GOODBOY_SHOW_COMMANDS_VAR,
+    NEO_PLAN_MODE_VAR,
+    NEO_REASONING_EFFORT_VAR,
+    NEO_SHOW_COMMANDS_VAR,
     OPENAI_MODEL_VAR,
     get_settings,
     is_configured,
@@ -260,7 +260,7 @@ class AgentHarness:
         self._ui.show_commands = not self._ui.show_commands
         save_env(
             {
-                GOODBOY_SHOW_COMMANDS_VAR: (
+                NEO_SHOW_COMMANDS_VAR: (
                     "true" if self._ui.show_commands else "false"
                 )
             }
@@ -324,12 +324,12 @@ class AgentHarness:
         self._ui.set_session_reasoning(chosen)
         self._loop.refresh_system_prompt()
         if chosen is None:
-            save_env({GOODBOY_REASONING_EFFORT_VAR: ""})
+            save_env({NEO_REASONING_EFFORT_VAR: ""})
             self._ui.print_notice(
                 "Default reasoning effort cleared — reasoning models use the API default."
             )
         else:
-            save_env({GOODBOY_REASONING_EFFORT_VAR: chosen})
+            save_env({NEO_REASONING_EFFORT_VAR: chosen})
             self._ui.print_notice(f"Default reasoning effort set to {chosen}.")
 
     def _run_setup(self) -> None:
@@ -368,7 +368,7 @@ class AgentHarness:
     def _change_plan_mode(self) -> None:
         chosen = next_plan_mode(self._loop._plan_mode)
         self._loop._plan_mode = chosen
-        save_env({GOODBOY_PLAN_MODE_VAR: chosen})
+        save_env({NEO_PLAN_MODE_VAR: chosen})
         self._ui.set_plan_mode(chosen)
         self._loop.refresh_system_prompt()
         self._ui.print_notice(f"Plan mode set to {chosen}.")
@@ -464,10 +464,10 @@ def run_harness(
     debug_output: bool = False,
     stream_output: bool = False,
 ) -> None:
-    """Entry point for the GoodBoy harness."""
+    """Entry point for the Neo harness."""
     cfg = get_settings()
     if not is_configured(cfg):
-        click.echo("Not configured yet. Run: goodboy", err=True)
+        click.echo("Not configured yet. Run: neo", err=True)
         raise SystemExit(1)
     harness = AgentHarness(
         show_thoughts=show_thoughts,

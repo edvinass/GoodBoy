@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
-# GoodBoy installer
+# Neo installer
 #
 #   curl -fsSL https://YOUR-DOMAIN/install.sh | bash
 #
 # Env vars before curl do not reach piped bash — prefix bash instead, e.g.:
-#   curl -fsSL https://YOUR-DOMAIN/install.sh | GOODBOY_LOCAL=1 bash
+#   curl -fsSL https://YOUR-DOMAIN/install.sh | NEO_LOCAL=1 bash
 #
 # Environment (optional):
-#   GOODBOY_INSTALL_DIR        install location (default: ~/.local/share/goodboy)
-#   GOODBOY_INSTALL_BASE_URL   download goodboy.tar.gz from here
-#   GOODBOY_SOURCE_DIR         use an existing local source tree instead of fetching
-#   GOODBOY_LOCAL=1            also install optional local GGUF dependencies
-#   GOODBOY_NO_PATH=1          do not append the venv bin dir to shell startup files
+#   NEO_INSTALL_DIR        install location (default: ~/.local/share/neo)
+#   NEO_INSTALL_BASE_URL   download neo.tar.gz from here
+#   NEO_SOURCE_DIR         use an existing local source tree instead of fetching
+#   NEO_LOCAL=1            also install optional local GGUF dependencies
+#   NEO_NO_PATH=1          do not append the venv bin dir to shell startup files
 
 set -euo pipefail
 
-INSTALL_DIR="${GOODBOY_INSTALL_DIR:-$HOME/.local/share/goodboy}"
+INSTALL_DIR="${NEO_INSTALL_DIR:-$HOME/.local/share/neo}"
 # Set by the web host when serving install.sh (see web/server.js). Empty in source copies.
-GOODBOY_INSTALL_BASE_DEFAULT=
-GOODBOY_INSTALL_BASE_URL="${GOODBOY_INSTALL_BASE_URL:-${GOODBOY_INSTALL_BASE_DEFAULT:-}}"
-if [[ $# -ge 1 && -z "${GOODBOY_INSTALL_BASE_URL:-}" ]]; then
-  GOODBOY_INSTALL_BASE_URL="$1"
+NEO_INSTALL_BASE_DEFAULT=
+NEO_INSTALL_BASE_URL="${NEO_INSTALL_BASE_URL:-${NEO_INSTALL_BASE_DEFAULT:-}}"
+if [[ $# -ge 1 && -z "${NEO_INSTALL_BASE_URL:-}" ]]; then
+  NEO_INSTALL_BASE_URL="$1"
   shift
 fi
 MIN_PYTHON_MAJOR=3
@@ -75,23 +75,23 @@ venv_bin_dir() {
 }
 
 package_dir() {
-  if [[ -f "$INSTALL_DIR/goodboy/pyproject.toml" ]]; then
-    printf '%s\n' "$INSTALL_DIR/goodboy"
+  if [[ -f "$INSTALL_DIR/neo/pyproject.toml" ]]; then
+    printf '%s\n' "$INSTALL_DIR/neo"
   elif [[ -f "$INSTALL_DIR/python/pyproject.toml" ]]; then
     printf '%s\n' "$INSTALL_DIR/python"
   else
-    die "Missing goodboy/ or python/ package under $INSTALL_DIR"
+    die "Missing neo/ or python/ package under $INSTALL_DIR"
   fi
 }
 
 fetch_from_tarball() {
-  local url="${GOODBOY_INSTALL_BASE_URL%/}/goodboy.tar.gz"
+  local url="${NEO_INSTALL_BASE_URL%/}/neo.tar.gz"
   local tmp archive
   need_cmd curl
   need_cmd tar
   tmp="$(mktemp -d)"
-  archive="$tmp/goodboy.tar.gz"
-  info "Downloading GoodBoy from $url"
+  archive="$tmp/neo.tar.gz"
+  info "Downloading Neo from $url"
   curl -fsSL "$url" -o "$archive"
   mkdir -p "$INSTALL_DIR"
   tar -xzf "$archive" -C "$INSTALL_DIR"
@@ -99,18 +99,18 @@ fetch_from_tarball() {
 }
 
 ensure_source_tree() {
-  if [[ -n "${GOODBOY_SOURCE_DIR:-}" ]]; then
-    INSTALL_DIR="$(cd "$GOODBOY_SOURCE_DIR" && pwd)"
+  if [[ -n "${NEO_SOURCE_DIR:-}" ]]; then
+    INSTALL_DIR="$(cd "$NEO_SOURCE_DIR" && pwd)"
     info "Using existing source tree: $INSTALL_DIR"
     return 0
   fi
 
-  if [[ -n "${GOODBOY_INSTALL_BASE_URL:-}" ]]; then
+  if [[ -n "${NEO_INSTALL_BASE_URL:-}" ]]; then
     fetch_from_tarball
     return 0
   fi
 
-  die "No source available: set GOODBOY_INSTALL_BASE_URL (tarball host) or GOODBOY_SOURCE_DIR (local checkout)."
+  die "No source available: set NEO_INSTALL_BASE_URL (tarball host) or NEO_SOURCE_DIR (local checkout)."
 }
 
 create_venv() {
@@ -127,10 +127,10 @@ install_package() {
   local python pkg
   python="$(venv_python)"
   pkg="$(package_dir)"
-  info "Installing GoodBoy (editable)..."
+  info "Installing Neo (editable)..."
   "$python" -m pip install -q --upgrade pip
   "$python" -m pip install -q -e "$pkg"
-  if [[ "${GOODBOY_LOCAL:-}" == "1" ]]; then
+  if [[ "${NEO_LOCAL:-}" == "1" ]]; then
     info "Installing local model dependencies..."
     "$python" -m pip install -q -e "$pkg[local]"
   fi
@@ -160,11 +160,11 @@ path_already_configured() {
 }
 
 configure_path() {
-  if [[ "${GOODBOY_NO_PATH:-}" == "1" ]]; then
+  if [[ "${NEO_NO_PATH:-}" == "1" ]]; then
     return 0
   fi
   if path_already_configured; then
-    info "PATH already configured for GoodBoy."
+    info "PATH already configured for Neo."
     return 0
   fi
 
@@ -179,9 +179,9 @@ configure_path() {
     target="$HOME/.profile"
   fi
 
-  info "Adding GoodBoy to PATH in $target"
+  info "Adding Neo to PATH in $target"
   {
-    printf '\n# GoodBoy CLI\n'
+    printf '\n# Neo CLI\n'
     printf '%s' "$line"
     printf '\n'
   } >>"$target"
@@ -191,9 +191,9 @@ print_next_steps() {
   local bin_dir
   bin_dir="$(cd "$(venv_bin_dir)" && pwd)"
   info ""
-  info "GoodBoy is installed."
+  info "Neo is installed."
   info ""
-  if [[ "${GOODBOY_NO_PATH:-}" == "1" ]] || ! path_already_configured; then
+  if [[ "${NEO_NO_PATH:-}" == "1" ]] || ! path_already_configured; then
     info "Open a new terminal, or run:"
     info "  source \"$INSTALL_DIR/.venv/bin/activate\"   # omit on Windows"
     info ""
@@ -201,16 +201,16 @@ print_next_steps() {
     info "Open a new terminal (or: source ~/.zshrc), then:"
     info ""
   fi
-  info "  goodboy    # first run: API key and default model"
-  info "  cd /path/to/your-repo && goodboy"
+  info "  neo    # first run: API key and default model"
+  info "  cd /path/to/your-repo && neo"
   info ""
-  if [[ "${GOODBOY_NO_PATH:-}" == "1" ]]; then
-    info "To add goodboy to your PATH manually:"
+  if [[ "${NEO_NO_PATH:-}" == "1" ]]; then
+    info "To add neo to your PATH manually:"
     info "  $(path_line | tr -d '\n')"
     info ""
   fi
   info "Install dir: $INSTALL_DIR"
-  info "CLI binary:  $bin_dir/goodboy"
+  info "CLI binary:  $bin_dir/neo"
 }
 
 main() {

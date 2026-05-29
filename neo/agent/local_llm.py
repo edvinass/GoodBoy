@@ -448,7 +448,7 @@ def download_model(
     *,
     on_progress: ProgressCallback | None = None,
 ) -> Path:
-    """Download a catalog model to the GoodBoy models directory."""
+    """Download a catalog model to the Neo models directory."""
     require_local_deps()
 
     spec = get_catalog_spec(model_id)
@@ -499,7 +499,7 @@ class LocalModelRunner:
         if ref is None:
             raise click.ClickException(
                 f"Local model weights not found for {model_id}. "
-                f"Place a .gguf in {models_dir()} or run: goodboy setup"
+                f"Place a .gguf in {models_dir()} or run: neo setup"
             )
 
         with self._lock:

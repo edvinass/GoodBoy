@@ -52,7 +52,7 @@ def _prompt_api_key(label: str = "OpenAI API key") -> str:
 
 def _prompt_setup_mode() -> str:
     choice = questionary.select(
-        "How do you want to use GoodBoy?",
+        "How do you want to use Neo?",
         choices=[
             questionary.Choice("Cloud (OpenAI API)", value="cloud"),
             questionary.Choice("DeepSeek (api.deepseek.com)", value="deepseek"),
@@ -312,7 +312,7 @@ def cli(
     debug_output: bool,
     stream_output: bool,
 ) -> None:
-    """GoodBoy CLI."""
+    """Neo CLI."""
     if ctx.invoked_subcommand is None:
         ensure_configured()
         cfg = get_settings()
@@ -334,7 +334,7 @@ def status() -> None:
     load_env()
     cfg = get_settings()
     if not is_configured(cfg):
-        click.echo("Not configured yet. Run: goodboy")
+        click.echo("Not configured yet. Run: neo")
         raise SystemExit(1)
     _brown = 94
     model = cfg.default_model
@@ -364,7 +364,7 @@ def status() -> None:
     else:
         click.echo("DeepSeek key: (not set)")
     click.echo(f"Models dir: {cfg.models_dir}")
-    click.echo("Run goodboy setup to change settings.")
+    click.echo("Run neo setup to change settings.")
 
 
 @cli.command()

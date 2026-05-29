@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# Build goodboy.tar.gz (and sync install.sh) for the Railway web install bundle.
+# Build neo.tar.gz (and sync install.sh) for the Railway web install bundle.
 #
 # Usage:
 #   ./scripts/release-web-tar.sh
-#   ./scripts/release-web-tar.sh --output /tmp/goodboy.tar.gz
+#   ./scripts/release-web-tar.sh --output /tmp/neo.tar.gz
 #   ./scripts/release-web-tar.sh --version 0.1.0
 #
 # Defaults:
-#   Tarball:   web/public/goodboy.tar.gz
+#   Tarball:   web/public/neo.tar.gz
 #   Installer: web/install.sh (copied from repo root; Railway only deploys web/)
 
 set -euo pipefail
 
 _update_version() {
   local ver="$1"
-  sed -i '' "s/^version = \"[^\"]*\"/version = \"$ver\"/" "$GOODBOY_DIR/pyproject.toml"
+  sed -i '' "s/^version = \"[^\"]*\"/version = \"$ver\"/" "$NEO_DIR/pyproject.toml"
   echo "Updated version in pyproject.toml to $ver"
 }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GOODBOY_DIR="$ROOT/goodboy"
+NEO_DIR="$ROOT/neo"
 INSTALL_SH="$ROOT/install.sh"
-DEFAULT_OUTPUT="$ROOT/web/public/goodboy.tar.gz"
+DEFAULT_OUTPUT="$ROOT/web/public/neo.tar.gz"
 WEB_INSTALL_SH="$ROOT/web/install.sh"
 
 OUTPUT="$DEFAULT_OUTPUT"
@@ -55,7 +55,7 @@ done
 
 if [[ -z "$VERSION" ]]; then
   # Auto-bump patch version from pyproject.toml
-  current=$(grep -E '^version = ' "$GOODBOY_DIR/pyproject.toml" | sed -E 's/version = "([^"]+)"/\1/')
+  current=$(grep -E '^version = ' "$NEO_DIR/pyproject.toml" | sed -E 's/version = "([^"]+)"/\1/')
   major=$(echo "$current" | cut -d. -f1)
   minor=$(echo "$current" | cut -d. -f2)
   patch=$(echo "$current" | cut -d. -f3)
@@ -68,34 +68,34 @@ fi
 echo "Setting version to $VERSION"
 _update_version "$VERSION"
 
-if [[ -d "$GOODBOY_DIR/__pycache__" ]]; then
+if [[ -d "$NEO_DIR/__pycache__" ]]; then
   echo "Cleaning __pycache__ before tar"
-  rm -rf "$GOODBOY_DIR/__pycache__"
+  rm -rf "$NEO_DIR/__pycache__"
 fi
 
-if [[ ! -d "$GOODBOY_DIR" ]]; then
-  echo "error: missing directory: $GOODBOY_DIR" >&2
+if [[ ! -d "$NEO_DIR" ]]; then
+  echo "error: missing directory: $NEO_DIR" >&2
   exit 1
 fi
 
-if [[ ! -f "$GOODBOY_DIR/pyproject.toml" ]]; then
-  echo "error: missing $GOODBOY_DIR/pyproject.toml" >&2
+if [[ ! -f "$NEO_DIR/pyproject.toml" ]]; then
+  echo "error: missing $NEO_DIR/pyproject.toml" >&2
   exit 1
 fi
 
 mkdir -p "$(dirname "$OUTPUT")"
 
-echo "Creating $(basename "$OUTPUT") from goodboy/ …"
+echo "Creating $(basename "$OUTPUT") from neo/ …"
 tar -czf "$OUTPUT" -C "$ROOT" \
   --exclude='__pycache__' \
   --exclude='*.py[cod]' \
   --exclude='.pytest_cache' \
   --exclude='*.egg-info' \
   --exclude='.venv' \
-  goodboy
+  neo
 
 if [[ -n "$VERSION" ]]; then
-  versioned="$ROOT/web/public/goodboy-${VERSION}.tar.gz"
+  versioned="$ROOT/web/public/neo-${VERSION}.tar.gz"
   cp -f "$OUTPUT" "$versioned"
   echo "Also wrote $(basename "$versioned")"
 fi

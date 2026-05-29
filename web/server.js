@@ -28,5 +28,5 @@ app.use((_req, res) => {
 })
 
 app.listen(port, () => {
-  console.log(`GoodBoy site listening on port ${port}`)
+  console.log(`Neo site listening on port ${port}`)
 })

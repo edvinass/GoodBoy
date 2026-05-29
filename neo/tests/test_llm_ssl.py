@@ -11,7 +11,7 @@ from settings import get_settings
 def test_resolve_ssl_verify_uses_ca_bundle(tmp_path, monkeypatch):
     ca = tmp_path / "corp-ca.pem"
     ca.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
-    monkeypatch.setenv("GOODBOY_SSL_CA_BUNDLE", str(ca))
+    monkeypatch.setenv("NEO_SSL_CA_BUNDLE", str(ca))
     get_settings.cache_clear()
     clear_openai_client_cache()
 
@@ -19,7 +19,7 @@ def test_resolve_ssl_verify_uses_ca_bundle(tmp_path, monkeypatch):
 
 
 def test_resolve_ssl_verify_disabled(monkeypatch):
-    monkeypatch.setenv("GOODBOY_SSL_VERIFY", "false")
+    monkeypatch.setenv("NEO_SSL_VERIFY", "false")
     get_settings.cache_clear()
     clear_openai_client_cache()
 
@@ -27,7 +27,7 @@ def test_resolve_ssl_verify_disabled(monkeypatch):
 
 
 def test_resolve_ssl_verify_missing_bundle_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOODBOY_SSL_CA_BUNDLE", str(tmp_path / "missing.pem"))
+    monkeypatch.setenv("NEO_SSL_CA_BUNDLE", str(tmp_path / "missing.pem"))
     get_settings.cache_clear()
     clear_openai_client_cache()
 
@@ -39,7 +39,7 @@ def test_resolve_ssl_verify_missing_bundle_raises(tmp_path, monkeypatch):
 def test_get_client_passes_verify_to_httpx(tmp_path, monkeypatch):
     ca = tmp_path / "corp-ca.pem"
     ca.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
-    monkeypatch.setenv("GOODBOY_SSL_CA_BUNDLE", str(ca))
+    monkeypatch.setenv("NEO_SSL_CA_BUNDLE", str(ca))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     get_settings.cache_clear()
     clear_openai_client_cache()

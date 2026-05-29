@@ -262,7 +262,7 @@ def _resolve_ssl_verify() -> bool | str:
         if not path.is_file():
             raise click.ClickException(
                 f"SSL CA bundle not found: {path}\n"
-                "Set GOODBOY_SSL_CA_BUNDLE (or SSL_CERT_FILE) to your proxy/root CA .pem file."
+                "Set NEO_SSL_CA_BUNDLE (or SSL_CERT_FILE) to your proxy/root CA .pem file."
             )
         return str(path)
     return True
@@ -297,10 +297,10 @@ def format_api_connection_error(exc: BaseException, *, provider: str = "OpenAI")
             f"Could not reach {provider}: TLS certificate verification failed "
             "(common behind corporate HTTPS proxies).\n\n"
             "Fix: save your organization's CA certificate to a .pem file, then add to .env:\n"
-            "  GOODBOY_SSL_CA_BUNDLE=/path/to/corporate-ca.pem\n\n"
-            "Or export before running goodboy:\n"
+            "  NEO_SSL_CA_BUNDLE=/path/to/corporate-ca.pem\n\n"
+            "Or export before running neo:\n"
             "  export SSL_CERT_FILE=/path/to/corporate-ca.pem\n\n"
-            "Last resort only (insecure): GOODBOY_SSL_VERIFY=false"
+            "Last resort only (insecure): NEO_SSL_VERIFY=false"
         )
     return f"Could not reach {provider}: {exc}"
 
@@ -310,7 +310,7 @@ def get_client(*, api_key: str | None = None) -> OpenAI:
     resolved_key = api_key or cfg.openai_api_key
     if not resolved_key:
         raise click.ClickException(
-            "OPENAI_API_KEY is not set. Run: goodboy"
+            "OPENAI_API_KEY is not set. Run: neo"
         )
     return _openai_client(resolved_key, cfg.ssl_verify, cfg.ssl_ca_bundle)
 
@@ -464,7 +464,7 @@ def _complete_structured_stream(
             watcher = threading.Thread(
                 target=_watch,
                 daemon=True,
-                name="goodboy-llm-abort-watch",
+                name="neo-llm-abort-watch",
             )
             watcher.start()
         try:
@@ -666,7 +666,7 @@ def _looks_like_chain_broken(exc: BaseException) -> bool:
     type=click.Choice(MODEL_CHOICES, case_sensitive=False),
     default=None,
     show_default="from .env (OPENAI_MODEL)",
-    help="OpenAI model ID; defaults to saved model from goodboy setup.",
+    help="OpenAI model ID; defaults to saved model from neo setup.",
 )
 @click.option(
     "--instructions",

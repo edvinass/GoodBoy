@@ -6,8 +6,8 @@ from pathlib import Path
 
 _MEMORY_FILENAMES = (
     "AGENTS.md",
-    ".goodboy/memory.md",
-    "GOODBOY.md",
+    ".neo/memory.md",
+    "NEO.md",
 )
 _MAX_MEMORY_CHARS = 8_000
 

@@ -38,8 +38,8 @@ def test_session_log_writes_jsonl(tmp_path: Path):
 
 
 def test_open_session_log_writes_start_and_end(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GOODBOY_LOG_DIR", str(tmp_path))
-    monkeypatch.setenv("GOODBOY_SESSION_LOG", "1")
+    monkeypatch.setenv("NEO_LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_SESSION_LOG", "1")
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -142,7 +142,7 @@ def test_log_llm_request_logs_instructions_when_prompt_changes(tmp_path: Path):
 
 
 def test_session_log_disabled(monkeypatch):
-    monkeypatch.setenv("GOODBOY_SESSION_LOG", "0")
+    monkeypatch.setenv("NEO_SESSION_LOG", "0")
     from settings import get_settings
 
     get_settings.cache_clear()

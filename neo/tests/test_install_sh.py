@@ -39,24 +39,24 @@ def test_install_sh_syntax():
 def test_install_from_source_dir(tmp_path: Path):
     result = _run_install(
         {
-            "GOODBOY_SOURCE_DIR": str(REPO_ROOT),
-            "GOODBOY_INSTALL_DIR": str(tmp_path / "ignored"),
-            "GOODBOY_NO_PATH": "1",
+            "NEO_SOURCE_DIR": str(REPO_ROOT),
+            "NEO_INSTALL_DIR": str(tmp_path / "ignored"),
+            "NEO_NO_PATH": "1",
             "HOME": str(tmp_path),
         },
     )
     assert result.returncode == 0, result.stderr + result.stdout
     venv_python = REPO_ROOT / ".venv" / "bin" / "python"
     assert venv_python.is_file()
-    assert "GoodBoy is installed." in result.stdout
-    assert "goodboy    # first run" in result.stdout
+    assert "Neo is installed." in result.stdout
+    assert "neo    # first run" in result.stdout
 
 
 @pytest.mark.skip(reason="Slow: runs real install.sh, eliminated per optimization request")
 def test_install_idempotent_with_existing_venv(tmp_path: Path):
     env = {
-        "GOODBOY_SOURCE_DIR": str(REPO_ROOT),
-        "GOODBOY_NO_PATH": "1",
+        "NEO_SOURCE_DIR": str(REPO_ROOT),
+        "NEO_NO_PATH": "1",
         "HOME": str(tmp_path),
     }
     first = _run_install(env)

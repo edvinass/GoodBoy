@@ -1,4 +1,4 @@
-"""Harness tool registry for the GoodBoy agent."""
+"""Harness tool registry for the Neo agent."""
 
 from __future__ import annotations
 

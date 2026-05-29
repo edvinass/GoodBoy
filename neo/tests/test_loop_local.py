@@ -56,8 +56,8 @@ def test_local_llm_call_omits_reasoning_and_tools(tmp_path):
 
 def test_local_session_uses_small_recent_full_turns(tmp_path, monkeypatch):
     """Local models default to a tighter prompt window to fit 8k contexts."""
-    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
-    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_CONTEXT_RECENT_FULL_TURNS", raising=False)
     from settings import DEFAULT_LOCAL_RECENT_FULL_TURNS, get_settings
 
     get_settings.cache_clear()
@@ -71,8 +71,8 @@ def test_local_session_uses_small_recent_full_turns(tmp_path, monkeypatch):
 
 
 def test_cloud_session_keeps_default_recent_full_turns(tmp_path, monkeypatch):
-    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
-    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_CONTEXT_RECENT_FULL_TURNS", raising=False)
     from settings import DEFAULT_CONTEXT_RECENT_FULL_TURNS, get_settings
 
     get_settings.cache_clear()
@@ -87,8 +87,8 @@ def test_cloud_session_keeps_default_recent_full_turns(tmp_path, monkeypatch):
 
 def test_set_session_model_resizes_window(tmp_path, monkeypatch):
     """Switching between cloud and local models adjusts the prompt window."""
-    monkeypatch.delenv("GOODBOY_LOCAL_RECENT_FULL_TURNS", raising=False)
-    monkeypatch.delenv("GOODBOY_CONTEXT_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_LOCAL_RECENT_FULL_TURNS", raising=False)
+    monkeypatch.delenv("NEO_CONTEXT_RECENT_FULL_TURNS", raising=False)
     monkeypatch.setattr(
         "agent.loop.get_selectable_models",
         lambda api_key=None, **_: ["gpt-5.4-nano", "local:qwen2.5-coder-7b-q4"],

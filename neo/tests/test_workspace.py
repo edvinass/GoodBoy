@@ -8,7 +8,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_resolve_workspace_uses_git_root():
-    nested = _REPO_ROOT / "goodboy"
+    nested = _REPO_ROOT / "neo"
     assert nested.is_dir()
     assert resolve_workspace(nested) == _REPO_ROOT.resolve()
 

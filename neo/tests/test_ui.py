@@ -221,7 +221,7 @@ def test_print_agent_with_subtitle(capsys):
     ui = ConversationUI()
     ui.print_agent("ls -la", subtitle="shell")
     out = capsys.readouterr().out
-    assert "GoodBoy" in out
+    assert "Neo" in out
     assert "shell" in out
     assert "ls -la" in out
 
@@ -498,7 +498,7 @@ def test_thinking_default_label_non_tty(capsys, monkeypatch):
     assert "working on your task" in capsys.readouterr().out
 
 
-def test_thinking_shows_plan_step_under_goodboy(capsys, monkeypatch):
+def test_thinking_shows_plan_step_under_neo(capsys, monkeypatch):
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
     ui = ConversationUI()
     with ui.thinking(
@@ -515,7 +515,7 @@ def test_thinking_shows_plan_step_under_goodboy(capsys, monkeypatch):
     ):
         pass
     out = capsys.readouterr().out
-    assert "GoodBoy" in out
+    assert "Neo" in out
     assert "writing ui.py" in out
     assert '2/3 step "refactor loop"' in out
 
@@ -532,7 +532,7 @@ def test_thinking_updater_render_includes_plan_step():
     )
     rendered = updater._render()
     assert isinstance(rendered, Group)
-    assert "GoodBoy" in rendered.renderables[0].plain
+    assert "Neo" in rendered.renderables[0].plain
     assert '2/4 step "map modules"' in rendered.renderables[1].plain
 
 
@@ -548,7 +548,7 @@ def test_default_hides_failed_banner_shows_message(capsys):
     out = capsys.readouterr().out
     assert "Failed" not in out
     assert "something broke" in out
-    assert "GoodBoy" in out
+    assert "Neo" in out
 
 
 def test_default_print_agent_step_surfaces_switch_tools_notice(capsys):
@@ -699,14 +699,14 @@ def test_print_llm_request_with_debug_input(capsys):
         turn=1,
         model="gpt-5.4-nano",
         reasoning_effort=None,
-        instructions="You are GoodBoy.",
+        instructions="You are Neo.",
         input_text="## User task\nfix bug",
     )
     out = capsys.readouterr().out
     assert "input" in out
     assert "turn" in out
     assert "instructions" in out
-    assert "You are GoodBoy." in out
+    assert "You are Neo." in out
     assert "fix bug" in out
     assert "gpt-5.4-nano" in out
 

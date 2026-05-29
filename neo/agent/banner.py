@@ -26,7 +26,7 @@ DESCRIPTION = "Autonomous coding agent"
 
 def get_version() -> str:
     try:
-        return version("goodboy")
+        return version("neo")
     except PackageNotFoundError:
         text = (PACKAGE_DIR / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
@@ -46,7 +46,7 @@ def format_startup(
         )
     return (
         f"{_brown_dog_art()}\n"
-        f"[bold {_BRAND_STYLE}]GoodBoy[/] [dim]v{ver}[/]\n"
+        f"[bold {_BRAND_STYLE}]Neo[/] [dim]v{ver}[/]\n"
         f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
         f"{DESCRIPTION}"
     )

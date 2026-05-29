@@ -1,4 +1,4 @@
-"""GoodBoy agent harness."""
+"""Neo agent harness."""
 
 from agent.harness import AgentHarness
 from agent.loop import AgentLoop, LoopOutcome

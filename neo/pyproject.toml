@@ -1,5 +1,5 @@
 [project]
-name = "goodboy"
+name = "neo"
 version = "0.1.5"
 description = "Local autonomous agent harness — shell and Python on your machine"
 requires-python = ">=3.10"
@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-goodboy = "main:cli"
+neo = "main:cli"
 llm = "llm:main"
 
 [tool.setuptools]

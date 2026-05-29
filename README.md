@@ -1,4 +1,4 @@
-# GoodBoy
+# Neo
 
 A local coding agent for your terminal. Give it a task, it gets to work.
 
@@ -13,7 +13,7 @@ curl -fsSL https://goodboy.codes/install.sh | bash
 Then open a new terminal and run:
 
 ```bash
-goodboy setup
+neo setup
 ```
 
 This will ask for your API key and let you pick a model (OpenAI, DeepSeek, or a local model that runs on your machine).
@@ -25,16 +25,16 @@ Full instructions and other install options are on [goodboy.codes](https://goodb
 From any project folder:
 
 ```bash
-goodboy
+neo
 ```
 
 Tell it what you want done. It runs shell and Python commands locally to get the job done, and asks before doing anything risky.
 
 ## Useful commands
 
-- `goodboy setup` — change API key or default model
-- `goodboy status` — show current settings
-- `goodboy --help` — list all flags
+- `neo setup` — change API key or default model
+- `neo status` — show current settings
+- `neo --help` — list all flags
 - Inside a session: type `/model`, `/reasoning`, `/commands`, or `exit`
 
 ## Requirements

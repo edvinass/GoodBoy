@@ -17,27 +17,27 @@ ENV_FILE = ROOT_DIR / ".env"
 OPENAI_API_KEY_VAR = "OPENAI_API_KEY"
 OPENAI_MODEL_VAR = "OPENAI_MODEL"
 DEEPSEEK_API_KEY_VAR = "DEEPSEEK_API_KEY"
-GOODBOY_MAX_TURNS_VAR = "GOODBOY_MAX_TURNS"
-GOODBOY_TOOL_TIMEOUT_SEC_VAR = "GOODBOY_TOOL_TIMEOUT_SEC"
-GOODBOY_MAX_CLARIFICATIONS_VAR = "GOODBOY_MAX_CLARIFICATIONS"
-GOODBOY_LOG_DIR_VAR = "GOODBOY_LOG_DIR"
-GOODBOY_SESSION_LOG_VAR = "GOODBOY_SESSION_LOG"
-GOODBOY_SSL_CA_BUNDLE_VAR = "GOODBOY_SSL_CA_BUNDLE"
-GOODBOY_SSL_VERIFY_VAR = "GOODBOY_SSL_VERIFY"
-GOODBOY_SHOW_COMMANDS_VAR = "GOODBOY_SHOW_COMMANDS"
-GOODBOY_REASONING_EFFORT_VAR = "GOODBOY_REASONING_EFFORT"
-GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR = "GOODBOY_CONTEXT_RECENT_FULL_TURNS"
-GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR = "GOODBOY_LOCAL_RECENT_FULL_TURNS"
-GOODBOY_RESPONSE_CHAIN_VAR = "GOODBOY_RESPONSE_CHAIN"
-GOODBOY_STRICT_JSON_VAR = "GOODBOY_STRICT_JSON"
-GOODBOY_PLAN_MODE_VAR = "GOODBOY_PLAN_MODE"
-GOODBOY_WORKING_MEMORY_MAX_VAR = "GOODBOY_WORKING_MEMORY_MAX"
-GOODBOY_VERIFY_BEFORE_COMPLETE_VAR = "GOODBOY_VERIFY_BEFORE_COMPLETE"
-GOODBOY_CONTEXT_TOKEN_BUDGET_VAR = "GOODBOY_CONTEXT_TOKEN_BUDGET"
-GOODBOY_COMPLEX_WINDOW_MULTIPLIER_VAR = "GOODBOY_COMPLEX_WINDOW_MULTIPLIER"
-GOODBOY_MODELS_DIR_VAR = "GOODBOY_MODELS_DIR"
+NEO_MAX_TURNS_VAR = "NEO_MAX_TURNS"
+NEO_TOOL_TIMEOUT_SEC_VAR = "NEO_TOOL_TIMEOUT_SEC"
+NEO_MAX_CLARIFICATIONS_VAR = "NEO_MAX_CLARIFICATIONS"
+NEO_LOG_DIR_VAR = "NEO_LOG_DIR"
+NEO_SESSION_LOG_VAR = "NEO_SESSION_LOG"
+NEO_SSL_CA_BUNDLE_VAR = "NEO_SSL_CA_BUNDLE"
+NEO_SSL_VERIFY_VAR = "NEO_SSL_VERIFY"
+NEO_SHOW_COMMANDS_VAR = "NEO_SHOW_COMMANDS"
+NEO_REASONING_EFFORT_VAR = "NEO_REASONING_EFFORT"
+NEO_CONTEXT_RECENT_FULL_TURNS_VAR = "NEO_CONTEXT_RECENT_FULL_TURNS"
+NEO_LOCAL_RECENT_FULL_TURNS_VAR = "NEO_LOCAL_RECENT_FULL_TURNS"
+NEO_RESPONSE_CHAIN_VAR = "NEO_RESPONSE_CHAIN"
+NEO_STRICT_JSON_VAR = "NEO_STRICT_JSON"
+NEO_PLAN_MODE_VAR = "NEO_PLAN_MODE"
+NEO_WORKING_MEMORY_MAX_VAR = "NEO_WORKING_MEMORY_MAX"
+NEO_VERIFY_BEFORE_COMPLETE_VAR = "NEO_VERIFY_BEFORE_COMPLETE"
+NEO_CONTEXT_TOKEN_BUDGET_VAR = "NEO_CONTEXT_TOKEN_BUDGET"
+NEO_COMPLEX_WINDOW_MULTIPLIER_VAR = "NEO_COMPLEX_WINDOW_MULTIPLIER"
+NEO_MODELS_DIR_VAR = "NEO_MODELS_DIR"
 DEFAULT_MODEL = "gpt-5.4-nano"
-DEFAULT_MODELS_DIR = Path.home() / ".goodboy" / "models"
+DEFAULT_MODELS_DIR = Path.home() / ".neo" / "models"
 DEFAULT_PLAN_MODE = "auto"
 DEFAULT_WORKING_MEMORY_MAX = 30
 DEFAULT_MAX_TURNS = 500
@@ -192,19 +192,19 @@ class Settings:
     @classmethod
     def from_env(cls) -> Settings:
         load_env()
-        log_dir_raw = os.getenv(GOODBOY_LOG_DIR_VAR)
+        log_dir_raw = os.getenv(NEO_LOG_DIR_VAR)
         log_dir = Path(log_dir_raw).expanduser() if log_dir_raw and log_dir_raw.strip() else None
         ssl_ca = (
-            os.getenv(GOODBOY_SSL_CA_BUNDLE_VAR)
+            os.getenv(NEO_SSL_CA_BUNDLE_VAR)
             or os.getenv("SSL_CERT_FILE")
             or os.getenv("REQUESTS_CA_BUNDLE")
         )
         ssl_ca_bundle = ssl_ca.strip() if ssl_ca and ssl_ca.strip() else None
-        reasoning_raw = os.getenv(GOODBOY_REASONING_EFFORT_VAR)
+        reasoning_raw = os.getenv(NEO_REASONING_EFFORT_VAR)
         default_reasoning: str | None = None
         if reasoning_raw is not None and reasoning_raw.strip():
             default_reasoning = reasoning_raw.strip()
-        models_dir_raw = os.getenv(GOODBOY_MODELS_DIR_VAR)
+        models_dir_raw = os.getenv(NEO_MODELS_DIR_VAR)
         models_dir = (
             Path(models_dir_raw).expanduser()
             if models_dir_raw and models_dir_raw.strip()
@@ -220,53 +220,53 @@ class Settings:
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
             deepseek_api_key=deepseek_api_key,
-            max_turns=_env_int(GOODBOY_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
+            max_turns=_env_int(NEO_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
             tool_timeout_sec=_env_float(
-                GOODBOY_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
+                NEO_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
             ),
             max_clarifications=_env_int(
-                GOODBOY_MAX_CLARIFICATIONS_VAR, DEFAULT_MAX_CLARIFICATIONS
+                NEO_MAX_CLARIFICATIONS_VAR, DEFAULT_MAX_CLARIFICATIONS
             ),
-            session_log_enabled=_env_bool(GOODBOY_SESSION_LOG_VAR, True),
+            session_log_enabled=_env_bool(NEO_SESSION_LOG_VAR, True),
             session_log_dir=log_dir,
             ssl_ca_bundle=ssl_ca_bundle,
-            ssl_verify=_env_bool(GOODBOY_SSL_VERIFY_VAR, True),
-            show_commands=_env_bool(GOODBOY_SHOW_COMMANDS_VAR, False),
+            ssl_verify=_env_bool(NEO_SSL_VERIFY_VAR, True),
+            show_commands=_env_bool(NEO_SHOW_COMMANDS_VAR, False),
             default_reasoning_effort=default_reasoning,
             context_recent_full_turns=max(
                 1,
                 _env_int(
-                    GOODBOY_CONTEXT_RECENT_FULL_TURNS_VAR,
+                    NEO_CONTEXT_RECENT_FULL_TURNS_VAR,
                     DEFAULT_CONTEXT_RECENT_FULL_TURNS,
                 ),
             ),
             local_recent_full_turns=max(
                 1,
                 _env_int(
-                    GOODBOY_LOCAL_RECENT_FULL_TURNS_VAR,
+                    NEO_LOCAL_RECENT_FULL_TURNS_VAR,
                     DEFAULT_LOCAL_RECENT_FULL_TURNS,
                 ),
             ),
-            response_chain_enabled=_env_bool(GOODBOY_RESPONSE_CHAIN_VAR, True),
-            strict_json_schema=_env_bool(GOODBOY_STRICT_JSON_VAR, True),
+            response_chain_enabled=_env_bool(NEO_RESPONSE_CHAIN_VAR, True),
+            strict_json_schema=_env_bool(NEO_STRICT_JSON_VAR, True),
             plan_mode=(
-                os.getenv(GOODBOY_PLAN_MODE_VAR) or DEFAULT_PLAN_MODE
+                os.getenv(NEO_PLAN_MODE_VAR) or DEFAULT_PLAN_MODE
             ).strip().lower(),
             working_memory_max=max(
                 1,
                 _env_int(
-                    GOODBOY_WORKING_MEMORY_MAX_VAR,
+                    NEO_WORKING_MEMORY_MAX_VAR,
                     DEFAULT_WORKING_MEMORY_MAX,
                 ),
             ),
             verify_before_complete=_env_bool(
-                GOODBOY_VERIFY_BEFORE_COMPLETE_VAR, True
+                NEO_VERIFY_BEFORE_COMPLETE_VAR, True
             ),
             context_token_budget=_env_optional_int(
-                GOODBOY_CONTEXT_TOKEN_BUDGET_VAR
+                NEO_CONTEXT_TOKEN_BUDGET_VAR
             ),
             complex_window_multiplier=_env_float(
-                GOODBOY_COMPLEX_WINDOW_MULTIPLIER_VAR,
+                NEO_COMPLEX_WINDOW_MULTIPLIER_VAR,
                 DEFAULT_COMPLEX_WINDOW_MULTIPLIER,
             ),
             models_dir=models_dir,

@@ -30,7 +30,7 @@ def _llm_responses(responses: list[AgentStep]):
 
 def test_loop_default_reasoning_effort_applied(tmp_path: Path, monkeypatch):
     env_file = tmp_path / ".env"
-    env_file.write_text("GOODBOY_REASONING_EFFORT=low\n", encoding="utf-8")
+    env_file.write_text("NEO_REASONING_EFFORT=low\n", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     from settings import get_settings
 
@@ -1003,7 +1003,7 @@ def test_verify_gate_blocks_task_complete_until_pytest(tmp_path: Path):
 
 def test_verify_gate_disabled_via_env(tmp_path: Path, monkeypatch):
     env_file = tmp_path / ".env"
-    env_file.write_text("GOODBOY_VERIFY_BEFORE_COMPLETE=false\n", encoding="utf-8")
+    env_file.write_text("NEO_VERIFY_BEFORE_COMPLETE=false\n", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", env_file)
     from settings import get_settings
 

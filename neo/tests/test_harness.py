@@ -248,7 +248,7 @@ def test_harness_reasoning_command_changes_loop_and_persists(monkeypatch):
     assert harness.run() == 0
     loop.set_session_reasoning.assert_called_once_with("low")
     assert ui._session_reasoning == "low"
-    assert saved == {"GOODBOY_REASONING_EFFORT": "low"}
+    assert saved == {"NEO_REASONING_EFFORT": "low"}
     loop.run.assert_not_called()
 
 
@@ -305,7 +305,7 @@ def test_harness_slash_commands_toggles_visibility(monkeypatch):
     assert ui.show_commands is True
     assert loop.refresh_system_prompt.call_count >= 2
     assert "on" in ui.notices[0].lower()
-    assert saved == {"GOODBOY_SHOW_COMMANDS": "true"}
+    assert saved == {"NEO_SHOW_COMMANDS": "true"}
 
 
 def test_harness_slash_stream_toggles_mid_session():

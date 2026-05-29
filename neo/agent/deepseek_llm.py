@@ -114,7 +114,7 @@ def _resolve_ssl_verify() -> bool | str:
         if not path.is_file():
             raise click.ClickException(
                 f"SSL CA bundle not found: {path}\n"
-                "Set GOODBOY_SSL_CA_BUNDLE (or SSL_CERT_FILE) to your proxy/root CA .pem file."
+                "Set NEO_SSL_CA_BUNDLE (or SSL_CERT_FILE) to your proxy/root CA .pem file."
             )
         return str(path)
     return True
@@ -147,7 +147,7 @@ def get_deepseek_client(*, api_key: str | None = None) -> OpenAI:
     resolved_key = api_key or cfg.deepseek_api_key
     if not resolved_key:
         raise click.ClickException(
-            "DEEPSEEK_API_KEY is not set. Run: goodboy setup"
+            "DEEPSEEK_API_KEY is not set. Run: neo setup"
         )
     return _deepseek_client(resolved_key, cfg.ssl_verify, cfg.ssl_ca_bundle)
 

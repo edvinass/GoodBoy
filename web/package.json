@@ -1,10 +1,10 @@
 {
-  "name": "goodboy-website",
+  "name": "neo-website",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "prebuild": "sh -c 'if [ -f public/goodboy.tar.gz ] && [ -f install.sh ]; then :; else echo \"error: missing public/goodboy.tar.gz or install.sh — run npm run release (or ../scripts/release-web-tar.sh)\" >&2; exit 1; fi'",
+    "prebuild": "sh -c 'if [ -f public/neo.tar.gz ] && [ -f install.sh ]; then :; else echo \"error: missing public/neo.tar.gz or install.sh — run npm run release (or ../scripts/release-web-tar.sh)\" >&2; exit 1; fi'",
     "release": "../scripts/release-web-tar.sh",
     "dev": "vite",
     "build": "vite build",

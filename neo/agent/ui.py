@@ -118,7 +118,7 @@ _resize_poller_installed = False
 
 @dataclass
 class ThinkingUpdater:
-    """Update the GoodBoy loading line while the model streams a step."""
+    """Update the Neo loading line while the model streams a step."""
 
     _label: str
     _console: Console
@@ -143,7 +143,7 @@ class ThinkingUpdater:
 
     def _render(self) -> RenderableType:
         header = Text.from_markup(
-            f"[agent]🐶 GoodBoy[/] [muted]{self._label}…[/]"
+            f"[agent]🐶 Neo[/] [muted]{self._label}…[/]"
         )
         if not self._plan_step:
             return header
@@ -406,7 +406,7 @@ def _install_resize_poller(ui: "ConversationUI") -> None:
     threading.Thread(
         target=_poll,
         daemon=True,
-        name="goodboy-resize-poller",
+        name="neo-resize-poller",
     ).start()
 
 
@@ -1095,7 +1095,7 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
 def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
     if role == "user":
         return Text.from_markup("[user]👤 You[/]")
-    title = Text.from_markup("[agent]🐶 GoodBoy[/]")
+    title = Text.from_markup("[agent]🐶 Neo[/]")
     if subtitle:
         icon_label = _SUBTITLE_ICONS.get(subtitle)
         if icon_label is not None:
@@ -1380,7 +1380,7 @@ class ConversationUI:
             listener = threading.Thread(
                 target=listen,
                 daemon=True,
-                name="goodboy-escape-listener",
+                name="neo-escape-listener",
             )
             listener.start()
             yield
@@ -1842,7 +1842,7 @@ class ConversationUI:
         self._record("agent_message", text=text, subtitle=subtitle)
 
     def print_plan(self, items: list[PlanItem]) -> None:
-        """Show the durable task plan in the GoodBoy panel."""
+        """Show the durable task plan in the Neo panel."""
         if items:
             self._record("plan", items=items)
         else:

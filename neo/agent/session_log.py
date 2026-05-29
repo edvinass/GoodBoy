@@ -14,7 +14,7 @@ from settings import get_settings
 
 
 def default_log_dir() -> Path:
-    return Path.home() / ".goodboy" / "logs"
+    return Path.home() / ".neo" / "logs"
 
 
 def _utc_now() -> str:

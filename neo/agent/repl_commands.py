@@ -62,7 +62,7 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
     ),
     ReplCommand(
         "exit",
-        "Exit GoodBoy",
+        "Exit Neo",
         ("quit", "q"),
     ),
 )

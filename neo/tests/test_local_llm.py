@@ -30,7 +30,7 @@ def test_is_local_model_prefix():
 
 
 def test_list_installed_models_empty(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -38,7 +38,7 @@ def test_list_installed_models_empty(tmp_path, monkeypatch):
 
 
 def test_list_installed_models_dropped_gguf(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -48,7 +48,7 @@ def test_list_installed_models_dropped_gguf(tmp_path, monkeypatch):
 
 
 def test_resolve_dropped_gguf(tmp_path, monkeypatch):
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -63,7 +63,7 @@ def test_resolve_dropped_gguf(tmp_path, monkeypatch):
 def test_catalog_takes_priority_over_duplicate_filename(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -76,7 +76,7 @@ def test_catalog_takes_priority_over_duplicate_filename(tmp_path, monkeypatch):
 def test_list_installed_models_when_file_present(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -88,7 +88,7 @@ def test_list_installed_models_when_file_present(tmp_path, monkeypatch):
 def test_download_model_skips_when_present(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -106,7 +106,7 @@ def test_download_model_skips_when_present(tmp_path, monkeypatch):
 def test_download_model_calls_http_download(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -129,7 +129,7 @@ def test_download_model_calls_http_download(tmp_path, monkeypatch):
 def test_download_reports_progress(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     from settings import get_settings
 
     get_settings.cache_clear()
@@ -284,7 +284,7 @@ def test_complete_structured_with_id_dispatches_local():
 def test_get_selectable_models_merges_local_and_cloud(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     (tmp_path / spec.filename).write_bytes(b"gguf")
     from settings import get_settings
 
@@ -299,7 +299,7 @@ def test_get_selectable_models_merges_local_and_cloud(tmp_path, monkeypatch):
 def test_is_configured_with_local_only(tmp_path, monkeypatch):
     spec = get_catalog_spec("local:qwen2.5-coder-7b-q4")
     assert spec is not None
-    monkeypatch.setenv("GOODBOY_MODELS_DIR", str(tmp_path))
+    monkeypatch.setenv("NEO_MODELS_DIR", str(tmp_path))
     monkeypatch.setenv("OPENAI_MODEL", spec.id)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     from settings import get_settings, is_configured

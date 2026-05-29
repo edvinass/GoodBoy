@@ -8,7 +8,7 @@ import {
 function installShDevPlugin() {
   const template = readInstallShTemplate()
   return {
-    name: 'goodboy-install-sh',
+    name: 'neo-install-sh',
     enforce: 'pre',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {

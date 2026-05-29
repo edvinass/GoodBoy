@@ -9,7 +9,7 @@ import pytest
 from settings import ENV_FILE, get_settings, load_env
 
 # Keys that ``Settings.from_env`` / ``load_env`` may read from the environment.
-_ISOLATED_ENV_PREFIXES = ("GOODBOY_", "OPENAI_", "DEEPSEEK_")
+_ISOLATED_ENV_PREFIXES = ("NEO_", "OPENAI_", "DEEPSEEK_")
 _ISOLATED_ENV_KEYS = frozenset(
     {
         "SSL_CERT_FILE",
@@ -26,7 +26,7 @@ def _clear_isolated_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolated_settings_env(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    """Use an empty ``.env`` and drop GoodBoy-related env vars before each test."""
+    """Use an empty ``.env`` and drop Neo-related env vars before each test."""
     empty_env = tmp_path / ".env"
     empty_env.write_text("", encoding="utf-8")
     monkeypatch.setattr("settings.ENV_FILE", empty_env)

@@ -983,7 +983,7 @@ class AgentLoop:
             return [self._run_harness_tool(steps[0])]
         workers = min(len(steps), 8)
         with ThreadPoolExecutor(
-            max_workers=workers, thread_name_prefix="goodboy-batch"
+            max_workers=workers, thread_name_prefix="neo-batch"
         ) as ex:
             return list(ex.map(self._run_harness_tool, steps))
 
