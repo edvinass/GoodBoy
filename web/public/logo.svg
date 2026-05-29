@@ -1,26 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Neo logo">
   <title>Neo</title>
-  <!-- Floppy ears, drawn first so the head sits on top -->
-  <path d="M22 18 C14 18 10 30 12 40 C14 44 22 42 22 36 Z" fill="#b08968"/>
-  <path d="M42 18 C50 18 54 30 52 40 C50 44 42 42 42 36 Z" fill="#b08968"/>
-
-  <!-- Head -->
-  <path d="M19 27 C19 18 25 14 32 14 C39 14 45 18 45 27 L45 36 C45 44 39 50 32 50 C25 50 19 44 19 36 Z" fill="#d4a373"/>
-
-  <!-- Muzzle -->
-  <ellipse cx="32" cy="41" rx="9.5" ry="6.5" fill="#e8b88a"/>
-
-  <!-- Eyes -->
-  <circle cx="25" cy="28" r="1.9" fill="#1c1410"/>
-  <circle cx="39" cy="28" r="1.9" fill="#1c1410"/>
-  <circle cx="25.65" cy="27.35" r="0.55" fill="#f3e6d3"/>
-  <circle cx="39.65" cy="27.35" r="0.55" fill="#f3e6d3"/>
-
-  <!-- Nose -->
-  <ellipse cx="32" cy="36.2" rx="2.6" ry="2" fill="#1c1410"/>
-
-  <!-- Mouth: short philtrum + gentle smile -->
-  <path d="M32 38.2 V40.4 M28 43 Q32 46 36 43"
-        stroke="#1c1410" stroke-width="1.4" fill="none"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect width="64" height="64" rx="12" fill="#050805"/>
+  <!-- Sunglasses frame -->
+  <path
+    d="M10 30 C10 22 18 16 32 16 C46 16 54 22 54 30 L54 36 C54 44 46 50 32 50 C18 50 10 44 10 36 Z"
+    fill="#0a140a"
+    stroke="#00ff41"
+    stroke-width="1.5"
+  />
+  <rect x="14" y="26" width="16" height="12" rx="3" fill="#001a08" stroke="#00ff41" stroke-width="1.2"/>
+  <rect x="34" y="26" width="16" height="12" rx="3" fill="#001a08" stroke="#00ff41" stroke-width="1.2"/>
+  <path d="M30 31 H34" stroke="#00ff41" stroke-width="1.4" stroke-linecap="round"/>
+  <!-- Lens glow -->
+  <rect x="16" y="28" width="12" height="8" rx="2" fill="#00ff41" opacity="0.35"/>
+  <rect x="36" y="28" width="12" height="8" rx="2" fill="#00ff41" opacity="0.35"/>
 </svg>

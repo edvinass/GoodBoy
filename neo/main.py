@@ -214,15 +214,15 @@ def run_setup() -> None:
 
     click.echo()
     click.echo(click.style("Setup complete.", fg="green", bold=True))
-    _brown = 94
-    click.echo(f"  Model: {click.style(model, fg=_brown)}")
+    _brand = 46
+    click.echo(f"  Model: {click.style(model, fg=_brand)}")
     if openai_key:
         click.echo(
-            f"  OpenAI key: {click.style(_mask_api_key(openai_key), fg=_brown)}"
+            f"  OpenAI key: {click.style(_mask_api_key(openai_key), fg=_brand)}"
         )
     if deepseek_key:
         click.echo(
-            f"  DeepSeek key: {click.style(_mask_api_key(deepseek_key), fg=_brown)}"
+            f"  DeepSeek key: {click.style(_mask_api_key(deepseek_key), fg=_brand)}"
         )
     if not openai_key and not deepseek_key and is_local_model(model):
         click.echo("  API key: (not set — using local model)")
@@ -336,30 +336,30 @@ def status() -> None:
     if not is_configured(cfg):
         click.echo("Not configured yet. Run: neo")
         raise SystemExit(1)
-    _brown = 94
+    _brand = 46
     model = cfg.default_model
-    click.echo(f"Model: {click.style(model, fg=_brown, bold=True)}")
+    click.echo(f"Model: {click.style(model, fg=_brand, bold=True)}")
     if is_local_model(model):
         path = resolve_model_path(model)
-        click.echo(f"Provider: {click.style('local (in-process)', fg=_brown)}")
+        click.echo(f"Provider: {click.style('local (in-process)', fg=_brand)}")
         if path:
             click.echo(f"Weights: {path}")
     elif is_deepseek_model(model):
-        click.echo(f"Provider: {click.style('DeepSeek', fg=_brown)}")
+        click.echo(f"Provider: {click.style('DeepSeek', fg=_brand)}")
     else:
-        click.echo(f"Provider: {click.style('OpenAI', fg=_brown)}")
+        click.echo(f"Provider: {click.style('OpenAI', fg=_brand)}")
     installed = list_installed_models()
     if installed:
         click.echo(f"Installed local: {', '.join(installed)}")
     if cfg.openai_api_key:
         click.echo(
-            f"OpenAI key: {click.style(_mask_api_key(cfg.openai_api_key), fg=_brown)}"
+            f"OpenAI key: {click.style(_mask_api_key(cfg.openai_api_key), fg=_brand)}"
         )
     else:
         click.echo("OpenAI key: (not set)")
     if cfg.deepseek_api_key:
         click.echo(
-            f"DeepSeek key: {click.style(_mask_api_key(cfg.deepseek_api_key), fg=_brown)}"
+            f"DeepSeek key: {click.style(_mask_api_key(cfg.deepseek_api_key), fg=_brand)}"
         )
     else:
         click.echo("DeepSeek key: (not set)")

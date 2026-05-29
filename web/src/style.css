@@ -1,16 +1,16 @@
 :root {
-  --bg: #1c1410;
-  --bg-soft: #241a14;
-  --surface: #2e221a;
-  --surface-2: #382a1f;
-  --border: #4a3729;
-  --text: #f3e6d3;
-  --muted: #b8a487;
-  --accent: #d4a373;
-  --accent-dim: #b08968;
-  --accent-strong: #e8b88a;
-  --user-bubble: #3b2a1f;
-  --agent-bubble: #2a1f17;
+  --bg: #050805;
+  --bg-soft: #0a100a;
+  --surface: #0f160f;
+  --surface-2: #141f14;
+  --border: #1f3d24;
+  --text: #d8f5dc;
+  --muted: #6b9b72;
+  --accent: #00ff41;
+  --accent-dim: #00cc33;
+  --accent-strong: #5cff7a;
+  --user-bubble: #0f1a12;
+  --agent-bubble: #0a120c;
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
@@ -30,9 +30,9 @@ body {
   color: var(--text);
   background: var(--bg);
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(212, 163, 115, 0.18), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(176, 137, 104, 0.10), transparent),
-    radial-gradient(ellipse 50% 35% at 0% 60%, rgba(232, 184, 138, 0.06), transparent);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 255, 65, 0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(0, 204, 51, 0.08), transparent),
+    radial-gradient(ellipse 50% 35% at 0% 60%, rgba(92, 255, 122, 0.04), transparent);
 }
 
 #app {
@@ -56,7 +56,7 @@ body {
   width: 2.75rem;
   height: 2.75rem;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 6px rgba(212, 163, 115, 0.3));
+  filter: drop-shadow(0 2px 8px rgba(0, 255, 65, 0.35));
 }
 
 .header h1 {
@@ -79,7 +79,7 @@ body {
   border-radius: 12px;
   padding: 1.5rem 1.5rem 1.25rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
 }
 
 .install-card h2 {
@@ -233,7 +233,7 @@ body {
 }
 
 .term {
-  background: #160e09;
+  background: #020402;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -241,8 +241,8 @@ body {
   font-size: 0.85rem;
   line-height: 1.55;
   box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(0, 0, 0, 0.2);
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(0, 255, 65, 0.06);
 }
 
 .term-chrome {
@@ -250,7 +250,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 0.85rem;
-  background: linear-gradient(180deg, #2a1d14 0%, #20150e 100%);
+  background: linear-gradient(180deg, #0f180f 0%, #080d08 100%);
   border-bottom: 1px solid var(--border);
 }
 
@@ -263,8 +263,8 @@ body {
 }
 
 .term-dot-red { background: #e06c5b; }
-.term-dot-yellow { background: #d4a373; }
-.term-dot-green { background: #9c8567; }
+.term-dot-yellow { background: #c9b458; }
+.term-dot-green { background: #00ff41; }
 
 .term-chrome-title {
   flex: 1;
@@ -277,13 +277,13 @@ body {
 }
 
 .term-body {
-  --term-bg: #160e09;
+  --term-bg: #020402;
   padding: 1rem 1.1rem 0.5rem;
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 0.85rem;
   background:
-    linear-gradient(180deg, rgba(212, 163, 115, 0.04), transparent 30%),
+    linear-gradient(180deg, rgba(0, 255, 65, 0.05), transparent 30%),
     var(--term-bg);
 }
 
@@ -306,7 +306,7 @@ body {
 }
 
 .term-panel-user {
-  border-color: #6a7d5a;
+  border-color: #2d6b4a;
 }
 
 .term-panel-thought {
@@ -331,7 +331,7 @@ body {
 }
 
 .term-panel-user .term-panel-title {
-  color: #b5c89d;
+  color: #7dd4a0;
 }
 
 .term-panel-thought .term-panel-title {
@@ -341,6 +341,7 @@ body {
 
 .term-panel-emoji {
   font-size: 0.95rem;
+  color: var(--accent);
 }
 
 .term-panel-sub-dot {
@@ -383,7 +384,7 @@ body {
   color: var(--accent-strong);
   white-space: pre;
   overflow-x: auto;
-  text-shadow: 0 0 6px rgba(232, 184, 138, 0.2);
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.35);
 }
 
 .term-activity {

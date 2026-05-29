@@ -38,11 +38,10 @@ async function copy(text) {
 }
 
 const bannerLines = [
-  '      / \\__',
-  '     (    @\\___',
-  '      /         O',
-  '     /   (_____/',
-  '    /_____/   U',
+  '     .---.     .---.',
+  '    /     \\   /     \\',
+  '   |   o   | |   o   |',
+  '    \\_____/   \\_____/',
   '',
   'Neo v0.1.0',
   'Model gpt-5',
@@ -222,7 +221,7 @@ const active = computed(
                 :class="{ 'term-panel-thought': turn.subtitle === 'thought' }"
               >
                 <span class="term-panel-title">
-                  <span class="term-panel-emoji">🐶</span> Neo<template
+                  <span class="term-panel-emoji">◆</span> Neo<template
                     v-if="turn.subtitle"
                   >  <span
                     class="term-panel-sub"

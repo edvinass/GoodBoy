@@ -76,7 +76,7 @@ from settings import get_settings
 from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
 from llm import TokenUsage
 
-_BRAND_STYLE = "rgb(139,69,19)"
+_BRAND_STYLE = "rgb(0,255,65)"
 
 _THEME = Theme(
     {
@@ -143,7 +143,7 @@ class ThinkingUpdater:
 
     def _render(self) -> RenderableType:
         header = Text.from_markup(
-            f"[agent]🐶 Neo[/] [muted]{self._label}…[/]"
+            f"[agent]◆ Neo[/] [muted]{self._label}…[/]"
         )
         if not self._plan_step:
             return header
@@ -939,7 +939,7 @@ def _prompt_user_line(
                     "input-footer": "#7f7f7f",
                     "prompt": "bold #cd853f",
                     # Completion menu surface: warm dark backdrop matching the
-                    # input frame, with brown accents instead of ansi blue.
+                    # input frame, with matrix-green accents instead of ansi blue.
                     "completion-menu": "bg:#1f1611",
                     "completion-menu.completion": "bg:#1f1611 #e6d7c3",
                     "completion-menu.completion.current": "bg:#8b4513 #ffffff bold",
@@ -956,7 +956,7 @@ def _prompt_user_line(
                     "mention.file": "bold #ffd9a8",
                     "mention.dim": "#8c7a65",
                     # Highlighted row inherits its background; override fragment
-                    # colours so the brown selection stays legible.
+                    # colours so the green selection stays legible.
                     "completion-menu.completion.current mention.icon": "bg:#8b4513 #f5e9d8",
                     "completion-menu.completion.current mention.slash": "bg:#8b4513 #f5e9d8 bold",
                     "completion-menu.completion.current mention.command": "bg:#8b4513 #ffffff bold",
@@ -1095,7 +1095,7 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
 def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
     if role == "user":
         return Text.from_markup("[user]👤 You[/]")
-    title = Text.from_markup("[agent]🐶 Neo[/]")
+    title = Text.from_markup("[agent]◆ Neo[/]")
     if subtitle:
         icon_label = _SUBTITLE_ICONS.get(subtitle)
         if icon_label is not None:
@@ -2070,11 +2070,9 @@ class ConversationUI:
                 for line in rendered.renderables:
                     text = line
                     markup = text.markup if isinstance(text, Text) else str(text)
-                    self._console.print(markup.replace("🐶", "◆", 1))
+                    self._console.print(markup)
             else:
-                self._console.print(
-                    rendered.markup.replace("🐶", "◆", 1)  # type: ignore[union-attr]
-                )
+                self._console.print(rendered)  # type: ignore[arg-type]
             yield updater
             return
 

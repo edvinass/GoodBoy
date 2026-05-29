@@ -7,19 +7,21 @@ from importlib.metadata import PackageNotFoundError, version
 
 from settings import PACKAGE_DIR
 
-_BRAND_STYLE = "rgb(139,69,19)"
+_BRAND_STYLE = "rgb(0,255,65)"
 
-DOG_ASCII = r"""
-      / \__
-     (    @\___
-      /         O
-     /   (_____/
-    /_____/   U
+MATRIX_ASCII = r"""
+     .---.     .---.
+    /     \   /     \
+   |   o   | |   o   |
+    \_____/   \_____/
 """
 
 
-def _brown_dog_art() -> str:
-    return "\n".join(f"[{_BRAND_STYLE}]{line}[/]" for line in DOG_ASCII.rstrip().splitlines())
+def _matrix_art() -> str:
+    return "\n".join(
+        f"[{_BRAND_STYLE}]{line}[/]" for line in MATRIX_ASCII.rstrip().splitlines()
+    )
+
 
 DESCRIPTION = "Autonomous coding agent"
 
@@ -45,7 +47,7 @@ def format_startup(
             f"\n[dim]Reasoning[/] [{_BRAND_STYLE}]{reasoning_effort}[/]"
         )
     return (
-        f"{_brown_dog_art()}\n"
+        f"{_matrix_art()}\n"
         f"[bold {_BRAND_STYLE}]Neo[/] [dim]v{ver}[/]\n"
         f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
         f"{DESCRIPTION}"
