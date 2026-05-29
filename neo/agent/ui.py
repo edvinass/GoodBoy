@@ -83,11 +83,14 @@ from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolRe
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(0,255,65)"
+# Mid-trail green from the matrix rain — used for the user panel so it reads
+# as the same palette as the agent's bright head colour but visibly dimmer.
+_USER_BORDER_STYLE = "rgb(0,160,40)"
 
 _THEME = Theme(
     {
         "agent": f"bold {_BRAND_STYLE}",
-        "user": "bold green",
+        "user": f"bold {_USER_BORDER_STYLE}",
         "subtitle": "dim italic",
         "shell": "yellow",
         "python": "magenta",
@@ -939,36 +942,41 @@ def _prompt_user_line(
             DEFAULT_STYLE,
             Style.from_dict(
                 {
-                    "": "#ffffff",
-                    "placeholder": "#7f7f7f italic",
-                    "input-border": "#8b4513",
-                    "input-footer": "#7f7f7f",
-                    "prompt": "bold #cd853f",
-                    # Completion menu surface: warm dark backdrop matching the
-                    # input frame, with matrix-green accents instead of ansi blue.
-                    "completion-menu": "bg:#1f1611",
-                    "completion-menu.completion": "bg:#1f1611 #e6d7c3",
-                    "completion-menu.completion.current": "bg:#8b4513 #ffffff bold",
-                    "completion-menu.meta.completion": "bg:#1f1611 #8c7a65 italic",
-                    "completion-menu.meta.completion.current": "bg:#8b4513 #f5e9d8 italic",
-                    "completion-menu.scrollbar.background": "bg:#2a1f17",
-                    "completion-menu.scrollbar.button": "bg:#cd853f",
+                    # Matrix palette — bright head (#00ff41), bright trail
+                    # (#7fffae), mid green (#00a028), dim green (#005a14), very
+                    # dark green-tinted surface (#031307 / #06210c) for menus.
+                    "": "#d8ffe2",
+                    "placeholder": "#3f7a4d italic",
+                    "input-border": "#00a028",
+                    "input-footer": "#3f7a4d",
+                    "prompt": "bold #00ff41",
+                    # Completion menu surface: near-black green backdrop that
+                    # echoes the rain's faded tail, with bright matrix-green
+                    # selection highlight.
+                    "completion-menu": "bg:#031307",
+                    "completion-menu.completion": "bg:#031307 #d8ffe2",
+                    "completion-menu.completion.current": "bg:#00a028 #031307 bold",
+                    "completion-menu.meta.completion": "bg:#031307 #3f7a4d italic",
+                    "completion-menu.meta.completion.current": "bg:#00a028 #06210c italic",
+                    "completion-menu.scrollbar.background": "bg:#06210c",
+                    "completion-menu.scrollbar.button": "bg:#00ff41",
                     # Per-fragment styles for slash commands and @ mentions.
-                    "mention.choice": "#cd853f",
-                    "mention.icon": "#8b4513",
-                    "mention.slash": "#cd853f",
-                    "mention.command": "bold #ffd9a8",
-                    "mention.dir": "bold #cd853f",
-                    "mention.file": "bold #ffd9a8",
-                    "mention.dim": "#8c7a65",
+                    "mention.choice": "#00ff41",
+                    "mention.icon": "#00a028",
+                    "mention.slash": "#00ff41",
+                    "mention.command": "bold #7fffae",
+                    "mention.dir": "bold #00ff41",
+                    "mention.file": "bold #7fffae",
+                    "mention.dim": "#3f7a4d",
                     # Highlighted row inherits its background; override fragment
-                    # colours so the green selection stays legible.
-                    "completion-menu.completion.current mention.icon": "bg:#8b4513 #f5e9d8",
-                    "completion-menu.completion.current mention.slash": "bg:#8b4513 #f5e9d8 bold",
-                    "completion-menu.completion.current mention.command": "bg:#8b4513 #ffffff bold",
-                    "completion-menu.completion.current mention.dir": "bg:#8b4513 #ffffff bold",
-                    "completion-menu.completion.current mention.file": "bg:#8b4513 #ffffff bold",
-                    "completion-menu.completion.current mention.dim": "bg:#8b4513 #f5e9d8",
+                    # colours so the green selection stays legible against the
+                    # bright matrix highlight.
+                    "completion-menu.completion.current mention.icon": "bg:#00a028 #06210c",
+                    "completion-menu.completion.current mention.slash": "bg:#00a028 #031307 bold",
+                    "completion-menu.completion.current mention.command": "bg:#00a028 #031307 bold",
+                    "completion-menu.completion.current mention.dir": "bg:#00a028 #031307 bold",
+                    "completion-menu.completion.current mention.file": "bg:#00a028 #031307 bold",
+                    "completion-menu.completion.current mention.dim": "bg:#00a028 #06210c",
                 }
             ),
         ]
@@ -1438,14 +1446,14 @@ class ConversationUI:
                 yield self._panel(
                     data["paste_label"],
                     title=user_title,
-                    border_style="green",
+                    border_style=_USER_BORDER_STYLE,
                     padding=(0, 1),
                 )
             panel_width = self._panel_text_width()
             yield self._panel(
                 _wrap_long_lines(data["text"].rstrip() or "", width=panel_width),
                 title=user_title,
-                border_style="green",
+                border_style=_USER_BORDER_STYLE,
                 padding=(0, 1),
             )
             return
