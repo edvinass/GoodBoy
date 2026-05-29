@@ -253,7 +253,7 @@ const active = computed(
     </main>
 
     <footer class="footer">
-      <a href="https://github.com/edvinass/GoodBoy" target="_blank" rel="noopener noreferrer">
+      <a href="https://github.com/edvinass/Neo" target="_blank" rel="noopener noreferrer">
         GitHub
       </a>
       <span class="sep">·</span>

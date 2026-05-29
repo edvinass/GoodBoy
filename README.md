@@ -7,7 +7,7 @@ A local coding agent for your terminal. Give it a task, it gets to work.
 One command on macOS / Linux:
 
 ```bash
-curl -fsSL https://goodboy.codes/install.sh | bash
+curl -fsSL https://neo.codes/install.sh | bash
 ```
 
 Then open a new terminal and run:
@@ -18,7 +18,7 @@ neo setup
 
 This will ask for your API key and let you pick a model (OpenAI, DeepSeek, or a local model that runs on your machine).
 
-Full instructions and other install options are on [goodboy.codes](https://goodboy.codes/).
+Full instructions and other install options are on [neo.codes](https://neo.codes/).
 
 ## Use it
 
@@ -44,5 +44,5 @@ Tell it what you want done. It runs shell and Python commands locally to get the
 
 ## Links
 
-- Website: [goodboy.codes](https://goodboy.codes/)
+- Website: [neo.codes](https://neo.codes/)
 - Issues & source: this repo
