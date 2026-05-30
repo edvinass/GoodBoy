@@ -22,7 +22,7 @@ _ABORT_MESSAGE = "Aborted by user."
 # small; the head+tail split below preserves both exploratory output (signal at
 # the top, e.g. ls/find/rg) and failure tails (signal at the bottom, e.g.
 # pytest, build errors).
-_MAX_OUTPUT_BYTES = 12 * 1024
+_MAX_OUTPUT_BYTES = 48 * 1024
 _TRUNCATION_SUFFIX = "\n... [truncated]"
 
 

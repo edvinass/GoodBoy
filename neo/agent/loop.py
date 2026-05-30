@@ -442,6 +442,7 @@ class AgentLoop:
                 len(batch_steps) >= 2
                 and all(is_batchable_read(s.action) for s in batch_steps)
             ):
+                batch_steps = self._dedupe_batch_steps(batch_steps)
                 batch_err = next(
                     (
                         e
@@ -954,6 +955,61 @@ class AgentLoop:
         if check is None:
             return None
         return check  # type: ignore[return-value]
+
+    @staticmethod
+    def _batch_dedup_key(step: AgentStep) -> tuple:
+        """Stable key for read-only batch actions; identical keys are duplicates.
+
+        Used to skip re-running identical read-only tools that the model emits
+        more than once in a single parallel-batch response (e.g. two reads of
+        the same file with the same line range).
+        """
+        if step.action == AgentAction.READ_FILE:
+            return (
+                "read_file",
+                step.path or "",
+                step.start_line,
+                step.end_line,
+            )
+        if step.action == AgentAction.SEARCH_CODE:
+            return (
+                "search_code",
+                step.pattern or "",
+                step.path or "",
+                step.glob or "",
+                bool(step.case_insensitive),
+                step.max_results,
+            )
+        if step.action == AgentAction.LIST_FILES:
+            return (
+                "list_files",
+                step.path or "",
+                step.glob or "",
+                step.max_depth,
+                step.max_results,
+            )
+        if step.action == AgentAction.GIT:
+            return (
+                "git",
+                step.git_op or "",
+                step.path or "",
+                bool(step.staged),
+                step.max_results,
+            )
+        return ("_unique", id(step))
+
+    @classmethod
+    def _dedupe_batch_steps(cls, steps: list[AgentStep]) -> list[AgentStep]:
+        """Drop later duplicates so each unique read-only action runs once."""
+        seen: set[tuple] = set()
+        out: list[AgentStep] = []
+        for s in steps:
+            key = cls._batch_dedup_key(s)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(s)
+        return out
 
     @staticmethod
     def _batch_progress_label(steps: list[AgentStep]) -> str:
