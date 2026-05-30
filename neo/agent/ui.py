@@ -168,15 +168,15 @@ class ThinkingUpdater:
         )
 
     def _compute_gradient(self) -> Text:
-        """Return the label text with a subtle lighter-to-darker green sweep."""
+        """Return the label text with a subtle light-to-dark gray-white sweep."""
         label = self._label
         result = Text()
         n = max(len(label), 1)
         phase = self._frame * 0.05
         for i, ch in enumerate(label):
             t = (i / n - phase) % 1.0
-            lightness = 0.70 - t * 0.25
-            r, g, b = colorsys.hls_to_rgb(0.33, lightness, 0.6)
+            lightness = 1.0 - t * 0.4
+            r, g, b = colorsys.hls_to_rgb(0.0, lightness, 0.0)
             colour = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
             result.append(ch, style=colour)
         return result
