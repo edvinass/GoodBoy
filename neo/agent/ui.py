@@ -101,10 +101,11 @@ _THEME = Theme(
     }
 )
 
-_SUBTITLE_ICONS = {
-    "shell": ("$", "shell"),
-    "python": ("›", "python"),
-    "output": ("↳", "output"),
+_SUBTITLE_META: dict[str, tuple[str, str]] = {
+    "thought": ("💭", "Thought"),
+    "plan": ("📋", "Plan"),
+    "shell": ("⚡", "Shell"),
+    "python": ("🐍", "Python"),
 }
 
 _LS_SECTION = re.compile(r"^\./(.+):$")
@@ -160,7 +161,7 @@ class ThinkingUpdater:
             return header
         return Group(
             header,
-            Text.from_markup(f"  [muted]{self._plan_step}[/]"),
+            Text.from_markup(f"/  [muted]{self._plan_step}[/]"),
         )
 
     def _matrix_animation_active(self) -> bool:
@@ -1156,11 +1157,11 @@ def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text | None:
     if not subtitle:
         return None
     title = Text()
-    icon_label = _SUBTITLE_ICONS.get(subtitle)
-    if icon_label is not None:
-        icon, label = icon_label
-        title.append(f"[{icon}] ", style="subtitle")
-        title.append(f"({label})", style="subtitle")
+    meta = _SUBTITLE_META.get(subtitle)
+    if meta is not None:
+        emoji, label = meta
+        title.append(f"{emoji} ", style="subtitle")
+        title.append(label, style="subtitle")
     else:
         title.append(f"({subtitle})", style="subtitle")
     return title

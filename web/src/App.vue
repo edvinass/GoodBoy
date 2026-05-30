@@ -240,6 +240,20 @@ const active = computed(
   () => conversations.find((c) => c.id === activeId.value) ?? conversations[0],
 )
 
+const subtitleMeta = {
+  thought: { emoji: '💭', label: 'Thought' },
+  plan: { emoji: '📋', label: 'Plan' },
+  shell: { emoji: '⚡', label: 'Shell' },
+}
+
+function subLabel(sub) {
+  return subtitleMeta[sub]?.label ?? sub
+}
+
+function subEmoji(sub) {
+  return subtitleMeta[sub]?.emoji ?? ''
+}
+
 const features = [
   {
     title: 'Runs in your terminal',
@@ -450,7 +464,7 @@ const providers = [
                     v-if="turn.subtitle"
                   >  <span
                     class="term-panel-sub"
-                  >({{ turn.subtitle }})</span></template>
+                  ><span class="term-panel-sub-emoji">{{ subEmoji(turn.subtitle) }}</span> {{ subLabel(turn.subtitle) }}</span></template>
                 </span>
                 <div class="term-panel-body">
                   <p>{{ turn.text }}</p>

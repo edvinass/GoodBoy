@@ -222,7 +222,7 @@ def test_print_agent_with_subtitle(capsys):
     ui.print_agent("ls -la", subtitle="shell")
     out = capsys.readouterr().out
     assert "Neo" in out
-    assert "shell" in out
+    assert "Shell" in out
     assert "ls -la" in out
 
 
@@ -286,7 +286,7 @@ def test_print_agent_step_hides_shell_without_debug(capsys):
     ui.print_agent_step(step)
     out = capsys.readouterr().out
     assert "curl" not in out
-    assert "shell" not in out
+    assert "Shell" not in out
 
 
 def test_print_agent_step_shows_shell_with_debug(capsys):
@@ -295,7 +295,7 @@ def test_print_agent_step_shows_shell_with_debug(capsys):
     ui.print_agent_step(step)
     out = capsys.readouterr().out
     assert "curl -s example.com" in out
-    assert "shell" in out
+    assert "Shell" in out
 
 
 def test_print_agent_step_shows_shell_with_show_commands(capsys):
@@ -304,7 +304,7 @@ def test_print_agent_step_shows_shell_with_show_commands(capsys):
     ui.print_agent_step(step)
     out = capsys.readouterr().out
     assert "curl -s example.com" in out
-    assert "shell" in out
+    assert "Shell" in out
 
 
 def test_print_agent_step_shows_full_python_with_show_commands(capsys):
@@ -317,7 +317,7 @@ def test_print_agent_step_shows_full_python_with_show_commands(capsys):
     assert "urllib.request" in out
     assert "print(json.load" in out
     assert "..." not in out
-    assert "python" in out
+    assert "Python" in out
 
 
 def test_print_agent_python_code_wraps(capsys):
@@ -661,7 +661,7 @@ def test_print_plan_shows_plan_items(capsys):
     out = capsys.readouterr().out
     assert "[✓] 1." in out
     assert "[→] 2. edit file" in out
-    assert "(plan)" in out
+    assert "Plan" in out
 
 
 def test_print_agent_step_does_not_show_plan_items(capsys):
@@ -675,7 +675,7 @@ def test_print_agent_step_does_not_show_plan_items(capsys):
         ),
     )
     out = capsys.readouterr().out
-    assert "(plan)" not in out
+    assert "Plan" not in out
 
 
 def test_print_tool_result_hidden_without_debug(capsys):

@@ -604,6 +604,11 @@ body {
   font-weight: 400;
 }
 
+.term-panel-sub-emoji {
+  font-style: normal;
+  margin-right: 0.1rem;
+}
+
 .term-panel-body {
   color: var(--text);
 }
