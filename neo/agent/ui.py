@@ -10,10 +10,11 @@ import sys
 import termios
 import threading
 import time
+import colorsys
 import tty
 from contextlib import contextmanager
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator, Literal
 
 import click
@@ -132,6 +133,10 @@ class ThinkingUpdater:
     _plan_step: str | None = None
     _status: Any = None
     _non_tty_printed: bool = False
+    _frame: int = 0
+    _animation_thread: threading.Thread | None = None
+    _stop_event: threading.Event = field(default_factory=threading.Event)
+    _gradient_text: Text = field(default_factory=Text)
 
     def update(self, label: str) -> None:
         cleaned = label.strip().rstrip(".…")
@@ -149,8 +154,11 @@ class ThinkingUpdater:
             self._console.print(rendered)
 
     def _render(self) -> RenderableType:
-        header = Text.from_markup(
-            f"[agent]◆ Neo[/] [muted]{self._label}…[/]"
+        gradient = self._compute_gradient()
+        header = Text.assemble(
+            ("◆ Neo ", "agent"),
+            gradient,
+            ("…", "muted"),
         )
         if not self._plan_step:
             return header
@@ -158,6 +166,42 @@ class ThinkingUpdater:
             header,
             Text.from_markup(f"  [muted]{self._plan_step}[/]"),
         )
+
+    def _compute_gradient(self) -> Text:
+        """Return the label text with a left-to-right colour sweep."""
+        label = self._label
+        result = Text()
+        phase = self._frame * 0.05
+        for i, ch in enumerate(label):
+            hue = (phase + i * 0.3) % 1.0
+            r, g, b = colorsys.hsv_to_rgb(hue, 0.9, 1.0)
+            colour = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+            result.append(ch, style=colour)
+        return result
+
+    def _animate(self) -> None:
+        """Continuously update the gradient while the animation is active."""
+        while not self._stop_event.is_set():
+            self._frame += 1
+            self._refresh()
+            time.sleep(0.08)
+
+    def start_animation(self) -> None:
+        """Start the background gradient animation."""
+        if self._animation_thread is not None and self._animation_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._animation_thread = threading.Thread(
+            target=self._animate, daemon=True
+        )
+        self._animation_thread.start()
+
+    def stop_animation(self) -> None:
+        """Stop the background gradient animation and wait for the thread."""
+        self._stop_event.set()
+        if self._animation_thread is not None:
+            self._animation_thread.join(timeout=0.5)
+            self._animation_thread = None
 
 
 def progress_label_for_step(step: AgentStep) -> str:
@@ -2116,7 +2160,11 @@ class ConversationUI:
                     spinner="dots",
                 ) as status:
                     updater._status = status
-                    yield updater
+                    updater.start_animation()
+                    try:
+                        yield updater
+                    finally:
+                        updater.stop_animation()
         finally:
             self._transient_ui = False
             self._sync_redraw()
