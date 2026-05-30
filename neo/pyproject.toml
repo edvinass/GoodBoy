@@ -1,6 +1,6 @@
 [project]
 name = "neo"
-version = "0.1.6"
+version = "0.1.7"
 description = "Local autonomous agent harness — shell and Python on your machine"
 requires-python = ">=3.10"
 dependencies = [
