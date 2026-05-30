@@ -532,7 +532,8 @@ def test_thinking_updater_render_includes_plan_step():
     )
     rendered = updater._render()
     assert isinstance(rendered, Group)
-    assert "Neo" in rendered.renderables[0].plain
+    assert updater._label == "reading files"
+    assert rendered.renderables[0].plain.endswith("…")
     assert '2/4 step "map modules"' in rendered.renderables[1].plain
 
 

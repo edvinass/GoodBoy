@@ -10,7 +10,6 @@ import sys
 import termios
 import threading
 import time
-import colorsys
 import tty
 from contextlib import contextmanager
 from pathlib import Path
@@ -136,8 +135,6 @@ class ThinkingUpdater:
     _frame: int = 0
     _animation_thread: threading.Thread | None = None
     _stop_event: threading.Event = field(default_factory=threading.Event)
-    _gradient_text: Text = field(default_factory=Text)
-
     def update(self, label: str) -> None:
         cleaned = label.strip().rstrip(".…")
         if not cleaned or cleaned == self._label:
@@ -166,18 +163,45 @@ class ThinkingUpdater:
             Text.from_markup(f"  [muted]{self._plan_step}[/]"),
         )
 
+    def _matrix_animation_active(self) -> bool:
+        thread = self._animation_thread
+        return thread is not None and thread.is_alive()
+
     def _compute_gradient(self) -> Text:
-        """Return the label text with a subtle light-to-dark gray-white sweep."""
+        """Matrix-style rain sweeping left to right across the status label.
+
+        The label's own characters stay visible — only their colour shifts as a
+        bright head with a fading green trail passes over them.
+        """
         label = self._label
+        n = len(label)
+        if n == 0:
+            return Text()
+
+        if not self._matrix_animation_active():
+            return Text(label, style=_BRAND_STYLE)
+
+        # Head advances ~1.2 cells per frame; trail length matches the intro rain.
+        head = (self._frame * 1.2) % (n + 7)
+        trail_len = 7
         result = Text()
-        n = max(len(label), 1)
-        phase = self._frame * 0.05
+
         for i, ch in enumerate(label):
-            t = (i / n - phase) % 1.0
-            lightness = 1.0 - t * 0.4
-            r, g, b = colorsys.hls_to_rgb(0.0, lightness, 0.0)
-            colour = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
-            result.append(ch, style=colour)
+            dist = head - i
+            if dist < 0 or dist > trail_len:
+                style = "rgb(0,55,14)"
+            elif dist < 1:
+                style = "bold rgb(220,255,225)"
+            elif dist < 2:
+                style = _BRAND_STYLE
+            elif dist < 4:
+                style = "rgb(0,160,40)"
+            elif dist < 6:
+                style = "rgb(0,90,20)"
+            else:
+                style = "rgb(0,55,14)"
+            result.append(ch, style=style)
+
         return result
 
     def _animate(self) -> None:
@@ -185,7 +209,7 @@ class ThinkingUpdater:
         while not self._stop_event.is_set():
             self._frame += 1
             self._refresh()
-            time.sleep(0.08)
+            time.sleep(0.06)
 
     def start_animation(self) -> None:
         """Start the background gradient animation."""
