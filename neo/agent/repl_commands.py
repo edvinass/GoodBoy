@@ -47,7 +47,7 @@ REPL_COMMANDS: tuple[ReplCommand, ...] = (
     ),
     ReplCommand(
         "commands",
-        "Toggle showing shell/Python commands (no output)",
+        "Toggle showing tool commands (no output)",
         ("cmds", "show-commands"),
     ),
     ReplCommand(

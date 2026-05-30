@@ -320,7 +320,7 @@ def ensure_configured() -> None:
     "-c",
     "show_commands",
     is_flag=True,
-    help="Print shell/Python commands the agent runs (not their output).",
+    help="Print the tool commands the agent runs (not their output).",
 )
 @click.option(
     "-d",

@@ -237,6 +237,101 @@ def progress_label_for_step(step: AgentStep) -> str:
     return activity_label(step, phase="progress")
 
 
+def _format_path_range(path: str, start: int | None, end: int | None) -> str:
+    if start is None and end is None:
+        return path
+    if start is not None and end is not None:
+        return f"{path}:{start}-{end}"
+    if start is not None:
+        return f"{path}:{start}-"
+    return f"{path}:-{end}"
+
+
+def _shell_quote(value: str) -> str:
+    """Single-quote ``value`` for display when it contains shell metacharacters."""
+    if not value:
+        return "''"
+    if all(ch.isalnum() or ch in "-_./:=@%+," for ch in value):
+        return value
+    escaped = value.replace("'", "'\\''")
+    return f"'{escaped}'"
+
+
+def command_summary_for_step(step: AgentStep) -> str | None:
+    """CLI-style summary of a harness tool invocation for ``/commands`` mode.
+
+    Returns ``None`` when the step is not a harness tool (routing, planning,
+    terminal actions, etc.) or lacks the fields needed to render a summary.
+    """
+    action = step.action
+    if action == AgentAction.RUN_SHELL:
+        return step.command.strip() if step.command else None
+    if action == AgentAction.RUN_PYTHON:
+        return step.code.strip() if step.code else None
+    if action == AgentAction.READ_FILE:
+        if not step.path:
+            return None
+        return f"read_file {_format_path_range(step.path, step.start_line, step.end_line)}"
+    if action == AgentAction.SEARCH_CODE:
+        if not step.pattern:
+            return None
+        parts = ["search_code", _shell_quote(step.pattern)]
+        if step.glob:
+            parts.append(f"--glob {_shell_quote(step.glob)}")
+        if step.case_insensitive:
+            parts.append("-i")
+        if step.max_results:
+            parts.append(f"--max {step.max_results}")
+        return " ".join(parts)
+    if action == AgentAction.LIST_FILES:
+        path = step.path or "."
+        parts = ["list_files", _shell_quote(path)]
+        if step.max_depth is not None:
+            parts.append(f"--max-depth {step.max_depth}")
+        return " ".join(parts)
+    if action == AgentAction.GIT:
+        op = (step.git_op or "").strip()
+        if not op:
+            return None
+        parts = ["git", op]
+        if step.staged:
+            parts.append("--staged")
+        if step.path:
+            parts.append(_shell_quote(step.path))
+        return " ".join(parts)
+    if action == AgentAction.STR_REPLACE:
+        if not step.path:
+            return None
+        return f"str_replace {_format_path_range(step.path, step.start_line, step.end_line)}"
+    if action == AgentAction.APPLY_PATCH:
+        if not step.path:
+            return None
+        return f"apply_patch {_shell_quote(step.path)}"
+    if action == AgentAction.DELETE_FILE:
+        if not step.path:
+            return None
+        return f"delete_file {_shell_quote(step.path)}"
+    if action == AgentAction.MOVE_FILE:
+        if not step.path or not step.dest_path:
+            return None
+        return f"move_file {_shell_quote(step.path)} → {_shell_quote(step.dest_path)}"
+    return None
+
+
+_COMMAND_SUBTITLES: dict[AgentAction, str] = {
+    AgentAction.RUN_SHELL: "shell",
+    AgentAction.RUN_PYTHON: "python",
+    AgentAction.READ_FILE: "read_file",
+    AgentAction.SEARCH_CODE: "search_code",
+    AgentAction.LIST_FILES: "list_files",
+    AgentAction.GIT: "git",
+    AgentAction.STR_REPLACE: "str_replace",
+    AgentAction.APPLY_PATCH: "apply_patch",
+    AgentAction.DELETE_FILE: "delete_file",
+    AgentAction.MOVE_FILE: "move_file",
+}
+
+
 def activity_label(step: AgentStep, *, phase: Literal["progress", "done"]) -> str:
     """Human-facing status text for harness tool progress or completion."""
     name = Path(step.path).name if step.path else None
@@ -2029,10 +2124,8 @@ class ConversationUI:
                 self.print_notice(
                     f"Hosted tools enabled: {', '.join(step.tools)}."
                 )
-            elif self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
-                self.print_agent(step.command, subtitle="shell")
-            elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
-                self.print_agent(step.code.strip(), subtitle="python")
+            elif self._maybe_print_tool_command(step):
+                pass
             elif self.show_model and (model or reasoning):
                 routing_rows: list[tuple[str, str]] = []
                 if model:
@@ -2056,10 +2149,8 @@ class ConversationUI:
         if self._show_thoughts and step.thought:
             self._record("thought", text=step.thought)
 
-        if self._show_tool_commands and step.action == AgentAction.RUN_SHELL and step.command:
-            self.print_agent(step.command, subtitle="shell")
-        elif self._show_tool_commands and step.action == AgentAction.RUN_PYTHON and step.code:
-            self.print_agent(step.code.strip(), subtitle="python")
+        if self._maybe_print_tool_command(step):
+            pass
         elif step.action in (
             AgentAction.SWITCH_TOOLS,
             AgentAction.SWITCH_API,
@@ -2074,6 +2165,21 @@ class ConversationUI:
             AgentAction.FAILED,
         ):
             self.print_agent(step.message)
+
+    def _maybe_print_tool_command(self, step: AgentStep) -> bool:
+        """Print a CLI-style command panel for harness tool actions when enabled.
+
+        Returns True when a panel was rendered so callers can suppress other
+        branches that would otherwise compete for the same slot.
+        """
+        if not self._show_tool_commands:
+            return False
+        summary = command_summary_for_step(step)
+        if not summary:
+            return False
+        subtitle = _COMMAND_SUBTITLES.get(step.action, step.action.value)
+        self.print_agent(summary, subtitle=subtitle)
+        return True
 
     @property
     def _show_thoughts(self) -> bool:

@@ -39,6 +39,7 @@ from agent.ui import (
     _user_input_placeholder,
     _wrap_long_lines,
     activity_label,
+    command_summary_for_step,
     format_pasted_text_label,
 )
 
@@ -318,6 +319,155 @@ def test_print_agent_step_shows_full_python_with_show_commands(capsys):
     assert "print(json.load" in out
     assert "..." not in out
     assert "Python" in out
+
+
+def test_command_summary_covers_all_harness_tools():
+    cases = [
+        (AgentStep(action=AgentAction.RUN_SHELL, command="git status"), "git status"),
+        (AgentStep(action=AgentAction.RUN_PYTHON, code="print(1)"), "print(1)"),
+        (
+            AgentStep(action=AgentAction.READ_FILE, path="src/foo.py"),
+            "read_file src/foo.py",
+        ),
+        (
+            AgentStep(
+                action=AgentAction.READ_FILE,
+                path="src/foo.py",
+                start_line=10,
+                end_line=20,
+            ),
+            "read_file src/foo.py:10-20",
+        ),
+        (
+            AgentStep(
+                action=AgentAction.SEARCH_CODE,
+                pattern="hello world",
+                glob="*.py",
+                case_insensitive=True,
+                max_results=10,
+            ),
+            "search_code 'hello world' --glob '*.py' -i --max 10",
+        ),
+        (
+            AgentStep(action=AgentAction.LIST_FILES, path="src", max_depth=3),
+            "list_files src --max-depth 3",
+        ),
+        (
+            AgentStep(
+                action=AgentAction.GIT,
+                git_op="diff",
+                staged=True,
+                path="neo/agent/ui.py",
+            ),
+            "git diff --staged neo/agent/ui.py",
+        ),
+        (
+            AgentStep(
+                action=AgentAction.STR_REPLACE,
+                path="foo.py",
+                old_string="x",
+                new_string="y",
+            ),
+            "str_replace foo.py",
+        ),
+        (
+            AgentStep(action=AgentAction.APPLY_PATCH, path="foo.py", patch="---"),
+            "apply_patch foo.py",
+        ),
+        (
+            AgentStep(action=AgentAction.DELETE_FILE, path="foo.py"),
+            "delete_file foo.py",
+        ),
+        (
+            AgentStep(
+                action=AgentAction.MOVE_FILE,
+                path="src/foo.py",
+                dest_path="src/bar.py",
+            ),
+            "move_file src/foo.py → src/bar.py",
+        ),
+    ]
+    for step, expected in cases:
+        assert command_summary_for_step(step) == expected, step.action
+
+
+def test_command_summary_returns_none_for_non_tool_actions():
+    assert (
+        command_summary_for_step(
+            AgentStep(action=AgentAction.TASK_COMPLETE, message="done")
+        )
+        is None
+    )
+    assert (
+        command_summary_for_step(
+            AgentStep(action=AgentAction.REMEMBER, memory=["note"])
+        )
+        is None
+    )
+    plan = [PlanItem(id="1", text="do", status=PlanItemStatus.PENDING)]
+    assert (
+        command_summary_for_step(
+            AgentStep(action=AgentAction.UPDATE_PLAN, plan_items=plan)
+        )
+        is None
+    )
+
+
+def test_print_agent_step_shows_read_file_with_show_commands(capsys):
+    ui = ConversationUI(show_commands=True, show_thoughts=False)
+    step = AgentStep(
+        action=AgentAction.READ_FILE,
+        path="src/foo.py",
+        start_line=10,
+        end_line=20,
+    )
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "read_file src/foo.py:10-20" in out
+
+
+def test_print_agent_step_shows_git_with_show_commands(capsys):
+    ui = ConversationUI(show_commands=True, show_thoughts=False)
+    step = AgentStep(
+        action=AgentAction.GIT,
+        git_op="diff",
+        staged=True,
+        path="neo/agent/ui.py",
+    )
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "git diff --staged neo/agent/ui.py" in out
+
+
+def test_print_agent_step_shows_search_code_with_show_commands(capsys):
+    ui = ConversationUI(show_commands=True, show_thoughts=False)
+    step = AgentStep(
+        action=AgentAction.SEARCH_CODE,
+        pattern="foo bar",
+        glob="*.py",
+    )
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "search_code 'foo bar' --glob '*.py'" in out
+
+
+def test_print_agent_step_hides_read_file_without_show_commands(capsys):
+    ui = ConversationUI(show_commands=False, show_thoughts=False)
+    step = AgentStep(action=AgentAction.READ_FILE, path="src/foo.py")
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "read_file" not in out
+    assert "src/foo.py" not in out
+
+
+def test_print_agent_step_shows_tool_command_in_verbose_with_show_commands(capsys):
+    ui = ConversationUI(verbose=True, show_commands=True)
+    step = AgentStep(
+        action=AgentAction.GIT, git_op="status", thought="checking git"
+    )
+    ui.print_agent_step(step)
+    out = capsys.readouterr().out
+    assert "git status" in out
 
 
 def test_print_agent_python_code_wraps(capsys):

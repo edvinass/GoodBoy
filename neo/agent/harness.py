@@ -268,7 +268,7 @@ class AgentHarness:
         self._loop.refresh_system_prompt()
         if self._ui.show_commands:
             self._ui.print_notice(
-                "Command visibility on — shell and Python runs are shown; output is hidden."
+                "Command visibility on — tool commands are shown; output is hidden."
             )
         else:
             self._ui.print_notice("Command visibility off.")
