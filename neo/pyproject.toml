@@ -4,6 +4,7 @@ version = "0.1.6"
 description = "Local autonomous agent harness — shell and Python on your machine"
 requires-python = ">=3.10"
 dependencies = [
+    "anthropic>=0.40",
     "click>=8.1",
     "openai>=1.82",
     "pydantic>=2.0",

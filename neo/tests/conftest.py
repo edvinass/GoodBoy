@@ -9,7 +9,7 @@ import pytest
 from settings import ENV_FILE, get_settings, load_env
 
 # Keys that ``Settings.from_env`` / ``load_env`` may read from the environment.
-_ISOLATED_ENV_PREFIXES = ("NEO_", "OPENAI_", "DEEPSEEK_")
+_ISOLATED_ENV_PREFIXES = ("NEO_", "OPENAI_", "DEEPSEEK_", "ANTHROPIC_")
 _ISOLATED_ENV_KEYS = frozenset(
     {
         "SSL_CERT_FILE",

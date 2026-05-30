@@ -24,7 +24,7 @@ def test_get_version_matches_pyproject():
     assert get_version() == expected
 
 
-def test_format_startup_includes_version_model_and_description():
+def test_format_startup_includes_version_model_and_tip():
     text = format_startup(model="gpt-5.4-nano")
     assert "Neo" in text
     assert get_version() in text
@@ -32,16 +32,16 @@ def test_format_startup_includes_version_model_and_description():
     assert "Model" in text
     assert "Routing" not in text
     assert "session" not in text.lower()
-    assert DESCRIPTION == "Autonomous coding agent"
-    assert DESCRIPTION in text
+    # The banner now shows a random tip from TIPS instead of a static DESCRIPTION
+    from agent.banner import TIPS
+    assert any(tip in text for tip in TIPS)
 
 
 def test_format_startup_renders_reasoning_effort_when_provided():
     text = format_startup(model="gpt-5.4-nano", reasoning_effort="low")
     assert "Routing" not in text
-    assert "/autoswitch" not in text
-    assert "/model" not in text
-    assert "/reasoning" not in text
+    # The random tip may contain slash commands like /model or /reasoning,
+    # so we only assert that "low" is rendered as the reasoning effort line.
     assert "low" in text
 
 

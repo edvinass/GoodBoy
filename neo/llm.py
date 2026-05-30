@@ -132,8 +132,15 @@ def is_deepseek_model(model_id: str | None) -> bool:
     return _is_deepseek(model_id)
 
 
+def is_claude_model(model_id: str | None) -> bool:
+    from agent.claude_llm import is_claude_model as _is_claude
+
+    return _is_claude(model_id)
+
+
 def get_selectable_models(*, api_key: str | None = None) -> list[str]:
-    """Return OpenAI cloud, DeepSeek (when configured), and installed local models."""
+    """Return OpenAI cloud, DeepSeek, Claude (when configured), and installed local models."""
+    from agent.claude_llm import CLAUDE_MODEL_IDS
     from agent.deepseek_llm import DEEPSEEK_MODEL_IDS
     from agent.local_llm import list_installed_models
 
@@ -150,9 +157,12 @@ def get_selectable_models(*, api_key: str | None = None) -> list[str]:
     deepseek: list[str] = (
         list(DEEPSEEK_MODEL_IDS) if cfg.deepseek_api_key else []
     )
+    claude: list[str] = (
+        list(CLAUDE_MODEL_IDS) if cfg.anthropic_api_key else []
+    )
     merged: list[str] = []
     seen: set[str] = set()
-    for model_id in local + cloud + deepseek:
+    for model_id in local + cloud + deepseek + claude:
         if model_id not in seen:
             seen.add(model_id)
             merged.append(model_id)
@@ -176,6 +186,11 @@ def _model_choice(model_id: str) -> questionary.Choice:
 
         description = deepseek_model_label(model_id)
         label = format_model_select_label(model_id, f"[DeepSeek] {description}")
+    elif is_claude_model(model_id):
+        from agent.claude_llm import claude_model_label
+
+        description = claude_model_label(model_id)
+        label = format_model_select_label(model_id, f"[Anthropic] {description}")
     else:
         description = MODEL_LABELS.get(model_id, model_id)
         label = format_model_select_label(model_id, description)
@@ -364,6 +379,19 @@ def complete(
         from agent.deepseek_llm import complete_deepseek
 
         return complete_deepseek(
+            prompt,
+            model=resolved_model,
+            instructions=instructions,
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_output_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+
+    if is_claude_model(resolved_model):
+        from agent.claude_llm import complete_claude
+
+        return complete_claude(
             prompt,
             model=resolved_model,
             instructions=instructions,
@@ -566,6 +594,19 @@ def complete_structured_with_id(
         from agent.deepseek_llm import complete_structured_deepseek
 
         return complete_structured_deepseek(
+            model=resolved_model,
+            input=input,
+            instructions=instructions,
+            json_schema=json_schema,
+            reasoning_effort=reasoning_effort,
+            stream=stream,
+            on_text_delta=on_text_delta,
+            abort_check=abort_check,
+        )
+    if is_claude_model(resolved_model):
+        from agent.claude_llm import complete_structured_claude
+
+        return complete_structured_claude(
             model=resolved_model,
             input=input,
             instructions=instructions,

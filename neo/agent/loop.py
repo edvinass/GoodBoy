@@ -75,6 +75,7 @@ from llm import (
     complete_structured_with_id,
     format_api_connection_error,
     get_selectable_models,
+    is_claude_model,
     is_deepseek_model,
     is_local_model,
 )
@@ -158,6 +159,7 @@ class AgentLoop:
             and llm_call is None
             and not is_local_model(self._default_model)
             and not is_deepseek_model(self._default_model)
+            and not is_claude_model(self._default_model)
         )
         self._last_response_id: str | None = None
         self._chain_watermark: ContextWatermark | None = None
@@ -228,7 +230,11 @@ class AgentLoop:
         self._hosted_tools = ()
         self._reset_response_chain()
         self.recent_full_turns = self._window_for_model(model)
-        if is_local_model(model) or is_deepseek_model(model):
+        if (
+            is_local_model(model)
+            or is_deepseek_model(model)
+            or is_claude_model(model)
+        ):
             self._chain_enabled = False
         elif self._llm_call is None:
             self._chain_enabled = get_settings().response_chain_enabled
@@ -342,6 +348,8 @@ class AgentLoop:
             effort = self._default_reasoning
             local_call = is_local_model(call_model)
             deepseek_call = is_deepseek_model(call_model)
+            claude_call = is_claude_model(call_model)
+            non_openai_call = local_call or deepseek_call or claude_call
             if local_call:
                 call_reasoning = None
             else:
@@ -355,9 +363,9 @@ class AgentLoop:
                 "model": call_model,
                 "reasoning_effort": call_reasoning,
             }
-            if self._hosted_tools and not local_call and not deepseek_call:
+            if self._hosted_tools and not non_openai_call:
                 llm_kwargs["tools"] = list(self._hosted_tools)
-            if prev_id is not None and not local_call and not deepseek_call:
+            if prev_id is not None and not non_openai_call:
                 llm_kwargs["previous_response_id"] = prev_id
 
             if session_log is not None:
@@ -1237,6 +1245,11 @@ class AgentLoop:
             if is_deepseek_model(call_model):
                 return (
                     "switch_tools is not available with DeepSeek models. "
+                    "Use run_shell with rg/grep for codebase search."
+                )
+            if is_claude_model(call_model):
+                return (
+                    "switch_tools is not available with Claude models. "
                     "Use run_shell with rg/grep for codebase search."
                 )
 

@@ -239,6 +239,77 @@ const activeId = ref(conversations[0].id)
 const active = computed(
   () => conversations.find((c) => c.id === activeId.value) ?? conversations[0],
 )
+
+const features = [
+  {
+    title: 'Runs in your terminal',
+    body:
+      'Neo is a single CLI you launch from any project. It reads files, runs shell and Python, and edits code in place — no editor plugin, no daemon, no cloud sandbox.',
+  },
+  {
+    title: 'Bring your own model',
+    body:
+      'Mix and match providers per session. Use a frontier model for hard refactors, a cheap nano model for routine edits, or a local GGUF model when you want to stay offline.',
+  },
+  {
+    title: 'Plan mode & reasoning control',
+    body:
+      'Toggle between auto / off / always plan mode, and pick reasoning effort (low → xhigh) on the fly. Neo plans before it edits and verifies before it claims done.',
+  },
+  {
+    title: 'Safe by default',
+    body:
+      'Risky shell commands ask for confirmation. Every session writes a structured log under ~/.neo/logs that you can replay in the built-in viewer.',
+  },
+]
+
+const providers = [
+  {
+    name: 'OpenAI',
+    badge: 'API',
+    desc: 'Responses API with hosted web_search, file_search, code_interpreter, image_generation, and MCP tools.',
+    models: [
+      { id: 'gpt-5.5', note: 'frontier · premium' },
+      { id: 'gpt-5.4', note: 'frontier · high' },
+      { id: 'gpt-5.4-mini', note: 'frontier · medium' },
+      { id: 'gpt-5.4-nano', note: 'frontier · low · default' },
+      { id: 'gpt-5 · gpt-5-mini · gpt-5-nano', note: 'previous gen' },
+      { id: 'gpt-4.1 · gpt-4.1-mini · gpt-4.1-nano', note: 'long context · general' },
+    ],
+  },
+  {
+    name: 'Anthropic',
+    badge: 'API',
+    desc: 'Claude with adaptive thinking and 1M-token context for long-horizon agentic work.',
+    models: [
+      { id: 'claude-opus-4-8', note: 'frontier · premium' },
+      { id: 'claude-opus-4-7', note: 'frontier · premium' },
+      { id: 'claude-sonnet-4-6', note: 'balanced default' },
+      { id: 'claude-haiku-4-5', note: 'fast · cheap' },
+    ],
+  },
+  {
+    name: 'DeepSeek',
+    badge: 'API',
+    desc: 'Cost-efficient 1M-context models with optional thinking mode.',
+    models: [
+      { id: 'deepseek-v4-pro', note: 'reasoning · medium' },
+      { id: 'deepseek-v4-flash', note: 'general · minimal' },
+    ],
+  },
+  {
+    name: 'Local (GGUF)',
+    badge: 'on-device',
+    desc: 'In-process inference via llama.cpp. No keys, no network, no daemon — models download on first use.',
+    models: [
+      { id: 'qwen2.5-coder-7b', note: 'coding · default · ~4.7 GB' },
+      { id: 'qwen2.5-coder-14b', note: 'coding · 16 GB+ RAM' },
+      { id: 'deepseek-coder-v2-lite', note: 'MoE · 16 GB+ RAM' },
+      { id: 'llama-3.2-3b · phi-3.5-mini', note: 'small · fast' },
+      { id: 'qwen2.5-7b · mistral-7b · gemma-2-9b · granite-3.1-8b', note: 'general' },
+    ],
+  },
+]
 </script>
 
 <template>
@@ -246,9 +317,19 @@ const active = computed(
     <header class="header">
       <canvas ref="rainCanvas" class="header-rain" aria-hidden="true"></canvas>
       <div class="header-content">
-        <div>
-          <h1>Neo</h1>
-          <p class="tagline">Local autonomous agent harness for your machine</p>
+        <div class="header-text">
+          <span class="eyebrow">Neo · v0.1.6</span>
+          <h1>NEO - The terminal coding agent</h1>
+          <p class="tagline">
+            A local-first AI pair-programmer that lives in your shell. Bring your own
+            OpenAI, Anthropic, or DeepSeek key — or run entirely offline on a local model.
+          </p>
+          <ul class="header-badges" aria-label="Supported providers">
+            <li>OpenAI</li>
+            <li>Anthropic</li>
+            <li>DeepSeek</li>
+            <li>Local · GGUF</li>
+          </ul>
         </div>
       </div>
     </header>
@@ -274,15 +355,49 @@ const active = computed(
       </section>
 
       <section class="steps">
-        <h3>After install</h3>
+        <h3 class="section-eyebrow">After install</h3>
         <ol>
           <li><code>neo</code> — first run configures API key and default model</li>
           <li><code>cd your-project && neo</code> — run the agent in any repo</li>
         </ol>
       </section>
 
+      <section class="features" aria-labelledby="features-heading">
+        <h3 id="features-heading" class="section-eyebrow">Why Neo</h3>
+        <div class="feature-grid">
+          <article v-for="f in features" :key="f.title" class="feature-card">
+            <h4>{{ f.title }}</h4>
+            <p>{{ f.body }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="providers" aria-labelledby="providers-heading">
+        <h3 id="providers-heading" class="section-eyebrow">Supported APIs &amp; models</h3>
+        <p class="section-lead">
+          Pick any provider at <code>neo setup</code> or switch mid-session with
+          <code>/model</code>. All models share the same tool surface — shell, Python,
+          file edits, plan mode, and structured logging.
+        </p>
+        <div class="provider-grid">
+          <article v-for="p in providers" :key="p.name" class="provider-card">
+            <header class="provider-head">
+              <h4>{{ p.name }}</h4>
+              <span class="provider-badge">{{ p.badge }}</span>
+            </header>
+            <p class="provider-desc">{{ p.desc }}</p>
+            <ul class="model-list">
+              <li v-for="m in p.models" :key="m.id">
+                <code>{{ m.id }}</code>
+                <span class="model-note">{{ m.note }}</span>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
       <section class="examples" aria-labelledby="examples-heading">
-        <h3 id="examples-heading" class="examples-head">See it in action</h3>
+        <h3 id="examples-heading" class="section-eyebrow">See it in action</h3>
 
         <div class="example-tabs" role="tablist">
           <button

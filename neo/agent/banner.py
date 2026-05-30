@@ -41,12 +41,12 @@ def _matrix_art() -> str:
 
 TIPS = [
     "Tip: Press Ctrl+C to interrupt safely",
+    "Tip: Use `/help` to list all slash commands",
     "Tip: Use `/model` to switch LLM providers",
-    "Tip: You can resume interrupted sessions with `/resume`",
-    "Tip: Neo can run tests, lint, and install packages",
-    "Tip: Use markdown in task_complete messages for readability",
-    "Tip: Search the codebase with refactor-aware tools",
-    "Tip: Neo remembers your preferences across sessions",
+    "Tip: Use `/reasoning` to set reasoning effort",
+    "Tip: Use `/plan` to toggle plan mode (auto/off/always)",
+    "Tip: Use `/clear` to reset conversation history",
+    "Tip: Use `/retry` to re-run the last task",
 ]
 
 
