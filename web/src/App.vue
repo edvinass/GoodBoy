@@ -119,15 +119,16 @@ async function copy(text) {
 }
 
 const bannerLines = [
-  '     .---.     .---.',
-  '    /     \\   /     \\',
-  '   |   o   | |   o   |',
-  '    \\_____/   \\_____/',
+  '███╗   ██╗ ███████╗  ██████╗ ',
+  '████╗  ██║ ██╔════╝ ██╔═══██╗',
+  '██╔██╗ ██║ █████╗   ██║   ██║',
+  '██║╚██╗██║ ██╔══╝   ██║   ██║',
+  '██║ ╚████║ ███████╗ ╚██████╔╝',
+  '╚═╝  ╚═══╝ ╚══════╝  ╚═════╝ ',
   '',
-  'Neo v0.1.0',
-  'Model gpt-5',
-  'Reasoning medium',
-  'Autonomous coding agent',
+  'Neo v0.1.6',
+  'Model gpt-5.4-nano',
+  'Tip: Press Ctrl+C to interrupt safely',
 ]
 
 const conversations = [
@@ -141,7 +142,6 @@ const conversations = [
         subtitle: 'thought',
         text: 'I should run the failing test first to see the actual error before guessing what changed.',
       },
-      { type: 'activity', text: 'ran pytest neo/tests/test_routing.py -x' },
       {
         role: 'agent',
         subtitle: 'thought',
@@ -153,7 +153,18 @@ const conversations = [
       },
       { role: 'user', text: 'Yes, please.' },
       { type: 'activity', text: 'wrote test_routing.py' },
-      { type: 'activity', text: 'ran pytest neo/tests/test_routing.py' },
+      {
+        type: 'diff',
+        path: 'test_routing.py',
+        hunk: 'lines 8–12',
+        lines: [
+          { kind: 'del', n: 8, text: 'assert router.route(query) == ("openai", "gpt-4")' },
+          { kind: 'add', n: 8, text: 'decision = router.route(query)' },
+          { kind: 'add', n: 9, text: 'assert isinstance(decision, RouteDecision)' },
+          { kind: 'add', n: 10, text: 'assert decision.provider == "openai"' },
+          { kind: 'add', n: 11, text: 'assert decision.model == "gpt-4"' },
+        ],
+      },
       {
         role: 'agent',
         text: 'Done — 12/12 passing. Want me to run the full suite?',
@@ -177,7 +188,23 @@ const conversations = [
       },
       { role: 'user', text: 'Go for it.' },
       { type: 'activity', text: 'wrote llm.py' },
-      { type: 'activity', text: 'ran pytest neo/tests/test_llm.py' },
+      {
+        type: 'diff',
+        path: 'llm.py',
+        hunk: 'lines 42–51',
+        lines: [
+          { kind: 'del', n: 42, text: 'for attempt in range(3):' },
+          { kind: 'del', n: 43, text: '    try:' },
+          { kind: 'del', n: 44, text: '        return openai.responses.create(...)' },
+          { kind: 'del', n: 45, text: '    except RetryableError:' },
+          { kind: 'del', n: 46, text: '        time.sleep([0.5, 1.0, 2.0][attempt])' },
+          { kind: 'add', n: 42, text: 'return with_retries(' },
+          { kind: 'add', n: 43, text: '    lambda: openai.responses.create(...),' },
+          { kind: 'add', n: 44, text: '    attempts=3,' },
+          { kind: 'add', n: 45, text: '    backoff=(0.5, 1.0, 2.0),' },
+          { kind: 'add', n: 46, text: ')' },
+        ],
+      },
       {
         role: 'agent',
         text: 'Done — net 24 fewer lines, all 9 LLM tests still pass. Timings unchanged.',
@@ -189,7 +216,7 @@ const conversations = [
     label: 'Explain',
     turns: [
       { role: 'user', text: 'How does Neo decide which model to use for a given turn?' },
-      { type: 'activity', text: 'read neo/agent/routing.py' },
+      { type: 'activity', text: 'read routing.py' },
       {
         role: 'agent',
         subtitle: 'thought',
@@ -219,7 +246,6 @@ const active = computed(
     <header class="header">
       <canvas ref="rainCanvas" class="header-rain" aria-hidden="true"></canvas>
       <div class="header-content">
-        <img class="logo" src="/logo.svg" alt="" aria-hidden="true" />
         <div>
           <h1>Neo</h1>
           <p class="tagline">Local autonomous agent harness for your machine</p>
@@ -320,14 +346,40 @@ const active = computed(
                 <span class="term-activity-mark">◦</span>
                 <span>{{ turn.text }}</span>
               </div>
+
+              <div v-else-if="turn.type === 'diff'" class="term-panel term-panel-diff">
+                <span class="term-panel-title">
+                  <span class="term-panel-emoji">◆</span> Neo  <span
+                    class="term-panel-sub"
+                  >(changes · {{ turn.path }})</span>
+                </span>
+                <div class="term-panel-body">
+                  <div class="term-diff-hunk">{{ turn.hunk }}</div>
+                  <pre class="term-diff"><template
+                    v-for="(line, idx) in turn.lines"
+                    :key="idx"
+                  ><span class="term-diff-row" :class="`term-diff-${line.kind}`"><span class="term-diff-num">{{ String(line.n).padStart(3, ' ') }}</span><span class="term-diff-mark">{{ line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ' }}</span><span class="term-diff-text">{{ line.text }}</span></span>{{ '\n' }}</template></pre>
+                </div>
+              </div>
             </template>
 
             <div class="term-input">
-              <div class="term-input-rule"></div>
-              <div class="term-input-placeholder">Ask anything</div>
-              <div class="term-input-rule"></div>
+              <div class="term-input-frame">
+                <div class="term-input-top">
+                  <span class="term-input-corner">╭</span><span class="term-input-border"></span><span class="term-input-corner">╮</span>
+                </div>
+                <div class="term-input-row">
+                  <span class="term-input-edge">│</span>
+                  <span class="term-input-prompt">❯</span>
+                  <span class="term-input-placeholder">Ask anything</span>
+                  <span class="term-input-edge term-input-edge-right">│</span>
+                </div>
+                <div class="term-input-bottom">
+                  <span class="term-input-corner">╰</span><span class="term-input-border"></span><span class="term-input-corner">╯</span>
+                </div>
+              </div>
               <div class="term-input-hint">
-                @ - files, / - commands, ? - help, Escape - stop, Cmd+D - clear
+                @ files · / commands · ? help · Escape stop · Cmd+D clear
               </div>
             </div>
           </div>
