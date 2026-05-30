@@ -83,7 +83,7 @@ from settings import get_settings
 from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolResult
 from llm import TokenUsage
 
-_BRAND_STYLE = "rgb(0,255,65)"
+_BRAND_STYLE = "rgb(0,180,50)"
 # Warm orange for the user panel so it visually separates from the matrix-green
 # agent output.
 _USER_BORDER_STYLE = "rgb(255,140,0)"
@@ -959,7 +959,7 @@ def _prompt_user_line(
             DEFAULT_STYLE,
             Style.from_dict(
                 {
-                    # Matrix palette — bright head (#00ff41), bright trail
+                    # Matrix palette — brand green (#00b432), bright accent
                     # (#7fffae), mid green (#00a028), dim green (#005a14), very
                     # dark green-tinted surface (#031307 / #06210c) for menus.
                     # The user input frame uses a warm orange palette so it
@@ -978,13 +978,13 @@ def _prompt_user_line(
                     "completion-menu.meta.completion": "bg:#031307 #3f7a4d italic",
                     "completion-menu.meta.completion.current": "bg:#00a028 #06210c italic",
                     "completion-menu.scrollbar.background": "bg:#06210c",
-                    "completion-menu.scrollbar.button": "bg:#00ff41",
+                    "completion-menu.scrollbar.button": "bg:#00b432",
                     # Per-fragment styles for slash commands and @ mentions.
-                    "mention.choice": "#00ff41",
+                    "mention.choice": "#00b432",
                     "mention.icon": "#00a028",
-                    "mention.slash": "#00ff41",
+                    "mention.slash": "#00b432",
                     "mention.command": "bold #7fffae",
-                    "mention.dir": "bold #00ff41",
+                    "mention.dir": "bold #00b432",
                     "mention.file": "bold #7fffae",
                     "mention.dim": "#3f7a4d",
                     # Highlighted row inherits its background; override fragment

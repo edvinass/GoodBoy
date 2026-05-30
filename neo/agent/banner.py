@@ -14,7 +14,7 @@ from rich.text import Text
 
 from settings import PACKAGE_DIR
 
-_BRAND_STYLE = "rgb(0,255,65)"
+_BRAND_STYLE = "rgb(0,180,50)"
 
 # Half-width katakana, digits, and ascii punctuation — same set the web banner
 # uses for its canvas rain so the terminal intro reads as the same effect.
