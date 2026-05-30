@@ -933,7 +933,7 @@ def _run_framed_user_prompt(
         ),
         style=style,
         full_screen=False,
-        erase_when_done=False,
+                erase_when_done=True,
     )
     try:
         with _enhanced_keyboard_reporting():

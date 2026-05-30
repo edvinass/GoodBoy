@@ -4,6 +4,10 @@ import click
 import questionary
 
 import settings
+from agent.claude_llm import (
+    CLAUDE_MODEL_IDS,
+    is_claude_model,
+)
 from agent.deepseek_llm import (
     DEEPSEEK_MODEL_IDS,
     is_deepseek_model,
@@ -20,6 +24,7 @@ from agent.local_llm import (
 )
 from llm import get_selectable_models, select_model_interactive
 from settings import (
+    ANTHROPIC_API_KEY_VAR,
     DEEPSEEK_API_KEY_VAR,
     OPENAI_API_KEY_VAR,
     OPENAI_MODEL_VAR,
@@ -56,9 +61,11 @@ def _prompt_setup_mode() -> str:
         choices=[
             questionary.Choice("Cloud (OpenAI API)", value="cloud"),
             questionary.Choice("DeepSeek (api.deepseek.com)", value="deepseek"),
+            questionary.Choice("Anthropic (api.anthropic.com)", value="anthropic"),
             questionary.Choice("Local (on this machine, no API key)", value="local"),
             questionary.Choice(
-                "Multiple providers (OpenAI / DeepSeek / local)", value="multi"
+                "Multiple providers (OpenAI / DeepSeek / Anthropic / local)",
+                value="multi",
             ),
         ],
         use_indicator=True,
@@ -125,6 +132,7 @@ def run_setup() -> None:
     mode = _prompt_setup_mode()
     openai_key = cfg.openai_api_key
     deepseek_key = cfg.deepseek_api_key
+    anthropic_key = cfg.anthropic_api_key
 
     if mode == "cloud":
         openai_key = _prompt_provider_key(
@@ -134,12 +142,19 @@ def run_setup() -> None:
         deepseek_key = _prompt_provider_key(
             "DeepSeek API key", deepseek_key, required=True
         )
+    elif mode == "anthropic":
+        anthropic_key = _prompt_provider_key(
+            "Anthropic API key", anthropic_key, required=True
+        )
     elif mode == "multi":
         openai_key = _prompt_provider_key(
             "OpenAI API key", openai_key, required=False
         )
         deepseek_key = _prompt_provider_key(
             "DeepSeek API key", deepseek_key, required=False
+        )
+        anthropic_key = _prompt_provider_key(
+            "Anthropic API key", anthropic_key, required=False
         )
     else:  # local-only
         if openai_key:
@@ -160,6 +175,15 @@ def run_setup() -> None:
                 raise click.ClickException("Setup cancelled.")
             if not keep:
                 deepseek_key = None
+        if anthropic_key:
+            keep = questionary.confirm(
+                f"Keep saved Anthropic key ({_mask_api_key(anthropic_key)}) for optional cloud use?",
+                default=True,
+            ).ask()
+            if keep is None:
+                raise click.ClickException("Setup cancelled.")
+            if not keep:
+                anthropic_key = None
 
     if mode in ("local", "multi"):
         offer_local = (
@@ -176,24 +200,29 @@ def run_setup() -> None:
             local_id = _select_local_catalog_model()
             _download_local_model(local_id)
 
-    # Persist credentials before listing selectable models so the DeepSeek and
-    # OpenAI clients can fetch their catalogs with the new keys.
+    # Persist credentials before listing selectable models so the OpenAI,
+    # DeepSeek, and Anthropic clients can fetch their catalogs with the new
+    # keys.
     pending_updates: dict[str, str] = {}
     if openai_key:
         pending_updates[OPENAI_API_KEY_VAR] = openai_key
-    elif mode in ("local", "deepseek") and cfg.openai_api_key:
+    elif mode in ("local", "deepseek", "anthropic") and cfg.openai_api_key:
         pending_updates[OPENAI_API_KEY_VAR] = ""
     if deepseek_key:
         pending_updates[DEEPSEEK_API_KEY_VAR] = deepseek_key
-    elif mode in ("local", "cloud") and cfg.deepseek_api_key:
+    elif mode in ("local", "cloud", "anthropic") and cfg.deepseek_api_key:
         pending_updates[DEEPSEEK_API_KEY_VAR] = ""
+    if anthropic_key:
+        pending_updates[ANTHROPIC_API_KEY_VAR] = anthropic_key
+    elif mode in ("local", "cloud", "deepseek") and cfg.anthropic_api_key:
+        pending_updates[ANTHROPIC_API_KEY_VAR] = ""
     if pending_updates:
         save_env(pending_updates)
 
     selectable = get_selectable_models(api_key=openai_key)
     if not selectable:
         raise click.ClickException(
-            "No models available. Configure OpenAI, DeepSeek, or install a local model."
+            "No models available. Configure OpenAI, DeepSeek, Anthropic, or install a local model."
         )
 
     default_for_picker = cfg.default_model
@@ -201,7 +230,15 @@ def run_setup() -> None:
         default_for_picker = list_installed_models()[0]
     elif mode == "deepseek":
         default_for_picker = next(iter(DEEPSEEK_MODEL_IDS))
-    elif mode == "multi" and list_installed_models() and not openai_key and not deepseek_key:
+    elif mode == "anthropic":
+        default_for_picker = next(iter(CLAUDE_MODEL_IDS))
+    elif (
+        mode == "multi"
+        and list_installed_models()
+        and not openai_key
+        and not deepseek_key
+        and not anthropic_key
+    ):
         default_for_picker = list_installed_models()[0]
 
     model = select_model_interactive(
@@ -224,7 +261,16 @@ def run_setup() -> None:
         click.echo(
             f"  DeepSeek key: {click.style(_mask_api_key(deepseek_key), fg=_brand)}"
         )
-    if not openai_key and not deepseek_key and is_local_model(model):
+    if anthropic_key:
+        click.echo(
+            f"  Anthropic key: {click.style(_mask_api_key(anthropic_key), fg=_brand)}"
+        )
+    if (
+        not openai_key
+        and not deepseek_key
+        and not anthropic_key
+        and is_local_model(model)
+    ):
         click.echo("  API key: (not set — using local model)")
     if list_installed_models():
         click.echo(
@@ -346,6 +392,8 @@ def status() -> None:
             click.echo(f"Weights: {path}")
     elif is_deepseek_model(model):
         click.echo(f"Provider: {click.style('DeepSeek', fg=_brand)}")
+    elif is_claude_model(model):
+        click.echo(f"Provider: {click.style('Anthropic', fg=_brand)}")
     else:
         click.echo(f"Provider: {click.style('OpenAI', fg=_brand)}")
     installed = list_installed_models()
@@ -363,6 +411,12 @@ def status() -> None:
         )
     else:
         click.echo("DeepSeek key: (not set)")
+    if cfg.anthropic_api_key:
+        click.echo(
+            f"Anthropic key: {click.style(_mask_api_key(cfg.anthropic_api_key), fg=_brand)}"
+        )
+    else:
+        click.echo("Anthropic key: (not set)")
     click.echo(f"Models dir: {cfg.models_dir}")
     click.echo("Run neo setup to change settings.")
 

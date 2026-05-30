@@ -342,38 +342,209 @@ def test_format_plan_items_marks_status():
     assert pending_line == "[ ] 4. later"
 
 
+def _read_turn(
+    turn: int,
+    path: str,
+    stdout: str,
+    *,
+    start_line: int | None = None,
+    end_line: int | None = None,
+) -> TurnRecord:
+    return TurnRecord(
+        turn=turn,
+        step=AgentStep(
+            action=AgentAction.READ_FILE,
+            path=path,
+            start_line=start_line,
+            end_line=end_line,
+        ),
+        tool_result=ToolResult(
+            executed=f"read_file {path}",
+            stdout=stdout,
+            exit_code=0,
+        ),
+    )
+
+
 def test_read_file_dedup_supersedes_older_reads():
     body_v1 = "version-one\n" * 50
     body_v2 = "version-two\n" * 50
     ctx = SessionContext(user_task="t", recent_full_turns=1)
-    ctx.add_turn(
-        TurnRecord(
-            turn=1,
-            step=AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
-            tool_result=ToolResult(
-                executed="read_file foo.py",
-                stdout=body_v1,
-                exit_code=0,
-            ),
-        )
-    )
+    ctx.add_turn(_read_turn(1, "foo.py", body_v1))
     ctx.add_turn(_shell_turn(2, "echo x", "x\n"))
+    ctx.add_turn(_read_turn(3, "foo.py", body_v2))
+
+    text = ctx.to_prompt()
+    assert "superseded by turn 3" in text
+    assert body_v1 not in text
+    assert body_v2 in text
+
+
+def test_read_file_dedup_supersedes_when_later_range_covers_earlier():
+    """A later read whose range fully contains an earlier one supersedes it."""
+    narrow = "narrow-body-line\n" * 20
+    wide = "wide-body-line\n" * 200
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "foo.py", narrow, start_line=10, end_line=30))
+    ctx.add_turn(_read_turn(2, "foo.py", wide))
+
+    text = ctx.to_prompt()
+    assert "superseded by turn 2" in text
+    assert "narrow-body-line" not in text
+    assert "wide-body-line" in text
+
+
+def test_read_file_not_superseded_when_ranges_only_overlap():
+    """Partial overlap doesn't supersede — model still needs both views."""
+    first = "first-body-line\n" * 5
+    second = "second-body-line\n" * 5
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "foo.py", first, start_line=1, end_line=50))
+    ctx.add_turn(_read_turn(2, "foo.py", second, start_line=30, end_line=80))
+
+    text = ctx.to_prompt()
+    assert "superseded by turn" not in text
+    assert "first-body-line" in text
+    assert "second-body-line" in text
+
+
+def test_read_file_invalidated_by_later_str_replace():
+    """After an edit, the prior read body is stale and is dropped from context."""
+    stale = "stale-body-line\n" * 20
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "foo.py", stale))
     ctx.add_turn(
         TurnRecord(
-            turn=3,
-            step=AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
+            turn=2,
+            step=AgentStep(
+                action=AgentAction.STR_REPLACE,
+                path="foo.py",
+                old_string="x",
+                new_string="y",
+            ),
             tool_result=ToolResult(
-                executed="read_file foo.py",
-                stdout=body_v2,
+                executed="str_replace foo.py",
+                stdout="Updated foo.py\n",
                 exit_code=0,
             ),
         )
     )
 
     text = ctx.to_prompt()
-    assert "superseded by turn 3" in text
-    assert body_v1 not in text
-    assert body_v2 in text
+    assert "superseded by turn 2" in text
+    assert "stale-body-line" not in text
+
+
+def test_read_file_invalidated_by_apply_patch():
+    stale = "patch-stale-line\n" * 20
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "bar.py", stale))
+    ctx.add_turn(
+        TurnRecord(
+            turn=2,
+            step=AgentStep(
+                action=AgentAction.APPLY_PATCH,
+                path="bar.py",
+                patch="--- a/bar.py\n+++ b/bar.py\n@@\n-a\n+b\n",
+            ),
+            tool_result=ToolResult(
+                executed="apply_patch bar.py",
+                stdout="Patched bar.py\n",
+                exit_code=0,
+            ),
+        )
+    )
+
+    text = ctx.to_prompt()
+    assert "superseded by turn 2" in text
+    assert "patch-stale-line" not in text
+
+
+def test_read_file_invalidated_by_move_destination():
+    """A read against ``dest_path`` is invalidated by an earlier move of another file there."""
+    stale_src = "stale-src-line\n" * 10
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "old.py", stale_src))
+    ctx.add_turn(
+        TurnRecord(
+            turn=2,
+            step=AgentStep(
+                action=AgentAction.MOVE_FILE,
+                path="old.py",
+                dest_path="new.py",
+            ),
+            tool_result=ToolResult(
+                executed="move_file old.py -> new.py",
+                stdout="Moved old.py -> new.py\n",
+                exit_code=0,
+            ),
+        )
+    )
+
+    text = ctx.to_prompt()
+    assert "superseded by turn 2" in text
+    assert "stale-src-line" not in text
+
+
+def test_read_file_dedup_only_supersedes_matching_path():
+    """Edits to a different file must not invalidate unrelated reads."""
+    body = "kept-body-line\n" * 10
+    ctx = SessionContext(user_task="t", recent_full_turns=5)
+    ctx.add_turn(_read_turn(1, "foo.py", body))
+    ctx.add_turn(
+        TurnRecord(
+            turn=2,
+            step=AgentStep(
+                action=AgentAction.STR_REPLACE,
+                path="bar.py",
+                old_string="x",
+                new_string="y",
+            ),
+            tool_result=ToolResult(
+                executed="str_replace bar.py",
+                stdout="Updated bar.py\n",
+                exit_code=0,
+            ),
+        )
+    )
+
+    text = ctx.to_prompt()
+    assert "superseded by turn" not in text
+    assert "kept-body-line" in text
+
+
+def test_dedupe_batch_steps_drops_duplicate_reads():
+    """Duplicate read-only actions in one parallel batch run only once."""
+    from agent.loop import AgentLoop
+
+    steps = [
+        AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
+        AgentStep(action=AgentAction.READ_FILE, path="foo.py"),
+        AgentStep(
+            action=AgentAction.READ_FILE,
+            path="foo.py",
+            start_line=10,
+            end_line=20,
+        ),
+        AgentStep(action=AgentAction.READ_FILE, path="bar.py"),
+        AgentStep(action=AgentAction.READ_FILE, path="bar.py"),
+        AgentStep(
+            action=AgentAction.SEARCH_CODE, pattern="hello", path="src"
+        ),
+        AgentStep(
+            action=AgentAction.SEARCH_CODE, pattern="hello", path="src"
+        ),
+    ]
+
+    deduped = AgentLoop._dedupe_batch_steps(steps)
+    keys = [AgentLoop._batch_dedup_key(s) for s in deduped]
+    assert len(deduped) == 4
+    assert keys == [
+        ("read_file", "foo.py", None, None),
+        ("read_file", "foo.py", 10, 20),
+        ("read_file", "bar.py", None, None),
+        ("search_code", "hello", "src", "", False, None),
+    ]
 
 
 def test_sticky_failed_turn_keeps_full_output_when_old():

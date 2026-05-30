@@ -17,6 +17,7 @@ ENV_FILE = ROOT_DIR / ".env"
 OPENAI_API_KEY_VAR = "OPENAI_API_KEY"
 OPENAI_MODEL_VAR = "OPENAI_MODEL"
 DEEPSEEK_API_KEY_VAR = "DEEPSEEK_API_KEY"
+ANTHROPIC_API_KEY_VAR = "ANTHROPIC_API_KEY"
 NEO_MAX_TURNS_VAR = "NEO_MAX_TURNS"
 NEO_TOOL_TIMEOUT_SEC_VAR = "NEO_TOOL_TIMEOUT_SEC"
 NEO_MAX_CLARIFICATIONS_VAR = "NEO_MAX_CLARIFICATIONS"
@@ -43,7 +44,7 @@ DEFAULT_WORKING_MEMORY_MAX = 30
 DEFAULT_MAX_TURNS = 500
 DEFAULT_TOOL_TIMEOUT_SEC = 180.0
 DEFAULT_MAX_CLARIFICATIONS = 3
-DEFAULT_CONTEXT_RECENT_FULL_TURNS = 15
+DEFAULT_CONTEXT_RECENT_FULL_TURNS = 30
 DEFAULT_LOCAL_RECENT_FULL_TURNS = 3
 DEFAULT_COMPLEX_WINDOW_MULTIPLIER = 2.0
 
@@ -125,6 +126,12 @@ def save_env(updates: dict[str, str]) -> None:
         clear_deepseek_client_cache()
     except ImportError:
         pass
+    try:
+        from agent.claude_llm import clear_claude_client_cache
+
+        clear_claude_client_cache()
+    except ImportError:
+        pass
 
 
 def _env_int(name: str, default: int) -> int:
@@ -169,6 +176,7 @@ class Settings:
     openai_api_key: str | None
     openai_model: str | None
     deepseek_api_key: str | None = None
+    anthropic_api_key: str | None = None
     max_turns: int = DEFAULT_MAX_TURNS
     tool_timeout_sec: float = DEFAULT_TOOL_TIMEOUT_SEC
     max_clarifications: int = DEFAULT_MAX_CLARIFICATIONS
@@ -216,10 +224,17 @@ class Settings:
             if deepseek_key_raw and deepseek_key_raw.strip()
             else None
         )
+        anthropic_key_raw = os.getenv(ANTHROPIC_API_KEY_VAR)
+        anthropic_api_key = (
+            anthropic_key_raw.strip()
+            if anthropic_key_raw and anthropic_key_raw.strip()
+            else None
+        )
         return cls(
             openai_api_key=os.getenv(OPENAI_API_KEY_VAR),
             openai_model=os.getenv(OPENAI_MODEL_VAR),
             deepseek_api_key=deepseek_api_key,
+            anthropic_api_key=anthropic_api_key,
             max_turns=_env_int(NEO_MAX_TURNS_VAR, DEFAULT_MAX_TURNS),
             tool_timeout_sec=_env_float(
                 NEO_TOOL_TIMEOUT_SEC_VAR, DEFAULT_TOOL_TIMEOUT_SEC
@@ -288,6 +303,8 @@ def is_configured(cfg: Settings | None = None) -> bool:
     if resolved.openai_api_key:
         return True
     if resolved.deepseek_api_key:
+        return True
+    if resolved.anthropic_api_key:
         return True
     try:
         from agent.local_llm import has_installed_local_model

@@ -114,6 +114,14 @@ def _spec(
 
 
 _DEEPSEEK_REASONING_EFFORTS: tuple[str, ...] = ("none", "medium", "high")
+# Adaptive thinking effort hints that map cleanly to Claude's effort scale.
+_CLAUDE_REASONING_EFFORTS: tuple[str, ...] = (
+    "none",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+)
 
 
 MODEL_CATALOG: dict[str, ModelSpec] = {
@@ -177,6 +185,68 @@ MODEL_CATALOG: dict[str, ModelSpec] = {
         price_out=0.28,
         reasoning=True,
         reasoning_efforts=_DEEPSEEK_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "claude-opus-4-8": _spec(
+        "claude-opus-4-8",
+        family=ModelFamily.FRONTIER,
+        best_for=(
+            "Anthropic flagship; hardest reasoning, multi-step agentic work, "
+            "1M context with adaptive thinking."
+        ),
+        avoid_when="Trivial commands or cost-sensitive high-volume steps.",
+        cost_tier=CostTier.PREMIUM,
+        price_in=5.00,
+        price_cached=0.50,
+        price_out=25.00,
+        reasoning=True,
+        reasoning_efforts=_CLAUDE_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "claude-opus-4-7": _spec(
+        "claude-opus-4-7",
+        family=ModelFamily.FRONTIER,
+        best_for=(
+            "Previous Anthropic flagship; strong reasoning for coding and "
+            "long-horizon agents (adaptive thinking only)."
+        ),
+        avoid_when="When 4.8 is available at the same price.",
+        cost_tier=CostTier.PREMIUM,
+        price_in=5.00,
+        price_cached=0.50,
+        price_out=25.00,
+        reasoning=True,
+        reasoning_efforts=_CLAUDE_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "claude-sonnet-4-6": _spec(
+        "claude-sonnet-4-6",
+        family=ModelFamily.REASONING,
+        best_for=(
+            "Anthropic balanced default; best price/performance for most "
+            "coding and agent workloads (1M context, adaptive thinking)."
+        ),
+        avoid_when="Single-turn trivial tasks where Haiku is enough.",
+        cost_tier=CostTier.MEDIUM,
+        price_in=3.00,
+        price_cached=0.30,
+        price_out=15.00,
+        reasoning=True,
+        reasoning_efforts=_CLAUDE_REASONING_EFFORTS,
+        openai_tools=_NO_HOSTED_OPENAI_TOOLS,
+    ),
+    "claude-haiku-4-5": _spec(
+        "claude-haiku-4-5",
+        family=ModelFamily.GENERAL,
+        best_for=(
+            "Anthropic fastest/cheapest; high-volume extraction, classification, "
+            "and simple coding."
+        ),
+        avoid_when="Hard reasoning or multi-file refactors — use Sonnet/Opus.",
+        cost_tier=CostTier.LOW,
+        price_in=1.00,
+        price_cached=0.10,
+        price_out=5.00,
         openai_tools=_NO_HOSTED_OPENAI_TOOLS,
     ),
     "gpt-4.1-nano": _spec(

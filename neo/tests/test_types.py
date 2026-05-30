@@ -178,6 +178,27 @@ def test_parse_str_replace_empty_new_string_from_json():
     assert step.new_string == ""
 
 
+def test_str_replace_preserves_old_string_indentation():
+    step = AgentStep.model_validate(
+        {
+            "action": "str_replace",
+            "path": "foo.py",
+            "old_string": "    def bar(self):\n        return 1",
+            "new_string": "    def bar(self):\n        return 2",
+        }
+    )
+    assert step.old_string == "    def bar(self):\n        return 1"
+    assert step.new_string == "    def bar(self):\n        return 2"
+
+
+def test_apply_patch_preserves_patch_whitespace():
+    patch = "--- a/f.py\n+++ b/f.py\n@@ -1 +1 @@\n-    x\n+    y\n"
+    step = AgentStep.model_validate(
+        {"action": "apply_patch", "path": "f.py", "patch": patch}
+    )
+    assert step.patch == patch
+
+
 def test_parse_search_code():
     step = parse_agent_step(
         json.dumps(

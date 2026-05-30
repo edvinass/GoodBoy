@@ -80,8 +80,6 @@ class AgentStep(BaseModel):
         "command",
         "code",
         "path",
-        "patch",
-        "old_string",
         "message",
         "pattern",
         "glob",
@@ -95,10 +93,10 @@ class AgentStep(BaseModel):
             return value.strip() or None
         return value
 
-    @field_validator("new_string", mode="before")
+    @field_validator("old_string", "new_string", "patch", mode="before")
     @classmethod
-    def _preserve_new_string(cls, value: Any) -> Any:
-        # str_replace allows empty new_string (deletion); do not strip to None.
+    def _preserve_edit_strings(cls, value: Any) -> Any:
+        # Edit payloads must keep leading/trailing whitespace (Python indentation).
         if value is None:
             return None
         if isinstance(value, str):

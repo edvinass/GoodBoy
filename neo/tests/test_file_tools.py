@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from agent.file_tools import apply_patch, read_file, str_replace
+from agent.types import AgentStep
 
 
 def test_read_file_numbered(tmp_path: Path):
@@ -29,6 +30,34 @@ def test_str_replace_ambiguous_fails(tmp_path: Path):
     result = str_replace("b.txt", "foo", "bar", workspace=tmp_path)
     assert result.exit_code == 1
     assert "ambiguous" in result.stderr
+
+
+def test_str_replace_preserves_python_indentation(tmp_path: Path):
+    """Regression: stripped old_string caused partial matches and broken indents."""
+    target = tmp_path / "test.py"
+    target.write_text(
+        "class Foo:\n    def bar(self):\n        return 1\n",
+        encoding="utf-8",
+    )
+    step = AgentStep.model_validate(
+        {
+            "action": "str_replace",
+            "path": "test.py",
+            "old_string": "    def bar(self):\n        return 1",
+            "new_string": "    def bar(self):\n        return 2",
+        }
+    )
+    result = str_replace(
+        "test.py",
+        step.old_string,
+        step.new_string,
+        workspace=tmp_path,
+    )
+    assert result.exit_code == 0
+    assert (
+        target.read_text(encoding="utf-8")
+        == "class Foo:\n    def bar(self):\n        return 2\n"
+    )
 
 
 def test_apply_patch_unified_diff(tmp_path: Path):

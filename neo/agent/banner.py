@@ -39,7 +39,19 @@ def _matrix_art() -> str:
     )
 
 
-DESCRIPTION = "Autonomous coding agent"
+TIPS = [
+    "Tip: Press Ctrl+C to interrupt safely",
+    "Tip: Use `/help` to list all slash commands",
+    "Tip: Use `/model` to switch LLM providers",
+    "Tip: Use `/reasoning` to set reasoning effort",
+    "Tip: Use `/plan` to toggle plan mode (auto/off/always)",
+    "Tip: Use `/clear` to reset conversation history",
+    "Tip: Use `/retry` to re-run the last task",
+]
+
+
+def get_random_tip() -> str:
+    return random.choice(TIPS)
 
 
 def get_version() -> str:
@@ -66,7 +78,7 @@ def format_startup(
         f"{_matrix_art()}\n"
         f"[bold {_BRAND_STYLE}]Neo[/] [dim]v{ver}[/]\n"
         f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
-        f"{DESCRIPTION}"
+        f"{get_random_tip()}"
     )
 
 

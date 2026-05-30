@@ -30,6 +30,17 @@ _EDIT_ACTIONS = frozenset(
     }
 )
 
+# Actions that change a file on disk, making any prior read of that file's
+# contents stale. ``move_file`` invalidates both the old and new paths.
+_FILE_MUTATING_ACTIONS = frozenset(
+    {
+        AgentAction.STR_REPLACE,
+        AgentAction.APPLY_PATCH,
+        AgentAction.DELETE_FILE,
+        AgentAction.MOVE_FILE,
+    }
+)
+
 
 def _strikethrough(text: str) -> str:
     return "".join(f"{char}\u0336" for char in text)
@@ -188,13 +199,76 @@ def _read_file_key(step: AgentStep) -> tuple[str, int | None, int | None]:
     return (step.path or "", step.start_line, step.end_line)
 
 
-def _latest_read_index_by_key(turns: list[TurnRecord]) -> dict[tuple, int]:
-    """Map read_file (path, lines) → index of the latest turn with that key."""
-    latest: dict[tuple, int] = {}
-    for index, record in enumerate(turns):
-        if record.step.action in _READ_FILE_ACTIONS and record.step.path:
-            latest[_read_file_key(record.step)] = index
-    return latest
+_INF_LINE = 10**12
+
+
+def _read_range(step: AgentStep) -> tuple[int, int]:
+    """Normalised inclusive line range for a read_file step.
+
+    Open-ended bounds collapse to ``1`` / a sentinel "end of file" so any two
+    reads can be compared with simple integer overlap checks.
+    """
+    start = step.start_line if step.start_line is not None else 1
+    end = step.end_line if step.end_line is not None else _INF_LINE
+    if end < start:
+        end = start
+    return start, end
+
+
+def _range_covers(outer: tuple[int, int], inner: tuple[int, int]) -> bool:
+    """True when ``outer`` fully contains ``inner`` (inclusive)."""
+    return outer[0] <= inner[0] and outer[1] >= inner[1]
+
+
+def _supersedes_by_index(turns: list[TurnRecord]) -> dict[int, int]:
+    """Map ``read_file`` turn index → index of the latest turn that supersedes it.
+
+    A later turn supersedes an earlier read when either holds:
+
+    * It is another ``read_file`` of the same path whose line range fully
+      contains the earlier range (exact-key duplicates are the trivial case).
+    * It mutates the file (``str_replace``, ``apply_patch``, ``delete_file``,
+      ``move_file`` source path), making the earlier read's body stale.
+
+    Only the most recent superseding turn is kept so the model sees a single
+    pointer to the authoritative version.
+    """
+    superseded: dict[int, int] = {}
+    for inner_index, inner_record in enumerate(turns):
+        inner_step = inner_record.step
+        if inner_step.action not in _READ_FILE_ACTIONS or not inner_step.path:
+            continue
+        inner_path = inner_step.path
+        inner_range = _read_range(inner_step)
+        latest: int | None = None
+        for outer_index in range(inner_index + 1, len(turns)):
+            outer_step = turns[outer_index].step
+            outer_path = outer_step.path
+            if not outer_path:
+                continue
+            if outer_step.action in _READ_FILE_ACTIONS:
+                if outer_path != inner_path:
+                    continue
+                if not _range_covers(_read_range(outer_step), inner_range):
+                    continue
+                latest = outer_index
+                continue
+            if outer_step.action in _FILE_MUTATING_ACTIONS:
+                if outer_path == inner_path:
+                    latest = outer_index
+                    continue
+                # ``move_file`` also invalidates reads of the destination — a
+                # later read against ``dest_path`` would target a freshly
+                # moved file whose contents differ from anything seen before.
+                if (
+                    outer_step.action == AgentAction.MOVE_FILE
+                    and outer_step.dest_path == inner_path
+                ):
+                    latest = outer_index
+                    continue
+        if latest is not None:
+            superseded[inner_index] = latest
+    return superseded
 
 
 def _sticky_turn_indices(turns: list[TurnRecord]) -> set[int]:
@@ -388,14 +462,14 @@ class SessionContext(BaseModel):
             )
             return pinned + body if pinned else body
 
-        latest_read = _latest_read_index_by_key(self.turns)
+        supersedes = _supersedes_by_index(self.turns)
 
         if new_turns:
             sections.append("## New turn output")
             for record in new_turns:
                 index = self.turns.index(record)
-                superseded = _superseded_read_hint(
-                    record, index, latest_read, self.turns
+                superseded = _superseded_turn_number(
+                    index, supersedes, self.turns
                 )
                 sections.append(
                     self._format_turn(
@@ -486,7 +560,7 @@ class SessionContext(BaseModel):
 
         if self.turns:
             sticky = _sticky_turn_indices(self.turns)
-            latest_read = _latest_read_index_by_key(self.turns)
+            supersedes = _supersedes_by_index(self.turns)
             split = max(0, len(self.turns) - full_count)
             older = self.turns[:split]
             recent = self.turns[split:]
@@ -499,8 +573,8 @@ class SessionContext(BaseModel):
                     mode: TurnRenderMode = (
                         "full" if index in sticky else "summary"
                     )
-                    superseded = _superseded_read_hint(
-                        record, index, latest_read, self.turns
+                    superseded = _superseded_turn_number(
+                        index, supersedes, self.turns
                     )
                     sections.append(
                         self._format_turn(
@@ -520,8 +594,8 @@ class SessionContext(BaseModel):
                 )
                 sections.append(header)
                 for index, record in enumerate(recent, start=split):
-                    superseded = _superseded_read_hint(
-                        record, index, latest_read, self.turns
+                    superseded = _superseded_turn_number(
+                        index, supersedes, self.turns
                     )
                     sections.append(
                         self._format_turn(
@@ -744,16 +818,13 @@ class SessionContext(BaseModel):
         return "\n".join(lines)
 
 
-def _superseded_read_hint(
-    record: TurnRecord,
+def _superseded_turn_number(
     index: int,
-    latest_read: dict[tuple, int],
+    supersedes: dict[int, int],
     turns: list[TurnRecord],
 ) -> int | None:
-    if record.step.action not in _READ_FILE_ACTIONS or not record.step.path:
-        return None
-    key = _read_file_key(record.step)
-    latest_index = latest_read.get(key)
-    if latest_index is None or latest_index == index:
+    """Public turn number that superseded the read at ``index``, if any."""
+    latest_index = supersedes.get(index)
+    if latest_index is None:
         return None
     return turns[latest_index].turn
