@@ -122,8 +122,6 @@ _HUNK_HEADER_RE = re.compile(
     r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@"
 )
 
-_resize_poller_installed = False
-
 
 @dataclass
 class ThinkingUpdater:
@@ -391,32 +389,6 @@ def _extract_unified_diff(stdout: str) -> str | None:
     if stdout.startswith("--- "):
         return stdout
     return None
-
-
-def _install_resize_poller(ui: "ConversationUI") -> None:
-    global _resize_poller_installed
-    if _resize_poller_installed:
-        return
-    _resize_poller_installed = True
-    ui._last_terminal_width: int | None = None
-
-    def _poll() -> None:
-        while True:
-            time.sleep(0.25)
-            current = ui._fresh_terminal_width()
-            if ui._last_terminal_width is None:
-                ui._last_terminal_width = current
-                continue
-            if current == ui._last_terminal_width:
-                continue
-            ui._last_terminal_width = current
-            ui._request_redraw()
-
-    threading.Thread(
-        target=_poll,
-        daemon=True,
-        name="neo-resize-poller",
-    ).start()
 
 
 class _AutoWidthConsole(Console):
@@ -1272,7 +1244,6 @@ class ConversationUI:
         self._plan_mode: str = get_settings().plan_mode
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
-        self._last_terminal_width: int | None = None
         self._history: list[tuple[str, dict[str, Any]]] = []
         self._display_lock = threading.Lock()
         self._at_prompt = False
@@ -1282,7 +1253,6 @@ class ConversationUI:
         self._abort_event = threading.Event()
         self._abort_lock = threading.Lock()
         self._abort_callbacks: list[Any] = []
-        _install_resize_poller(self)
 
 
     def request_stop_after_current_step(self) -> None:
@@ -1625,45 +1595,25 @@ class ConversationUI:
             width=terminal_width,
         )
 
-    def _redraw_all(self) -> None:
-        if not self._history:
-            return
-        self._console.clear()
-        for kind, data in self._history:
+    def _request_redraw(self) -> None:
+        # Re-rendering the entire transcript on every event used to push a
+        # full copy of the UI (banner, prompts, panels) into the terminal's
+        # scrollback buffer on each redraw. The transcript is now
+        # append-only; explicit /clear wipes scrollback when the user wants
+        # a fresh start.
+        return
+
+    def _sync_redraw(self) -> None:
+        self._pending_redraw = False
+
+    def _record(self, kind: str, **data: Any) -> None:
+        self._history.append((kind, data))
+        with self._display_lock:
             for item in self._iter_history_block(kind, data):
                 if item == "":
                     self._console.print()
                 else:
                     self._console.print(item)
-
-    def _request_redraw(self) -> None:
-        if not self._history or not self._is_interactive_tty():
-            return
-        if self._transient_ui:
-            self._pending_redraw = True
-            return
-        with self._display_lock:
-            self._redraw_all()
-
-    def _sync_redraw(self) -> None:
-        if not self._pending_redraw or not self._history or not self._is_interactive_tty():
-            self._pending_redraw = False
-            return
-        with self._display_lock:
-            self._redraw_all()
-        self._pending_redraw = False
-
-    def _record(self, kind: str, **data: Any) -> None:
-        self._history.append((kind, data))
-        if self._is_interactive_tty():
-            with self._display_lock:
-                self._redraw_all()
-            return
-        for item in self._iter_history_block(kind, data):
-            if item == "":
-                self._console.print()
-            else:
-                self._console.print(item)
 
     def _kv_table(
         self,
@@ -1809,7 +1759,15 @@ class ConversationUI:
         self.clear_abort_request()
         if self._is_interactive_tty():
             with self._display_lock:
-                self._console.clear()
+                # Wipe the visible viewport AND the scrollback buffer so the
+                # user actually sees a fresh terminal. \x1b[3J clears the
+                # scrollback in xterm, iTerm2, Kitty, Alacritty, GNOME
+                # Terminal, Windows Terminal, and other modern emulators.
+                try:
+                    self._console.file.write("\x1b[H\x1b[2J\x1b[3J")
+                    self._console.file.flush()
+                except OSError:
+                    self._console.clear()
         data = self._startup_data()
         if self._play_startup_intro(data):
             self._history.append(("startup", data))
