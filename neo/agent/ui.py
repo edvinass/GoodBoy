@@ -84,9 +84,9 @@ from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolRe
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(0,255,65)"
-# Mid-trail green from the matrix rain — used for the user panel so it reads
-# as the same palette as the agent's bright head colour but visibly dimmer.
-_USER_BORDER_STYLE = "rgb(0,160,40)"
+# Warm orange for the user panel so it visually separates from the matrix-green
+# agent output.
+_USER_BORDER_STYLE = "rgb(255,140,0)"
 
 _THEME = Theme(
     {
@@ -156,7 +156,6 @@ class ThinkingUpdater:
     def _render(self) -> RenderableType:
         gradient = self._compute_gradient()
         header = Text.assemble(
-            ("◆ Neo ", "agent"),
             gradient,
             ("…", "muted"),
         )
@@ -963,11 +962,13 @@ def _prompt_user_line(
                     # Matrix palette — bright head (#00ff41), bright trail
                     # (#7fffae), mid green (#00a028), dim green (#005a14), very
                     # dark green-tinted surface (#031307 / #06210c) for menus.
+                    # The user input frame uses a warm orange palette so it
+                    # visually separates from the agent's matrix-green output.
                     "": "#d8ffe2",
-                    "placeholder": "#3f7a4d italic",
-                    "input-border": "#00a028",
-                    "input-footer": "#3f7a4d",
-                    "prompt": "bold #00ff41",
+                    "placeholder": "#a05a00 italic",
+                    "input-border": "#ff8c00",
+                    "input-footer": "#a05a00",
+                    "prompt": "bold #ffaa00",
                     # Completion menu surface: near-black green backdrop that
                     # echoes the rain's faded tail, with bright matrix-green
                     # selection highlight.
@@ -1124,18 +1125,19 @@ def _tree_find_or_add(parent: Tree, label: str) -> Tree:
     return parent.add(f"[bold]{label}[/]")
 
 
-def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text:
+def _role_panel_title(role: str, *, subtitle: str | None = None) -> Text | None:
     if role == "user":
-        return Text.from_markup("[user]👤 You[/]")
-    title = Text.from_markup("[agent]◆ Neo[/]")
-    if subtitle:
-        icon_label = _SUBTITLE_ICONS.get(subtitle)
-        if icon_label is not None:
-            icon, label = icon_label
-            title.append(f"  [{icon}] ", style="subtitle")
-            title.append(f"({label})", style="subtitle")
-        else:
-            title.append(f"  ({subtitle})", style="subtitle")
+        return None
+    if not subtitle:
+        return None
+    title = Text()
+    icon_label = _SUBTITLE_ICONS.get(subtitle)
+    if icon_label is not None:
+        icon, label = icon_label
+        title.append(f"[{icon}] ", style="subtitle")
+        title.append(f"({label})", style="subtitle")
+    else:
+        title.append(f"({subtitle})", style="subtitle")
     return title
 
 
@@ -1457,18 +1459,18 @@ class ConversationUI:
             return
         if kind == "user_message":
             yield ""
-            user_title = _role_panel_title("user")
             if data.get("paste_label"):
                 yield self._panel(
-                    data["paste_label"],
-                    title=user_title,
+                    Text.assemble(("❯ ", "user"), data["paste_label"]),
                     border_style=_USER_BORDER_STYLE,
                     padding=(0, 1),
                 )
             panel_width = self._panel_text_width()
+            body_text = data["text"].rstrip() or ""
+            wrapped = _wrap_long_lines(body_text, width=max(panel_width - 2, 20))
+            body = Text.assemble(("❯ ", "user"), wrapped)
             yield self._panel(
-                _wrap_long_lines(data["text"].rstrip() or "", width=panel_width),
-                title=user_title,
+                body,
                 border_style=_USER_BORDER_STYLE,
                 padding=(0, 1),
             )
