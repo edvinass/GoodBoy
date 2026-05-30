@@ -6,10 +6,10 @@ import re
 from rich.console import Console
 
 from agent.banner import (
-    DESCRIPTION,
     MATRIX_GLYPHS,
     format_startup,
     get_version,
+    get_random_tip,
     matrix_intro_enabled,
     play_matrix_intro,
     _render_rain_frame,

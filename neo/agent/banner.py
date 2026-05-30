@@ -39,7 +39,19 @@ def _matrix_art() -> str:
     )
 
 
-DESCRIPTION = "Autonomous coding agent"
+TIPS = [
+    "Tip: Press Ctrl+C to interrupt safely",
+    "Tip: Use `/model` to switch LLM providers",
+    "Tip: You can resume interrupted sessions with `/resume`",
+    "Tip: Neo can run tests, lint, and install packages",
+    "Tip: Use markdown in task_complete messages for readability",
+    "Tip: Search the codebase with refactor-aware tools",
+    "Tip: Neo remembers your preferences across sessions",
+]
+
+
+def get_random_tip() -> str:
+    return random.choice(TIPS)
 
 
 def get_version() -> str:
@@ -66,7 +78,7 @@ def format_startup(
         f"{_matrix_art()}\n"
         f"[bold {_BRAND_STYLE}]Neo[/] [dim]v{ver}[/]\n"
         f"[dim]Model[/] [{_BRAND_STYLE}]{model}[/]{reasoning_line}\n"
-        f"{DESCRIPTION}"
+        f"{get_random_tip()}"
     )
 
 
