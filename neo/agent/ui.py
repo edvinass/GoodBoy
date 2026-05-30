@@ -84,9 +84,9 @@ from agent.types import AgentAction, AgentStep, PlanItem, PlanItemStatus, ToolRe
 from llm import TokenUsage
 
 _BRAND_STYLE = "rgb(0,180,50)"
-# Warm orange for the user panel so it visually separates from the matrix-green
-# agent output.
-_USER_BORDER_STYLE = "rgb(255,140,0)"
+# Light grey for the user panel so it visually separates from the matrix-green
+# agent output without competing with it.
+_USER_BORDER_STYLE = "rgb(170,170,170)"
 
 _THEME = Theme(
     {
@@ -962,13 +962,14 @@ def _prompt_user_line(
                     # Matrix palette — brand green (#00b432), bright accent
                     # (#7fffae), mid green (#00a028), dim green (#005a14), very
                     # dark green-tinted surface (#031307 / #06210c) for menus.
-                    # The user input frame uses a warm orange palette so it
-                    # visually separates from the agent's matrix-green output.
+                    # The user input frame uses a neutral light-grey palette so
+                    # it visually separates from the agent's matrix-green
+                    # output without competing with it.
                     "": "#d8ffe2",
-                    "placeholder": "#a05a00 italic",
-                    "input-border": "#ff8c00",
-                    "input-footer": "#a05a00",
-                    "prompt": "bold #ffaa00",
+                    "placeholder": "#777777 italic",
+                    "input-border": "#aaaaaa",
+                    "input-footer": "#777777",
+                    "prompt": "bold #cccccc",
                     # Completion menu surface: near-black green backdrop that
                     # echoes the rain's faded tail, with bright matrix-green
                     # selection highlight.
