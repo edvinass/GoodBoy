@@ -10,10 +10,11 @@ import sys
 import termios
 import threading
 import time
+import colorsys
 import tty
 from contextlib import contextmanager
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator, Literal
 
 import click
@@ -122,8 +123,6 @@ _HUNK_HEADER_RE = re.compile(
     r"\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@"
 )
 
-_resize_poller_installed = False
-
 
 @dataclass
 class ThinkingUpdater:
@@ -134,6 +133,10 @@ class ThinkingUpdater:
     _plan_step: str | None = None
     _status: Any = None
     _non_tty_printed: bool = False
+    _frame: int = 0
+    _animation_thread: threading.Thread | None = None
+    _stop_event: threading.Event = field(default_factory=threading.Event)
+    _gradient_text: Text = field(default_factory=Text)
 
     def update(self, label: str) -> None:
         cleaned = label.strip().rstrip(".…")
@@ -151,8 +154,11 @@ class ThinkingUpdater:
             self._console.print(rendered)
 
     def _render(self) -> RenderableType:
-        header = Text.from_markup(
-            f"[agent]◆ Neo[/] [muted]{self._label}…[/]"
+        gradient = self._compute_gradient()
+        header = Text.assemble(
+            ("◆ Neo ", "agent"),
+            gradient,
+            ("…", "muted"),
         )
         if not self._plan_step:
             return header
@@ -160,6 +166,44 @@ class ThinkingUpdater:
             header,
             Text.from_markup(f"  [muted]{self._plan_step}[/]"),
         )
+
+    def _compute_gradient(self) -> Text:
+        """Return the label text with a subtle light-to-dark gray-white sweep."""
+        label = self._label
+        result = Text()
+        n = max(len(label), 1)
+        phase = self._frame * 0.05
+        for i, ch in enumerate(label):
+            t = (i / n - phase) % 1.0
+            lightness = 1.0 - t * 0.4
+            r, g, b = colorsys.hls_to_rgb(0.0, lightness, 0.0)
+            colour = f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+            result.append(ch, style=colour)
+        return result
+
+    def _animate(self) -> None:
+        """Continuously update the gradient while the animation is active."""
+        while not self._stop_event.is_set():
+            self._frame += 1
+            self._refresh()
+            time.sleep(0.08)
+
+    def start_animation(self) -> None:
+        """Start the background gradient animation."""
+        if self._animation_thread is not None and self._animation_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._animation_thread = threading.Thread(
+            target=self._animate, daemon=True
+        )
+        self._animation_thread.start()
+
+    def stop_animation(self) -> None:
+        """Stop the background gradient animation and wait for the thread."""
+        self._stop_event.set()
+        if self._animation_thread is not None:
+            self._animation_thread.join(timeout=0.5)
+            self._animation_thread = None
 
 
 def progress_label_for_step(step: AgentStep) -> str:
@@ -391,32 +435,6 @@ def _extract_unified_diff(stdout: str) -> str | None:
     if stdout.startswith("--- "):
         return stdout
     return None
-
-
-def _install_resize_poller(ui: "ConversationUI") -> None:
-    global _resize_poller_installed
-    if _resize_poller_installed:
-        return
-    _resize_poller_installed = True
-    ui._last_terminal_width: int | None = None
-
-    def _poll() -> None:
-        while True:
-            time.sleep(0.25)
-            current = ui._fresh_terminal_width()
-            if ui._last_terminal_width is None:
-                ui._last_terminal_width = current
-                continue
-            if current == ui._last_terminal_width:
-                continue
-            ui._last_terminal_width = current
-            ui._request_redraw()
-
-    threading.Thread(
-        target=_poll,
-        daemon=True,
-        name="neo-resize-poller",
-    ).start()
 
 
 class _AutoWidthConsole(Console):
@@ -1272,7 +1290,6 @@ class ConversationUI:
         self._plan_mode: str = get_settings().plan_mode
         self._console = console or _AutoWidthConsole(theme=_THEME)
         self._err = _AutoWidthConsole(theme=_THEME, stderr=True)
-        self._last_terminal_width: int | None = None
         self._history: list[tuple[str, dict[str, Any]]] = []
         self._display_lock = threading.Lock()
         self._at_prompt = False
@@ -1282,7 +1299,6 @@ class ConversationUI:
         self._abort_event = threading.Event()
         self._abort_lock = threading.Lock()
         self._abort_callbacks: list[Any] = []
-        _install_resize_poller(self)
 
 
     def request_stop_after_current_step(self) -> None:
@@ -1625,45 +1641,25 @@ class ConversationUI:
             width=terminal_width,
         )
 
-    def _redraw_all(self) -> None:
-        if not self._history:
-            return
-        self._console.clear()
-        for kind, data in self._history:
+    def _request_redraw(self) -> None:
+        # Re-rendering the entire transcript on every event used to push a
+        # full copy of the UI (banner, prompts, panels) into the terminal's
+        # scrollback buffer on each redraw. The transcript is now
+        # append-only; explicit /clear wipes scrollback when the user wants
+        # a fresh start.
+        return
+
+    def _sync_redraw(self) -> None:
+        self._pending_redraw = False
+
+    def _record(self, kind: str, **data: Any) -> None:
+        self._history.append((kind, data))
+        with self._display_lock:
             for item in self._iter_history_block(kind, data):
                 if item == "":
                     self._console.print()
                 else:
                     self._console.print(item)
-
-    def _request_redraw(self) -> None:
-        if not self._history or not self._is_interactive_tty():
-            return
-        if self._transient_ui:
-            self._pending_redraw = True
-            return
-        with self._display_lock:
-            self._redraw_all()
-
-    def _sync_redraw(self) -> None:
-        if not self._pending_redraw or not self._history or not self._is_interactive_tty():
-            self._pending_redraw = False
-            return
-        with self._display_lock:
-            self._redraw_all()
-        self._pending_redraw = False
-
-    def _record(self, kind: str, **data: Any) -> None:
-        self._history.append((kind, data))
-        if self._is_interactive_tty():
-            with self._display_lock:
-                self._redraw_all()
-            return
-        for item in self._iter_history_block(kind, data):
-            if item == "":
-                self._console.print()
-            else:
-                self._console.print(item)
 
     def _kv_table(
         self,
@@ -1809,7 +1805,15 @@ class ConversationUI:
         self.clear_abort_request()
         if self._is_interactive_tty():
             with self._display_lock:
-                self._console.clear()
+                # Wipe the visible viewport AND the scrollback buffer so the
+                # user actually sees a fresh terminal. \x1b[3J clears the
+                # scrollback in xterm, iTerm2, Kitty, Alacritty, GNOME
+                # Terminal, Windows Terminal, and other modern emulators.
+                try:
+                    self._console.file.write("\x1b[H\x1b[2J\x1b[3J")
+                    self._console.file.flush()
+                except OSError:
+                    self._console.clear()
         data = self._startup_data()
         if self._play_startup_intro(data):
             self._history.append(("startup", data))
@@ -2158,7 +2162,11 @@ class ConversationUI:
                     spinner="dots",
                 ) as status:
                     updater._status = status
-                    yield updater
+                    updater.start_animation()
+                    try:
+                        yield updater
+                    finally:
+                        updater.stop_animation()
         finally:
             self._transient_ui = False
             self._sync_redraw()
