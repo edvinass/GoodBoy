@@ -159,9 +159,10 @@ class ThinkingUpdater:
         )
         if not self._plan_step:
             return header
+        plan_emoji = _SUBTITLE_META["plan"][0]
         return Group(
             header,
-            Text.from_markup(f"/  [muted]{self._plan_step}[/]"),
+            Text.from_markup(f"{plan_emoji}  [muted]{self._plan_step}[/]"),
         )
 
     def _matrix_animation_active(self) -> bool:
