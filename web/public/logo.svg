@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Neo logo">
   <title>Neo</title>
-  <rect width="64" height="64" rx="12" fill="#050805"/>
+  <rect width="64" height="64" rx="12" fill="#0b0e0c"/>
   <!-- Sunglasses frame -->
   <path
     d="M10 30 C10 22 18 16 32 16 C46 16 54 22 54 30 L54 36 C54 44 46 50 32 50 C18 50 10 44 10 36 Z"
-    fill="#0a140a"
-    stroke="#00ff41"
+    fill="#141916"
+    stroke="#4d8f63"
     stroke-width="1.5"
   />
-  <rect x="14" y="26" width="16" height="12" rx="3" fill="#001a08" stroke="#00ff41" stroke-width="1.2"/>
-  <rect x="34" y="26" width="16" height="12" rx="3" fill="#001a08" stroke="#00ff41" stroke-width="1.2"/>
-  <path d="M30 31 H34" stroke="#00ff41" stroke-width="1.4" stroke-linecap="round"/>
+  <rect x="14" y="26" width="16" height="12" rx="3" fill="#101411" stroke="#4d8f63" stroke-width="1.2"/>
+  <rect x="34" y="26" width="16" height="12" rx="3" fill="#101411" stroke="#4d8f63" stroke-width="1.2"/>
+  <path d="M30 31 H34" stroke="#4d8f63" stroke-width="1.4" stroke-linecap="round"/>
   <!-- Lens glow -->
-  <rect x="16" y="28" width="12" height="8" rx="2" fill="#00ff41" opacity="0.35"/>
-  <rect x="36" y="28" width="12" height="8" rx="2" fill="#00ff41" opacity="0.35"/>
+  <rect x="16" y="28" width="12" height="8" rx="2" fill="#4d8f63" opacity="0.22"/>
+  <rect x="36" y="28" width="12" height="8" rx="2" fill="#4d8f63" opacity="0.22"/>
 </svg>

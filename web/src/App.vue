@@ -42,7 +42,7 @@ function startMatrixRain(canvas) {
     drops = new Array(columns)
       .fill(0)
       .map(() => Math.random() * (clientHeight / fontSize))
-    ctx.fillStyle = 'rgba(5, 8, 5, 1)'
+    ctx.fillStyle = 'rgba(11, 14, 12, 1)'
     ctx.fillRect(0, 0, clientWidth, clientHeight)
   }
 
@@ -54,7 +54,7 @@ function startMatrixRain(canvas) {
     const w = canvas.clientWidth
     const h = canvas.clientHeight
 
-    ctx.fillStyle = 'rgba(5, 8, 5, 0.18)'
+    ctx.fillStyle = 'rgba(11, 14, 12, 0.2)'
     ctx.fillRect(0, 0, w, h)
 
     for (let i = 0; i < drops.length; i++) {
@@ -62,10 +62,10 @@ function startMatrixRain(canvas) {
       const x = i * fontSize
       const y = drops[i] * fontSize
 
-      ctx.fillStyle = 'rgba(180, 255, 200, 0.95)'
+      ctx.fillStyle = 'rgba(160, 185, 168, 0.55)'
       ctx.fillText(ch, x, y)
 
-      ctx.fillStyle = 'rgba(0, 255, 65, 0.85)'
+      ctx.fillStyle = 'rgba(77, 143, 99, 0.4)'
       ctx.fillText(ch, x, y - fontSize)
 
       if (y > h && Math.random() > 0.975) {
